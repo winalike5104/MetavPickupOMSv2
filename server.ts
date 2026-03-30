@@ -8,10 +8,10 @@ import http from "http";
 import { Server } from "socket.io";
 import bcrypt from 'bcryptjs';
 import firebaseConfig from './firebase-applet-config.json' with { type: 'json' };
-import { sendEmail, sendBulkEmails } from './src/lib/mailer.ts';
-import { isValidDateString } from './src/lib/firebase.ts';
-import { authenticate, loginUser } from './src/lib/auth.ts';
-import { SUPER_ADMINS } from './src/lib/auth-shared.ts';
+import { sendEmail, sendBulkEmails } from './src/lib/mailer';
+import { isValidDateString } from './src/lib/firebase';
+import { authenticate, loginUser } from './src/lib/auth';
+import { SUPER_ADMINS } from './src/lib/auth-shared';
 
 // Helper to write to debug log
 const writeDebugLog = (message: string) => {
@@ -113,7 +113,7 @@ const logAction = async (user: any, action: string, details: string, orderId?: s
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { writeLog, readLogs, clearLogs } from './src/lib/logger.ts';
+import { writeLog, readLogs, clearLogs } from './src/lib/logger';
 
 // ... (existing code)
 
