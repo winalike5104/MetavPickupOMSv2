@@ -1434,16 +1434,28 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     
-    // Ensure service-worker.js is never cached
-    app.get('/service-worker.js', (req, res, next) => {
+    // Ensure service-worker.js and index.html are never cached
+    const noCacheHeaders = (res: any) => {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
+    };
+
+    app.get('/service-worker.js', (req, res, next) => {
+      noCacheHeaders(res);
       next();
     });
 
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, path) => {
+        if (path.endsWith('.html')) {
+          noCacheHeaders(res);
+        }
+      }
+    }));
+
     app.get('*', (req, res) => {
+      noCacheHeaders(res);
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

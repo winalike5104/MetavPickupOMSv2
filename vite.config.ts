@@ -14,6 +14,7 @@ export default defineConfig(({mode}) => {
         registerType: 'autoUpdate',
         filename: 'service-worker.js',
         workbox: {
+          cleanupOutdatedCaches: true,
           skipWaiting: true,
           clientsClaim: true,
         },
