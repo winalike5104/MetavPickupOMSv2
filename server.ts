@@ -7,10 +7,11 @@ import fs from "fs";
 import http from "http";
 import { Server } from "socket.io";
 import bcrypt from 'bcryptjs';
-import { sendEmail, sendBulkEmails } from './src/lib/mailer.ts';
-import { isValidDateString } from './src/lib/firebase.ts';
-import { authenticate, loginUser } from './src/lib/auth.ts';
-import { SUPER_ADMINS } from './src/lib/auth-shared.ts';
+import firebaseConfig from './firebase-applet-config.json' with { type: 'json' };
+import { sendEmail, sendBulkEmails } from './src/lib/mailer.js';
+import { isValidDateString } from './src/lib/firebase.js';
+import { authenticate, loginUser } from './src/lib/auth.js';
+import { SUPER_ADMINS } from './src/lib/auth-shared.js';
 
 // Helper to write to debug log
 const writeDebugLog = (message: string) => {
@@ -27,12 +28,6 @@ let lastInitError: string | null = null;
 const initDb = async () => {
   if (db) return db;
   try {
-    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-    let firebaseConfig: any = {};
-    if (fs.existsSync(configPath)) {
-      firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    }
-
     if (!admin.apps.length) {
       // 1. Check for explicit service account in environment
       const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -73,7 +68,7 @@ const initDb = async () => {
     
     try {
       // Correct way to get a specific database instance in Firebase Admin SDK
-      const databaseId = firebaseConfig.firestoreDatabaseId;
+      const databaseId = (firebaseConfig as any).firestoreDatabaseId;
       db = admin.firestore(databaseId); 
       console.log(`Firestore instance created for database: ${databaseId || "(default)"}`);
       lastInitError = null;
@@ -118,7 +113,7 @@ const logAction = async (user: any, action: string, details: string, orderId?: s
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { writeLog, readLogs, clearLogs } from './src/lib/logger.ts';
+import { writeLog, readLogs, clearLogs } from './src/lib/logger.js';
 
 // ... (existing code)
 
