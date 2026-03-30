@@ -224,65 +224,94 @@ export const BulkOrderUpload = () => {
 
     setIsImporting(true);
     addLog(`Starting import of ${readyRows.length} orders...`, 'info');
+    setProgress(0);
 
     try {
-      // Prepare orders for backend
-      const ordersToCreate = readyRows.map(row => {
-        const data = row.data;
-        return {
-          bookingNumber: data['booking number'].trim().toUpperCase(),
-          refNumber: data['customer ref'].trim().toUpperCase(),
-          customerName: data['Customer Name'],
-          customerId: data['customer id'] || '',
-          customerEmail: data['Email'],
-          storeId: data['Store ID'].toUpperCase().replace(/\s+/g, '_'),
-          pickupDateScheduled: data['scheduled pickup date'],
-          warehouseId: data['Warehouse'],
-          paymentStatus: data['payment state'].toLowerCase() === 'paid' ? 'Paid' : 'Unpaid',
-          paymentMethod: data.method || null,
-          items: [{
-            sku: data['SKU 1'].toUpperCase(),
-            qty: parseInt(data['quantity 1'], 10),
-            productName: '',
-            location: ''
-          }],
-          sendPickupEmail: false
-        };
-      });
-
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/orders/bulk-create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`
-        },
-        body: JSON.stringify({ orders: ordersToCreate })
-      });
+      const BATCH_SIZE = 50;
+      let totalSuccess = 0;
+      let totalFailed = 0;
 
-      const result = await response.json();
+      for (let i = 0; i < readyRows.length; i += BATCH_SIZE) {
+        const chunkRows = readyRows.slice(i, i + BATCH_SIZE);
+        const ordersToCreate = chunkRows.map(row => {
+          const data = row.data;
+          return {
+            bookingNumber: data['booking number'].trim().toUpperCase(),
+            refNumber: data['customer ref'].trim().toUpperCase(),
+            customerName: data['Customer Name'],
+            customerId: data['customer id'] || '',
+            customerEmail: data['Email'],
+            storeId: data['Store ID'].toUpperCase().replace(/\s+/g, '_'),
+            pickupDateScheduled: data['scheduled pickup date'],
+            warehouseId: data['Warehouse'],
+            paymentStatus: data['payment state'].toLowerCase() === 'paid' ? 'Paid' : 'Unpaid',
+            paymentMethod: data.method || null,
+            items: [{
+              sku: data['SKU 1'].toUpperCase(),
+              qty: parseInt(data['quantity 1'], 10),
+              productName: '',
+              location: ''
+            }],
+            sendPickupEmail: false
+          };
+        });
 
-      if (response.ok) {
-        addLog(`Import complete. Success: ${result.success}, Failed: ${result.failed}`, result.success > 0 ? 'success' : 'error');
-        if (result.errors && result.errors.length > 0) {
-          result.errors.forEach((err: string) => addLog(`Error: ${err}`, 'error'));
+        try {
+          const response = await fetch('/api/orders/bulk-create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-custom-auth-token': `Bearer ${token}`
+            },
+            body: JSON.stringify({ orders: ordersToCreate })
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.failed === 0) {
+            totalSuccess += result.success;
+            addLog(`Batch ${Math.floor(i / BATCH_SIZE) + 1} imported successfully (${result.success} orders)`, 'success');
+            
+            // Mark these rows as success
+            setRows(prev => prev.map(r => {
+              if (chunkRows.some(c => c.id === r.id)) {
+                return { ...r, status: 'success' };
+              }
+              return r;
+            }));
+          } else {
+            totalFailed += chunkRows.length;
+            const errorMsg = result.errors?.[0] || result.error || 'Unknown error';
+            addLog(`Batch ${Math.floor(i / BATCH_SIZE) + 1} failed: ${errorMsg}`, 'error');
+            
+            // Mark these rows as failed
+            setRows(prev => prev.map(r => {
+              if (chunkRows.some(c => c.id === r.id)) {
+                return { ...r, status: 'failed', errors: [...r.errors, errorMsg] };
+              }
+              return r;
+            }));
+          }
+        } catch (err: any) {
+          totalFailed += chunkRows.length;
+          addLog(`Network error in batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err.message}`, 'error');
+          setRows(prev => prev.map(r => {
+            if (chunkRows.some(c => c.id === r.id)) {
+              return { ...r, status: 'failed', errors: [...r.errors, err.message] };
+            }
+            return r;
+          }));
         }
         
-        setRows(prev => prev.map(r => {
-          const isReady = readyRows.some(c => c.id === r.id);
-          if (isReady) {
-            return { ...r, status: 'success' };
-          }
-          return r;
-        }));
-      } else {
-        throw new Error(result.error || 'Failed to import orders');
+        setProgress(Math.round(((i + chunkRows.length) / readyRows.length) * 100));
       }
+
+      addLog(`Import process finished. Total Success: ${totalSuccess}, Total Failed: ${totalFailed}`, totalSuccess > 0 ? 'success' : 'error');
     } catch (err: any) {
-      addLog(`Import failed: ${err.message}`, 'error');
+      addLog(`Import process encountered a critical error: ${err.message}`, 'error');
     } finally {
       setIsImporting(false);
-      setProgress(100);
     }
   };
 
@@ -415,7 +444,7 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4" />
-                    Duplicates Found
+                    Duplicate found
                   </span>
                   <span className="font-bold">{stats.duplicates}</span>
                 </button>
@@ -429,7 +458,7 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
-                    Invalid Data
+                    Invalid data
                   </span>
                   <span className="font-bold">{stats.invalid}</span>
                 </button>
@@ -588,45 +617,53 @@ export const BulkOrderUpload = () => {
 
           {/* Right Pane: Log Window */}
           <div className="lg:col-span-3 space-y-6">
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col h-[600px]">
-              <div className="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex items-center justify-between">
-                <h3 className="font-bold text-white flex items-center gap-2">
-                  <History className="w-5 h-5 text-indigo-400" />
-                  Process Logs
-                </h3>
-                <button 
-                  onClick={() => setLogs([])}
-                  className="text-slate-400 hover:text-white text-xs"
-                >
-                  Clear
-                </button>
-              </div>
+            {(profile?.roleTemplate === 'Admin' || profile?.allowedWarehouses?.includes('*')) ? (
+              <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col h-[600px]">
+                <div className="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex items-center justify-between">
+                  <h3 className="font-bold text-white flex items-center gap-2">
+                    <History className="w-5 h-5 text-indigo-400" />
+                    Process Logs
+                  </h3>
+                  <button 
+                    onClick={() => setLogs([])}
+                    className="text-slate-400 hover:text-white text-xs"
+                  >
+                    Clear
+                  </button>
+                </div>
 
-              <div className="flex-1 overflow-auto p-4 font-mono text-xs space-y-2">
-                {logs.length === 0 ? (
-                  <div className="text-slate-600 italic">Waiting for activity...</div>
-                ) : (
-                  <AnimatePresence initial={false}>
-                    {logs.map((log, i) => (
-                      <motion.div 
-                        key={i}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className={cn(
-                          "flex gap-3",
-                          log.type === 'error' ? "text-red-400" : 
-                          log.type === 'success' ? "text-emerald-400" : 
-                          log.type === 'warning' ? "text-amber-400" : "text-slate-300"
-                        )}
-                      >
-                        <span className="text-slate-600 shrink-0">[{log.timestamp}]</span>
-                        <span>{log.message}</span>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                )}
+                <div className="flex-1 overflow-auto p-4 font-mono text-xs space-y-2">
+                  {logs.length === 0 ? (
+                    <div className="text-slate-600 italic">Waiting for activity...</div>
+                  ) : (
+                    <AnimatePresence initial={false}>
+                      {logs.map((log, i) => (
+                        <motion.div 
+                          key={i}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className={cn(
+                            "flex gap-3",
+                            log.type === 'error' ? "text-red-400" : 
+                            log.type === 'success' ? "text-emerald-400" : 
+                            log.type === 'warning' ? "text-amber-400" : "text-slate-300"
+                          )}
+                        >
+                          <span className="text-slate-600 shrink-0">[{log.timestamp}]</span>
+                          <span>{log.message}</span>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center h-[600px] flex flex-col items-center justify-center">
+                <History className="w-12 h-12 text-slate-200 mb-4" />
+                <h3 className="font-bold text-slate-900 mb-2">Process Logs</h3>
+                <p className="text-slate-500 text-sm">Only administrators can view real-time process logs.</p>
+              </div>
+            )}
 
             {/* Info Card */}
             <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200">

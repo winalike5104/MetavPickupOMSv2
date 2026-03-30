@@ -73,7 +73,9 @@ export default function SystemLogs() {
     .filter(line => line.toLowerCase().includes(filter.toLowerCase()))
     .join('\n');
 
-  if (!profile?.allowedWarehouses?.includes('*')) {
+  const isAdmin = profile?.roleTemplate === 'Admin' || profile?.allowedWarehouses?.includes('*');
+
+  if (!isAdmin) {
     return (
       <div className="p-8 text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />

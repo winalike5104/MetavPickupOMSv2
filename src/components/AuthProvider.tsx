@@ -31,12 +31,42 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<{ uid: string; username: string; email: string; role: string; allowedWarehouses: string[] } | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [activeWarehouse, setActiveWarehouseState] = useState<string | null>(sessionStorage.getItem('activeWarehouse'));
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [user, setUser] = useState<{ uid: string; username: string; email: string; role: string; allowedWarehouses: string[] } | null>(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        return JSON.parse(savedUser);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        return {
+          uid: parsedUser.uid,
+          username: parsedUser.username,
+          email: parsedUser.email,
+          name: parsedUser.username,
+          status: 'Active',
+          allowedWarehouses: parsedUser.allowedWarehouses,
+          roleTemplate: parsedUser.role,
+          permissions: parsedUser.permissions || (ROLE_TEMPLATES as any)[parsedUser.role] || []
+        };
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(true);
+  const [activeWarehouse, setActiveWarehouseState] = useState<string | null>(() => sessionStorage.getItem('activeWarehouse'));
 
   const setActiveWarehouse = (id: string) => {
     if (!id) {
@@ -94,35 +124,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveWarehouseState(null);
   };
 
+  // Sync state if localStorage changes in other tabs
   useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
-
-    if (savedToken && savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        setToken(savedToken);
-        setUser(parsedUser);
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token' || e.key === 'user') {
+        const savedToken = localStorage.getItem('token');
+        const savedUser = localStorage.getItem('user');
         
-        const userProfile: UserProfile = {
-          uid: parsedUser.uid,
-          username: parsedUser.username,
-          email: parsedUser.email,
-          name: parsedUser.username,
-          status: 'Active',
-          allowedWarehouses: parsedUser.allowedWarehouses,
-          roleTemplate: parsedUser.role,
-          permissions: parsedUser.permissions || (ROLE_TEMPLATES as any)[parsedUser.role] || []
-        };
-        setProfile(userProfile);
-      } catch (e) {
-        console.error("Failed to parse saved user", e);
-        logout();
+        if (!savedToken || !savedUser) {
+          logout();
+        } else {
+          try {
+            const parsedUser = JSON.parse(savedUser);
+            setToken(savedToken);
+            setUser(parsedUser);
+            setProfile({
+              uid: parsedUser.uid,
+              username: parsedUser.username,
+              email: parsedUser.email,
+              name: parsedUser.username,
+              status: 'Active',
+              allowedWarehouses: parsedUser.allowedWarehouses,
+              roleTemplate: parsedUser.role,
+              permissions: parsedUser.permissions || (ROLE_TEMPLATES as any)[parsedUser.role] || []
+            });
+          } catch (e) {
+            logout();
+          }
+        }
       }
-    }
-    
-    setIsAuthReady(true);
-    setLoading(false);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const value = useMemo(() => ({ 

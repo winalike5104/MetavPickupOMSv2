@@ -722,36 +722,42 @@ async function startServer() {
         try {
           // Use Admin SDK for transaction
           await currentDb.runTransaction(async (transaction: any) => {
-            for (const orderData of chunk) {
+            const preparedOrders = chunk.map(orderData => {
               const bookingNumber = orderData.bookingNumber.trim().toUpperCase();
               const refNumber = orderData.refNumber.trim().toUpperCase();
-
-              const bKeyRef = currentDb.collection("unique_keys").doc(`bn_${bookingNumber}`);
-              const rKeyRef = currentDb.collection("unique_keys").doc(`ref_${refNumber}`);
-              const orderRef = currentDb.collection("orders").doc(bookingNumber);
-
-              const [bSnap, rSnap] = await Promise.all([
-                transaction.get(bKeyRef),
-                transaction.get(rKeyRef)
-              ]);
-
-              if (bSnap.exists) throw new Error(`Booking Number ${bookingNumber} already exists`);
-              if (rSnap.exists) throw new Error(`Customer Ref ${refNumber} already exists`);
-
-              const finalOrderData = {
-                ...orderData,
+              return {
+                orderData,
                 bookingNumber,
                 refNumber,
+                bKeyRef: currentDb.collection("unique_keys").doc(`bn_${bookingNumber}`),
+                rKeyRef: currentDb.collection("unique_keys").doc(`ref_${refNumber}`),
+                orderRef: currentDb.collection("orders").doc(bookingNumber)
+              };
+            });
+
+            // 1. All Reads First
+            const bSnaps = await Promise.all(preparedOrders.map(p => transaction.get(p.bKeyRef)));
+            const rSnaps = await Promise.all(preparedOrders.map(p => transaction.get(p.rKeyRef)));
+
+            // 2. Validation and Writes
+            preparedOrders.forEach((p, index) => {
+              if (bSnaps[index].exists) throw new Error(`Booking Number ${p.bookingNumber} already exists`);
+              if (rSnaps[index].exists) throw new Error(`Customer Ref ${p.refNumber} already exists`);
+
+              const finalOrderData = {
+                ...p.orderData,
+                bookingNumber: p.bookingNumber,
+                refNumber: p.refNumber,
                 createdTime: new Date().toISOString(),
                 createdBy: req.user.name || 'System',
                 creatorUid: req.user.uid,
                 status: 'Created'
               };
 
-              transaction.set(bKeyRef, { createdAt: admin.firestore.FieldValue.serverTimestamp() });
-              transaction.set(rKeyRef, { createdAt: admin.firestore.FieldValue.serverTimestamp() });
-              transaction.set(orderRef, finalOrderData);
-            }
+              transaction.set(p.bKeyRef, { createdAt: admin.firestore.FieldValue.serverTimestamp() });
+              transaction.set(p.rKeyRef, { createdAt: admin.firestore.FieldValue.serverTimestamp() });
+              transaction.set(p.orderRef, finalOrderData);
+            });
           });
           results.success += chunk.length;
         } catch (err: any) {
