@@ -1,5 +1,5 @@
 {
-  "name": "Remix: 仓库管理系统 (WMS)",
+  "name": "仓库管理系统 (WMS)",
   "description": "A comprehensive internal system for managing pickup orders, SKU databases, payments, and customer signatures with a flexible RBAC permission system.",
   "requestFramePermissions": []
 }

@@ -7,10 +7,10 @@ import fs from "fs";
 import http from "http";
 import { Server } from "socket.io";
 import bcrypt from 'bcryptjs';
-import { sendEmail, sendBulkEmails } from './src/lib/mailer.js';
-import { isValidDateString } from './src/lib/firebase.js';
-import { authenticate, loginUser } from './src/lib/auth.js';
-import { SUPER_ADMINS } from './src/lib/auth-shared.js';
+import { sendEmail, sendBulkEmails } from './src/lib/mailer.ts';
+import { isValidDateString } from './src/lib/firebase.ts';
+import { authenticate, loginUser } from './src/lib/auth.ts';
+import { SUPER_ADMINS } from './src/lib/auth-shared.ts';
 
 // Helper to write to debug log
 const writeDebugLog = (message: string) => {
@@ -118,7 +118,7 @@ const logAction = async (user: any, action: string, details: string, orderId?: s
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { writeLog, readLogs, clearLogs } from './src/lib/logger.js';
+import { writeLog, readLogs, clearLogs } from './src/lib/logger.ts';
 
 // ... (existing code)
 
