@@ -1,0 +1,910 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { collection, query, getDocs, orderBy, where, writeBatch, doc, limit } from 'firebase/firestore';
+import { db } from '../firebase';
+import { Order } from '../types';
+import { useAuth } from '../components/AuthProvider';
+import { logAction, cn, safeSearch, handleFirestoreError, OperationType, formatDate } from '../utils';
+import { 
+  Search, 
+  Download, 
+  Calendar, 
+  Filter, 
+  ChevronRight,
+  ShoppingBag,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  AlertCircle,
+  CheckCircle,
+  MapPin,
+  Mail,
+  Send,
+  MoreVertical,
+  Plus,
+  Upload,
+  LayoutGrid,
+  Table as TableIcon,
+  Clock,
+  CreditCard,
+  Store as StoreIcon,
+  Loader2
+} from 'lucide-react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useClickOutside } from '../hooks/useClickOutside';
+import { API_BASE_URL } from '../constants';
+
+import { useTask } from '../components/TaskProvider';
+
+export const Orders = () => {
+  const { profile, user, activeWarehouse, token } = useAuth();
+  const { emailProgress, setEmailProgress, isMinimized, setIsMinimized, isTaskRunning, setIsTaskRunning } = useTask();
+  const location = useLocation();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [statusFilter, setStatusFilter] = useState(location.state?.statusFilter || 'All'); // Default to All or state
+  const [overdueThreshold, setOverdueThreshold] = useState(location.state?.overdueThreshold || 7); // Default 7 days or state
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
+  const [storeFilter, setStoreFilter] = useState('All');
+  const [stores, setStores] = useState<{id: string, name: string}[]>([]);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (location.state) {
+      if (location.state.statusFilter) {
+        setStatusFilter(location.state.statusFilter);
+      }
+      if (location.state.overdueThreshold) {
+        setOverdueThreshold(location.state.overdueThreshold);
+      }
+    } else {
+      // Reset to default if no state (e.g. clicking "Order List")
+      setStatusFilter('All');
+      setOverdueThreshold(7);
+      setSearchTerm('');
+      setPaymentMethodFilter('All');
+      setStoreFilter('All');
+      setDateRange({ start: '', end: '' });
+    }
+  }, [location.state]);
+
+  useClickOutside(menuRef, () => setActiveMenuId(null));
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (activeWarehouse) {
+      fetchOrders();
+    }
+    fetchStores();
+  }, [activeWarehouse]);
+
+  const fetchStores = async () => {
+    try {
+      const q = query(collection(db, 'stores'));
+      const snap = await getDocs(q);
+      const storesData = snap.docs.map(doc => ({ 
+        id: doc.id, 
+        name: (doc.data() as any).name || doc.id 
+      }));
+      setStores(storesData.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (err) {
+      console.error('Error fetching stores:', err);
+    }
+  };
+
+  const fetchOrders = async () => {
+    if (!activeWarehouse) return;
+    setLoading(true);
+    try {
+      const ordersRef = collection(db, 'orders');
+      
+      // If warehouse is AKL, we fetch more broadly to catch orders without warehouseId
+      let q;
+      if (activeWarehouse === 'AKL') {
+        q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
+      } else {
+        q = query(ordersRef, where('warehouseId', '==', activeWarehouse), orderBy('createdTime', 'desc'), limit(3000));
+      }
+      
+      let snap;
+      try {
+        snap = await getDocs(q);
+      } catch (err: any) {
+        console.error('Error fetching orders:', err);
+        const fallbackQ = query(ordersRef, limit(3000));
+        snap = await getDocs(fallbackQ);
+      }
+
+      const allFetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      console.log(`DEBUG: Fetched ${allFetched.length} orders total from Firestore`);
+      
+      // Sort in memory by createdTime descending
+      allFetched.sort((a, b) => {
+        const timeA = a.createdTime ? new Date(a.createdTime).getTime() : 0;
+        const timeB = b.createdTime ? new Date(b.createdTime).getTime() : 0;
+        return timeB - timeA;
+      });
+      
+      const filteredOrders = allFetched.filter(order => {
+        const orderWarehouse = order.warehouseId || 'AKL';
+        const matches = orderWarehouse === activeWarehouse;
+        if (!matches) {
+          console.log(`DEBUG: Order ${order.bookingNumber} skipped (Warehouse: ${orderWarehouse}, Active: ${activeWarehouse})`);
+        }
+        return matches;
+      });
+      
+      console.log(`DEBUG: Found ${filteredOrders.length} orders for warehouse ${activeWarehouse}`);
+      if (filteredOrders.length > 0) {
+        console.log('DEBUG: First order in list:', filteredOrders[0]);
+      } else {
+        console.log('DEBUG: No orders matched the active warehouse filter.');
+      }
+      setOrders(filteredOrders);
+    } catch (err: any) {
+      console.error('Error fetching orders:', err);
+      handleFirestoreError(err, OperationType.GET, 'orders');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      const searchLower = debouncedSearchTerm.toLowerCase();
+      const matchesSearch = 
+        safeSearch(order.bookingNumber, searchLower) ||
+        safeSearch(order.customerName, searchLower) ||
+        safeSearch(order.customerId, searchLower) ||
+        order.items.some(item => safeSearch(item.sku, searchLower));
+      
+      let matchesStatus = true;
+      if (statusFilter === 'Active') {
+        matchesStatus = order.status === 'Created' || order.status === 'Picked Up';
+      } else if (statusFilter === 'Overdue') {
+        if (!order.pickupDateScheduled || order.status !== 'Created') {
+          matchesStatus = false;
+        } else {
+          // Normalize dates to midnight for accurate day-based comparison
+          const scheduledDate = new Date(order.pickupDateScheduled);
+          scheduledDate.setHours(0, 0, 0, 0);
+          
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          
+          const thresholdDate = new Date(now);
+          thresholdDate.setDate(now.getDate() - overdueThreshold);
+          
+          // Overdue by at least X days means scheduledDate <= thresholdDate
+          matchesStatus = scheduledDate <= thresholdDate;
+        }
+      } else if (statusFilter !== 'All') {
+        matchesStatus = order.status === statusFilter;
+      }
+      
+      const matchesPaymentMethod = paymentMethodFilter === 'All' || order.paymentMethod === paymentMethodFilter;
+      const matchesStore = storeFilter === 'All' || order.storeId === storeFilter || order.storeName === storeFilter;
+      
+      let matchesDate = true;
+      if (order.createdTime) {
+        try {
+          const orderDate = new Date(order.createdTime).toISOString().split('T')[0];
+          matchesDate = (!dateRange.start || orderDate >= dateRange.start) && 
+                        (!dateRange.end || orderDate <= dateRange.end);
+        } catch (e) {
+          console.warn('Invalid createdTime for order:', order.id, order.createdTime);
+          matchesDate = !dateRange.start && !dateRange.end; // Only match if no date filter
+        }
+      } else {
+        matchesDate = !dateRange.start && !dateRange.end;
+      }
+      
+      return matchesSearch && matchesStatus && matchesDate && matchesPaymentMethod && matchesStore;
+    });
+  }, [orders, debouncedSearchTerm, statusFilter, dateRange, paymentMethodFilter, storeFilter, overdueThreshold]);
+
+  const eligibleOrders = useMemo(() => {
+    return filteredOrders.filter(o => o.status !== 'Cancelled');
+  }, [filteredOrders]);
+
+  const toggleSelectAll = () => {
+    if (selectedOrderIds.length === eligibleOrders.length && eligibleOrders.length > 0) {
+      setSelectedOrderIds([]);
+    } else {
+      setSelectedOrderIds(eligibleOrders.map(o => o.id!));
+    }
+  };
+
+  const toggleSelectOrder = (id: string, status: string) => {
+    if (status === 'Cancelled') return;
+    setSelectedOrderIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkReview = async () => {
+    const reviewableIds = selectedOrderIds.filter(id => {
+      const order = orders.find(o => o.id === id);
+      return order?.status === 'Picked Up';
+    });
+
+    if (reviewableIds.length === 0 || !profile) {
+      setNotification({ message: 'Only orders with "Picked Up" status can be marked as Reviewed.', type: 'error' });
+      return;
+    }
+
+    setBulkUpdating(true);
+    try {
+      const batch = writeBatch(db);
+      reviewableIds.forEach(id => {
+        batch.update(doc(db, 'orders', id), { status: 'Reviewed' });
+      });
+      await batch.commit();
+      
+      await logAction(profile, 'Bulk Update', `Updated ${reviewableIds.length} orders to Reviewed status.`);
+      
+      setSelectedOrderIds([]);
+      fetchOrders();
+      setNotification({ message: `Successfully updated ${reviewableIds.length} orders to Reviewed.`, type: 'success' });
+    } catch (err) {
+      console.error('Error bulk updating orders:', err);
+      setNotification({ message: 'Failed to update orders. Please try again.', type: 'error' });
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleBulkEmail = async (overrideIds?: string[]) => {
+    const targetIds = overrideIds || selectedOrderIds;
+    const selectedOrders = orders.filter(o => targetIds.includes(o.id!));
+    const now = new Date().getTime();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+
+    const queue = selectedOrders.filter(order => {
+      // Only block if it was successfully sent within the last 24 hours
+      if (order.emailStatus === 'sent' && order.lastEmailSentAt) {
+        const lastSent = new Date(order.lastEmailSentAt).getTime();
+        if ((now - lastSent) <= twentyFourHours) return false;
+      }
+      return true;
+    });
+
+    if (queue.length === 0) {
+      setNotification({ 
+        message: 'No eligible orders found. (Already sent in last 24h or no selection)', 
+        type: 'error' 
+      });
+      return;
+    }
+
+    setIsTaskRunning(true);
+    if (!overrideIds) setSelectedOrderIds([]);
+    setEmailProgress({
+      total: queue.length,
+      current: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [],
+      isComplete: false
+    });
+
+    if (!token) {
+      console.error("No token available for bulk email");
+      return;
+    }
+    // 🔍 这里的打印至关重要，看控制台是不是真的有一长串 JWT
+    console.log("🚀 [DEBUG] Preparing to POST. Token state:", token ? "Exists" : "MISSING");
+
+    for (let i = 0; i < queue.length; i++) {
+      const order = queue[i];
+      setEmailProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+
+      try {
+        // Client-side validation before sending
+        if (!order.customerEmail) {
+          throw new Error("Missing customer email address");
+        }
+        if (!order.warehouseId) {
+          throw new Error("Missing warehouse/shop selection");
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/orders/send-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // 方案 A：自定义头
+            'x-custom-auth-token': `Bearer ${token}`,
+            // 方案 B：标准头（双重保险）
+            'Authorization': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          },
+          body: JSON.stringify({
+            orderId: order.id,
+            type: 'pickup_notification'
+          }),
+          mode: 'cors'
+        });
+
+        const result = await response.json();
+        if (result.success && result.emailStatus === 'sent') {
+          setEmailProgress(prev => prev ? { ...prev, success: prev.success + 1 } : null);
+          // Update local state immediately for better UI feedback
+          setOrders(prev => prev.map(o => o.id === order.id ? { ...o, emailStatus: 'sent', lastEmailSentAt: new Date().toISOString(), lastEmailError: null } : o));
+        } else if (result.success && result.emailStatus === 'skipped') {
+          setEmailProgress(prev => prev ? { ...prev, skipped: prev.skipped + 1 } : null);
+          // Optionally mark as skipped in local state if you want to show it
+          setOrders(prev => prev.map(o => o.id === order.id ? { ...o, emailStatus: 'skipped', lastEmailError: result.message } : o));
+        } else {
+          throw new Error(result.error || 'Failed to send email');
+        }
+      } catch (err: any) {
+        console.error(`Error sending email to ${order.bookingNumber}:`, err);
+        setEmailProgress(prev => prev ? { 
+          ...prev, 
+          failed: prev.failed + 1,
+          errors: [...prev.errors, { id: order.id!, booking: order.bookingNumber, error: err.message }]
+        } : null);
+        // Update local state for failure
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, emailStatus: 'failed', lastEmailError: err.message } : o));
+      }
+
+      // Random interval between 1.5s and 4s to avoid spam detection
+      if (i < queue.length - 1) {
+        const delay = Math.floor(Math.random() * (4000 - 1500 + 1)) + 1500;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    setEmailProgress(prev => prev ? { ...prev, isComplete: true } : null);
+    fetchOrders();
+  };
+
+  const handleBulkEmailClick = () => {
+    const selectedOrders = orders.filter(o => selectedOrderIds.includes(o.id!));
+    const now = new Date().getTime();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+
+    const eligibleCount = selectedOrders.filter(order => {
+      if (!order.customerEmail) return false;
+      if (order.emailStatus === 'sent' && order.lastEmailSentAt) {
+        const lastSent = new Date(order.lastEmailSentAt).getTime();
+        if ((now - lastSent) <= twentyFourHours) return false;
+      }
+      return true;
+    }).length;
+
+    setConfirmMessage(`Send pickup notification emails to ${eligibleCount} eligible orders? (Successfully sent within 24h or missing email will be skipped)`);
+    setConfirmAction(() => () => {
+      setShowConfirmModal(false);
+      handleBulkEmail();
+    });
+    setShowConfirmModal(true);
+  };
+
+  const handleSingleEmail = async (order: Order) => {
+    setActiveMenuId(null);
+    if (!order.id) return;
+    
+    // Unify logic: treat single as bulk with 1 item
+    handleBulkEmail([order.id]);
+  };
+
+  const exportToCSV = () => {
+    const headers = ['Booking Number', 'Customer Name', 'Store ID', 'Status', 'Payment Status', 'Created Time', 'Scheduled Pickup', 'Picked Up By', 'Items'];
+    const rows = filteredOrders.map(o => [
+      o.bookingNumber,
+      o.customerName,
+      o.storeId || 'N/A',
+      o.status,
+      o.paymentStatus,
+      formatDate(o.createdTime, 'yyyy-MM-dd HH:mm'),
+      o.pickupDateScheduled || 'N/A',
+      o.pickedUpBy || 'N/A',
+      o.items.map(i => `${i.sku}(${i.qty || 0})`).join('; ')
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `orders_${formatDate(new Date(), 'yyyyMMdd')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Notification Toast */}
+      {notification && (
+        <div className={cn(
+          "fixed bottom-4 right-4 z-50 px-6 py-3 rounded-xl shadow-lg text-white font-semibold transition-all transform translate-y-0",
+          notification.type === 'success' ? "bg-emerald-600" : "bg-red-600"
+        )}>
+          {notification.message}
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Confirm Action</h3>
+            <p className="text-slate-500 mb-6">{confirmMessage}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAction}
+                className="px-4 py-2 bg-indigo-600 text-white font-semibold hover:bg-indigo-700 rounded-lg transition-colors shadow-lg shadow-indigo-200"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Order Management</h1>
+          <div className="flex items-center gap-2 text-slate-500">
+            <MapPin className="w-4 h-4" />
+            <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-white border border-slate-200 p-1 rounded-xl flex gap-1 shadow-sm">
+            <button
+              onClick={() => setViewMode('table')}
+              className={cn(
+                "p-2 rounded-lg transition-all",
+                viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+              )}
+              title="Table View"
+            >
+              <TableIcon className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('card')}
+              className={cn(
+                "p-2 rounded-lg transition-all",
+                viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+              )}
+              title="Card View"
+            >
+              <LayoutGrid className="w-5 h-5" />
+            </button>
+          </div>
+          <Link 
+            to="/orders/bulk-import"
+            className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
+          >
+            <Upload className="w-4 h-4" />
+            Bulk Import
+          </Link>
+          <Link 
+            to="/orders/create"
+            className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            New Order
+          </Link>
+          <button 
+            onClick={exportToCSV}
+            className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="Search by Booking #, Customer, ID, or SKU..."
+            />
+            <button 
+              onClick={fetchOrders}
+              disabled={loading}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-200 rounded-lg transition-colors text-slate-400 hover:text-indigo-600 disabled:opacity-50"
+              title="Refresh orders"
+            >
+              <Loader2 className={cn("w-5 h-5", loading && "animate-spin")} />
+            </button>
+          </div>
+            {selectedOrderIds.length > 0 && (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleBulkReview}
+                  disabled={bulkUpdating || isTaskRunning}
+                  className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 text-sm"
+                >
+                  {bulkUpdating ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4" />
+                  )}
+                  Mark {selectedOrderIds.length} Reviewed
+                </button>
+                <button
+                  onClick={handleBulkEmailClick}
+                  disabled={bulkUpdating || isTaskRunning}
+                  className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 text-sm"
+                >
+                  {isTaskRunning ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Mail className="w-4 h-4" />
+                  )}
+                  Send {selectedOrderIds.length} Emails
+                </button>
+              </div>
+            )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <Filter className="w-5 h-5 text-slate-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-transparent outline-none text-sm flex-1 font-medium"
+            >
+              <option value="Active">Active Orders</option>
+              <option value="All">All Orders</option>
+              <option value="Overdue">Overdue Orders</option>
+              <option value="Created">Created</option>
+              <option value="Picked Up">Picked Up</option>
+              <option value="Reviewed">Reviewed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <Calendar className="w-5 h-5 text-slate-400" />
+            <input 
+              type="date" 
+              value={dateRange.start} 
+              onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+              className="bg-transparent outline-none text-xs flex-1"
+            />
+            <span className="text-slate-400">to</span>
+            <input 
+              type="date" 
+              value={dateRange.end} 
+              onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+              className="bg-transparent outline-none text-xs flex-1"
+            />
+          </div>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <CreditCard className="w-5 h-5 text-slate-400" />
+            <select
+              value={paymentMethodFilter}
+              onChange={(e) => setPaymentMethodFilter(e.target.value)}
+              className="bg-transparent outline-none text-sm flex-1 font-medium"
+            >
+              <option value="All">All Payments</option>
+              <option value="Cash">Cash</option>
+              <option value="EFTPOS">EFTPOS</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Online Payment">Online Payment</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <StoreIcon className="w-5 h-5 text-slate-400" />
+            <select
+              value={storeFilter}
+              onChange={(e) => setStoreFilter(e.target.value)}
+              className="bg-transparent outline-none text-sm flex-1 font-medium"
+            >
+              <option value="All">All Stores</option>
+              {stores.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          {statusFilter === 'Overdue' && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              <Clock className="w-5 h-5 text-amber-500" />
+              <select
+                value={overdueThreshold}
+                onChange={(e) => setOverdueThreshold(Number(e.target.value))}
+                className="bg-transparent outline-none text-sm flex-1 font-bold text-amber-700"
+              >
+                <option value={7}>Overdue &gt; 1 Week</option>
+                <option value={14}>Overdue &gt; 2 Weeks</option>
+                <option value={30}>Overdue &gt; 1 Month</option>
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-4">
+          {[1,2,3,4,5].map(i => <div key={i} className="h-20 bg-slate-100 animate-pulse rounded-2xl"></div>)}
+        </div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-2xl border border-slate-100 border-dashed">
+          <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-500 font-medium mb-4">No orders found.</p>
+          <button 
+            onClick={fetchOrders}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-medium"
+          >
+            Refresh List
+          </button>
+        </div>
+      ) : viewMode === 'table' ? (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+                <tr>
+                  <th className="px-6 py-4 w-10">
+                    <input 
+                      type="checkbox"
+                      checked={eligibleOrders.length > 0 && selectedOrderIds.length === eligibleOrders.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                  </th>
+                  <th className="px-6 py-4">Booking #</th>
+                  <th className="px-6 py-4">Customer</th>
+                  <th className="px-6 py-4">Store</th>
+                  <th className="px-6 py-4">Pickup Date</th>
+                  <th className="px-6 py-4">Payment</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredOrders.map((order) => (
+                  <tr 
+                    key={order.id} 
+                    className={cn(
+                      "hover:bg-slate-50 transition-colors cursor-pointer",
+                      selectedOrderIds.includes(order.id!) && "bg-indigo-50/50"
+                    )}
+                  >
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox"
+                        checked={selectedOrderIds.includes(order.id!)}
+                        onChange={() => toggleSelectOrder(order.id!, order.status)}
+                        disabled={order.status === 'Cancelled'}
+                        className={cn(
+                          "rounded border-slate-300 text-indigo-600 focus:ring-indigo-500",
+                          order.status !== 'Cancelled' ? "cursor-pointer" : "cursor-not-allowed opacity-30"
+                        )}
+                      />
+                    </td>
+                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900">{order.bookingNumber}</span>
+                        {order.notes && <FileText className="w-4 h-4 text-indigo-500" />}
+                        {order.emailStatus === 'sent' && (
+                          <div className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-emerald-100">
+                            <Mail className="w-3 h-3" />
+                            SENT
+                          </div>
+                        )}
+                        {order.emailStatus === 'failed' && (
+                          <div 
+                            className="flex items-center gap-1 bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-red-100"
+                            title={order.lastEmailError || 'Unknown error'}
+                          >
+                            <AlertCircle className="w-3 h-3" />
+                            FAILED
+                          </div>
+                        )}
+                        {order.emailStatus === 'skipped' && (
+                          <div 
+                            className="flex items-center gap-1 bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-amber-100"
+                            title={order.lastEmailError || 'Already sent or disabled'}
+                          >
+                            <AlertCircle className="w-3 h-3" />
+                            SKIPPED
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                      <p className="font-medium text-slate-700">{order.customerName}</p>
+                      <p className="text-xs text-slate-500">{order.customerId}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
+                      {stores.find(s => s.id === order.storeId)?.name || order.storeId || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
+                      {formatDate(order.pickupDateScheduled, 'yyyy-MM-dd')}
+                    </td>
+                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                      <span className={cn(
+                        "px-2 py-1 rounded text-[10px] font-bold",
+                        order.paymentStatus === 'Paid' ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                      )}>
+                        {order.paymentStatus}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-xs font-bold",
+                        order.status === 'Created' ? "bg-amber-100 text-amber-700" :
+                        order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-700" :
+                        order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-700" :
+                        "bg-red-100 text-red-700"
+                      )}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="relative" ref={activeMenuId === order.id ? menuRef : null}>
+                          <button
+                            onClick={() => setActiveMenuId(activeMenuId === order.id ? null : order.id!)}
+                            className="p-2 hover:bg-slate-200 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
+                          >
+                            <MoreVertical className="w-5 h-5" />
+                          </button>
+                          
+                          {activeMenuId === order.id && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-30 py-1 overflow-hidden">
+                              <button
+                                onClick={() => handleSingleEmail(order)}
+                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                              >
+                                <Mail className="w-4 h-4 text-emerald-500" />
+                                Send Pickup Email
+                              </button>
+                              <button
+                                onClick={() => navigate(`/orders/${order.id}`)}
+                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                              >
+                                <FileText className="w-4 h-4 text-indigo-500" />
+                                View Details
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <ChevronRight 
+                          className="w-5 h-5 text-slate-300 cursor-pointer hover:text-indigo-500" 
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredOrders.map((order) => (
+            <div
+              key={order.id}
+              onClick={() => navigate(`/orders/${order.id}`)}
+              className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center",
+                    order.status === 'Created' ? "bg-amber-100 text-amber-600" :
+                    order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-600" :
+                    order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-600" :
+                    "bg-red-100 text-red-600"
+                  )}>
+                    {order.status === 'Created' ? <Clock className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-slate-900">{order.bookingNumber}</h3>
+                      {order.emailStatus === 'sent' && (
+                        <Mail className="w-3 h-3 text-emerald-500" />
+                      )}
+                      {order.emailStatus === 'failed' && (
+                        <span title={order.lastEmailError || 'Failed'}>
+                          <AlertCircle className="w-3 h-3 text-red-500" />
+                        </span>
+                      )}
+                      {order.emailStatus === 'skipped' && (
+                        <span title={order.lastEmailError || 'Skipped'}>
+                          <AlertCircle className="w-3 h-3 text-amber-500" />
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">{formatDate(order.createdTime, 'MMM d, HH:mm')}</p>
+                  </div>
+                </div>
+                <span className={cn(
+                  "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                  order.status === 'Created' ? "bg-amber-100 text-amber-700" :
+                  order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-700" :
+                  order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-700" :
+                  "bg-red-100 text-red-700"
+                )}>
+                  {order.status}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Customer</span>
+                  <span className="font-bold text-slate-900">{order.customerName}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Scheduled Pickup</span>
+                  <span className="font-bold text-slate-900">{formatDate(order.pickupDateScheduled, 'MMM d, yyyy')}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Payment</span>
+                  <span className={cn(
+                    "px-2 py-0.5 rounded text-[10px] font-bold",
+                    order.paymentStatus === 'Paid' ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                  )}>
+                    {order.paymentStatus}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
+                <div className="flex -space-x-2">
+                  {order.items.slice(0, 3).map((item, i) => (
+                    <div key={i} className="w-8 h-8 rounded-lg bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600" title={item.sku}>
+                      {item.sku.substring(0, 2)}
+                    </div>
+                  ))}
+                  {order.items.length > 3 && (
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-600">
+                      +{order.items.length - 3}
+                    </div>
+                  )}
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};

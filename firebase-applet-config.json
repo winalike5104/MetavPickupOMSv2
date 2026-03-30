@@ -1,0 +1,10 @@
+{
+  "apiKey": "AIzaSyA0z0xkKKuZO-A8GNRNCSwa1z_2vxJ2gdc",
+  "authDomain": "pickup-system-prod.firebaseapp.com",
+  "projectId": "pickup-system-prod",
+  "databaseURL": "https://pickup-system-prod-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "storageBucket": "pickup-system-prod.firebasestorage.app",
+  "messagingSenderId": "885181520250",
+  "appId": "1:885181520250:web:b130f3130f6273ddb69ec3",
+  "measurementId": "G-7WT6YKYYL4"
+}

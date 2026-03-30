@@ -1,0 +1,223 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with specific permissions.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "description": "Login username (mapped to email)" },
+        "name": { "type": "string", "description": "Full name of the employee" },
+        "status": { "type": "string", "enum": ["Active", "Disabled"] },
+        "permissions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of granted permission keys"
+        },
+        "roleTemplate": { "type": "string", "description": "Optional template name (Sales, Reception, Admin)" },
+        "allowedWarehouses": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of warehouse IDs the user can access"
+        }
+      },
+      "required": ["username", "name", "status", "permissions"]
+    },
+    "SKU": {
+      "title": "SKU",
+      "description": "Product information in the warehouse.",
+      "type": "object",
+      "properties": {
+        "sku": { "type": "string" },
+        "productName": { "type": "string" },
+        "location": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sku", "productName"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Pickup order information.",
+      "type": "object",
+      "properties": {
+        "bookingNumber": { "type": "string", "description": "Unique booking identifier" },
+        "refNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "pickupDateScheduled": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "creatorEmail": { "type": "string" },
+        "createdTime": { "type": "string", "format": "date-time" },
+        "warehouseId": { "type": "string" },
+        "storeId": { "type": "string", "description": "ID of the store this order belongs to" },
+        "emailStatus": { "type": "string", "enum": ["sent", "failed", null] },
+        "lastEmailSentAt": { "type": "string", "format": "date-time" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sku": { "type": "string" },
+              "productName": { "type": "string" },
+              "location": { "type": "string" },
+              "qty": { "type": "number" }
+            }
+          }
+        },
+        "paymentStatus": { "type": "string", "enum": ["Paid", "Unpaid"] },
+        "paymentMethod": { "type": "string", "enum": ["Cash", "EFTPOS", "Bank Transfer"] },
+        "paymentTime": { "type": "string", "format": "date-time" },
+        "paymentBy": { "type": "string" },
+        "actualPickupTime": { "type": "string", "format": "date-time" },
+        "pickedUpBy": { "type": "string" },
+        "customerSignature": { "type": "string", "description": "Base64 or URL of signature image" },
+        "status": { "type": "string", "enum": ["Pending", "Confirmed", "Picked Up", "Reviewed", "Overdue", "Cancelled"] },
+        "printedTime": { "type": "string", "format": "date-time" },
+        "printedBy": { "type": "string" },
+        "emailLog": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "format": "date-time" },
+          "description": "Log of sent emails (type -> timestamp)"
+        }
+      },
+      "required": ["bookingNumber", "customerName", "status", "createdTime", "createdBy", "warehouseId", "storeId"]
+    },
+    "EmailTemplate": {
+      "title": "EmailTemplate",
+      "description": "Dynamic email templates.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string", "description": "HTML body with {{handlebars}} variables" },
+        "type": { "type": "string", "enum": ["pickup_notification", "order_created", "custom"] },
+        "storeName": { "type": "string", "description": "Optional: specific to a store" },
+        "status": { "type": "string", "description": "Optional: specific to an order status" }
+      },
+      "required": ["name", "subject", "body", "type"]
+    },
+    "StoreConfig": {
+      "title": "StoreConfig",
+      "description": "Configuration for a store, including email templates.",
+      "type": "object",
+      "properties": {
+        "senderEmail": { "type": "string" },
+        "emailTemplate": { "type": "string" }
+      },
+      "required": ["senderEmail"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "System audit log.",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["timestamp", "userId", "action"]
+    },
+    "Store": {
+      "title": "Store",
+      "description": "Store configuration including email templates.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "description": "Unique identifier (e.g., SHOPIFY_NZ_01)" },
+        "name": { "type": "string", "description": "Friendly name for display and signatures" },
+        "senderEmail": { "type": "string", "description": "Sender email address" },
+        "template": {
+          "type": "object",
+          "properties": {
+            "subject": { "type": "string" },
+            "body": { "type": "string", "description": "HTML body with {{variables}}" }
+          },
+          "required": ["subject", "body"]
+        },
+        "disableEmail": { "type": "boolean", "description": "If true, skip sending emails for this store" }
+      },
+      "required": ["storeId", "name", "template"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "System announcements displayed on the dashboard.",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string", "description": "Text content of the announcement" },
+        "link": { "type": "string", "description": "Optional link for more info" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["content", "updatedAt", "updatedBy"]
+    },
+    "UserGroup": {
+      "title": "UserGroup",
+      "description": "A group of users for targeted notifications.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "userIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["name", "userIds"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System notifications for users.",
+      "type": "object",
+      "properties": {
+        "recipientUid": { "type": "string", "description": "Recipient user ID" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "type": { "type": "string", "enum": ["New Order", "Order Picked Up", "System"] },
+        "orderId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["recipientUid", "title", "body", "createdAt", "isRead"]
+    },
+    "BugReport": {
+      "title": "BugReport",
+      "description": "User submitted bug report.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "severity": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "status": { "type": "string", "enum": ["Open", "In Progress", "Resolved", "Closed"] },
+        "reporterUid": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reporterEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userAgent": { "type": "string" },
+        "appVersion": { "type": "string" }
+      },
+      "required": ["title", "description", "severity", "status", "reporterUid", "createdAt"]
+    },
+    "UniqueKey": {
+      "title": "UniqueKey",
+      "description": "Shadow document to ensure global uniqueness of booking numbers and customer references.",
+      "type": "object",
+      "properties": {
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["createdAt"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "Collection of system users" },
+    "skus": { "schema": "SKU", "description": "Product database" },
+    "orders": { "schema": "Order", "description": "Pickup orders" },
+    "stores": { "schema": "Store", "description": "Store configurations including SMTP and templates" },
+    "logs": { "schema": "Log", "description": "Audit logs" },
+    "announcements": { "schema": "Announcement", "description": "System announcements" },
+    "notifications": { "schema": "Notification", "description": "User notifications" },
+    "userGroups": { "schema": "UserGroup", "description": "Groups of users" },
+    "bug_reports": { "schema": "BugReport", "description": "User submitted bug reports" },
+    "unique_keys": { "schema": "UniqueKey", "description": "Shadow collection for uniqueness constraints" }
+  }
+}
