@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Response, NextFunction } from 'express';
-import { SUPER_ADMINS, isSuperAdmin } from './auth-shared.js';
+import { SUPER_ADMINS, isSuperAdmin } from './auth-shared.ts';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'aca-pickup-secret-key-2026';
 
@@ -18,7 +18,7 @@ export const generateToken = (payload: any) => {
 /**
  * Middleware to authenticate JWT and parse user info.
  */
-import { writeLog } from './logger.js';
+import { writeLog } from './logger.ts';
 
 // ... (existing code)
 
