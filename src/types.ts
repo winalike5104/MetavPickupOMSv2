@@ -130,7 +130,7 @@ export interface UserProfile {
   fcmToken?: string;
 }
 
-export interface SystemLog {
+export interface OperationLog {
   id?: string;
   timestamp: string;
   userId: string;
@@ -157,13 +157,12 @@ export const ROLE_TEMPLATES = {
     'Create Order', 'Edit Order', 'Search Orders', 'View Orders',
     'Add Order Items', 'Edit Order Items',
     'Add Payment', 'Edit Payment', 'View Payment',
-    'Cancel Orders', 'View SKU'
+    'Cancel Orders'
   ],
   Reception: [
     'View Orders', 'Search Orders',
     'Add Payment', 'View Payment',
-    'Print Pick List', 'Confirm Pickup', 'Capture Signature',
-    'View SKU'
+    'Print Pick List', 'Confirm Pickup', 'Capture Signature'
   ],
   Admin: [...PERMISSIONS]
 };

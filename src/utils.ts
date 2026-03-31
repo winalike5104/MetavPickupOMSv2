@@ -44,6 +44,12 @@ export const hasPermission = (profile: UserProfile | null, permission: Permissio
   if (isSystemAdmin(username)) return true;
   if (!profile) return false;
   if (profile.status === 'Disabled') return false;
+  
+  // Explicitly deny SKU access for Sales/Reception roles
+  if (permission === 'View SKU' && (profile.roleTemplate === 'Sales' || profile.roleTemplate === 'Reception')) {
+    return false;
+  }
+
   return (profile.permissions || []).includes(permission);
 };
 

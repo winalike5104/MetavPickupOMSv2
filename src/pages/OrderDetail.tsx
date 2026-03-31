@@ -17,7 +17,7 @@ import {
   OrderItem, 
   SKU, 
   Store, 
-  SystemLog, 
+  OperationLog, 
   PaymentStatus, 
   PaymentMethod,
   OrderStatus
@@ -59,7 +59,7 @@ export const OrderDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
-  const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [logs, setLogs] = useState<OperationLog[]>([]);
   
   // Signature State
   const [showSignatureModal, setShowSignatureModal] = useState(false);
@@ -71,6 +71,29 @@ export const OrderDetail: React.FC = () => {
   const [isGuestOnline, setIsGuestOnline] = useState(false);
   const [isProjecting, setIsProjecting] = useState(false);
   const [receivedRemoteSignature, setReceivedRemoteSignature] = useState<string | null>(null);
+  
+  // Scroll state for collapsible header
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
   
   // Edit Form State
   const [editForm, setEditForm] = useState<Partial<Order>>({});
@@ -234,7 +257,7 @@ export const OrderDetail: React.FC = () => {
       );
       const querySnapshot = await getDocs(q);
       const logsData = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as SystemLog))
+        .map(doc => ({ id: doc.id, ...doc.data() } as OperationLog))
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setLogs(logsData);
     } catch (err) {
@@ -550,86 +573,110 @@ export const OrderDetail: React.FC = () => {
   const store = stores.find(s => s.storeId === order.storeId);
 
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/orders')}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6 text-gray-600" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{order.bookingNumber}</h1>
-              {renderStatusBadge(order.status)}
+    <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Fixed Header */}
+      <div className={cn(
+        "flex-shrink-0 bg-white border-b border-slate-200 z-20 transition-all duration-300 ease-in-out group print:hidden",
+        isScrolled ? "py-2 shadow-md" : "py-6 shadow-sm"
+      )}>
+        <div className="max-w-5xl mx-auto px-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/orders')}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ArrowLeft className={cn("transition-all duration-300", isScrolled ? "w-5 h-5" : "w-6 h-6")} />
+            </button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className={cn(
+                  "font-bold text-gray-900 transition-all duration-300",
+                  isScrolled ? "text-lg" : "text-2xl"
+                )}>
+                  {order.bookingNumber}
+                </h1>
+                {renderStatusBadge(order.status)}
+              </div>
+              <p className={cn(
+                "text-gray-500 transition-all duration-300",
+                isScrolled ? "text-[10px] opacity-0 h-0 overflow-hidden group-hover:opacity-100 group-hover:h-auto group-hover:text-xs" : "text-sm"
+              )}>
+                Ref: {order.refNumber}
+              </p>
             </div>
-            <p className="text-sm text-gray-500">Ref: {order.refNumber}</p>
+          </div>
+
+          <div className={cn(
+            "flex flex-wrap items-center gap-2 transition-all duration-300",
+            isScrolled ? "scale-90 origin-right" : "scale-100"
+          )}>
+            {hasPermission(profile, 'Edit Order', profile?.email) && order.status !== 'Cancelled' && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Edit className="w-3.5 h-3.5 mr-1.5" />
+                Edit
+              </button>
+            )}
+            
+            {hasPermission(profile, 'Print Pick List', profile?.email) && (
+              <button
+                onClick={handlePrint}
+                className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5 mr-1.5" />
+                Print
+              </button>
+            )}
+
+            {hasPermission(profile, 'Confirm Pickup', profile?.email) && order.status === 'Created' && (
+              <button
+                onClick={() => handleStatusChange('Picked Up')}
+                className="inline-flex items-center px-3 py-1.5 bg-green-600 rounded-lg text-xs font-medium text-white hover:bg-green-700 transition-colors"
+              >
+                <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                Confirm Pickup
+              </button>
+            )}
+
+            {hasPermission(profile, 'Review Orders', profile?.email) && order.status === 'Picked Up' && (
+              <button
+                onClick={() => handleStatusChange('Reviewed')}
+                className="inline-flex items-center px-3 py-1.5 bg-purple-600 rounded-lg text-xs font-medium text-white hover:bg-purple-700 transition-colors"
+              >
+                <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                Mark Reviewed
+              </button>
+            )}
+
+            {hasPermission(profile, 'Cancel Orders', profile?.email) && order.status !== 'Cancelled' && (
+              <button
+                onClick={() => handleStatusChange('Cancelled')}
+                className="inline-flex items-center px-3 py-1.5 bg-red-50 rounded-lg text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                Cancel
+              </button>
+            )}
+
+            {hasPermission(profile, 'Manage Users', profile?.email) && (
+              <button
+                onClick={handleDeleteOrder}
+                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {hasPermission(profile, 'Edit Order', profile?.email) && order.status !== 'Cancelled' && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </button>
-          )}
-          
-          {hasPermission(profile, 'Print Pick List', profile?.email) && (
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Print
-            </button>
-          )}
-
-          {hasPermission(profile, 'Confirm Pickup', profile?.email) && order.status === 'Created' && (
-            <button
-              onClick={() => handleStatusChange('Picked Up')}
-              className="inline-flex items-center px-4 py-2 bg-green-600 rounded-lg text-sm font-medium text-white hover:bg-green-700 transition-colors"
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Confirm Pickup
-            </button>
-          )}
-
-          {hasPermission(profile, 'Review Orders', profile?.email) && order.status === 'Picked Up' && (
-            <button
-              onClick={() => handleStatusChange('Reviewed')}
-              className="inline-flex items-center px-4 py-2 bg-purple-600 rounded-lg text-sm font-medium text-white hover:bg-purple-700 transition-colors"
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Mark Reviewed
-            </button>
-          )}
-
-          {hasPermission(profile, 'Cancel Orders', profile?.email) && order.status !== 'Cancelled' && (
-            <button
-              onClick={() => handleStatusChange('Cancelled')}
-              className="inline-flex items-center px-4 py-2 bg-red-50 rounded-lg text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
-            >
-              <XCircle className="w-4 h-4 mr-2" />
-              Cancel
-            </button>
-          )}
-
-          {hasPermission(profile, 'Manage Users', profile?.email) && (
-            <button
-              onClick={handleDeleteOrder}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-          )}
-        </div>
       </div>
+
+      {/* Content Area (Scrolling) */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 print:hidden">
+        {/* Sentinel for Scroll Detection */}
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
+        <div className="max-w-5xl mx-auto space-y-6">
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -764,10 +811,10 @@ export const OrderDetail: React.FC = () => {
 
         {/* Right Column: Logs & Metadata */}
         <div className="space-y-6">
-          {/* System Logs */}
+          {/* Operation Logs */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">System Logs</h3>
+              <h3 className="font-semibold text-gray-900">Operation Logs</h3>
               <Clock className="w-4 h-4 text-gray-400" />
             </div>
             <div className="p-4 max-h-[500px] overflow-y-auto">
@@ -1149,6 +1196,9 @@ export const OrderDetail: React.FC = () => {
             </div>
           </div>
         )}
+
+        </div>
+      </div>
 
       {/* Print View (Hidden) */}
       <div className="hidden print:block p-8 bg-white text-black">

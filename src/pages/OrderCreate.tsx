@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { SKU, OrderItem, Store, UserProfile, UserGroup } from '../types';
-import { handleFirestoreError, OperationType, resolveRecipients } from '../utils';
+import { handleFirestoreError, OperationType, resolveRecipients, cn } from '../utils';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { 
   Plus, 
@@ -50,6 +50,29 @@ export const OrderCreate = () => {
   const [allGroups, setAllGroups] = useState<UserGroup[]>([]);
   const [storeConfigs, setStoreConfigs] = useState<Record<string, boolean>>({});
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
+  
+  // Scroll state for collapsible header
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
   
   // SKU Search state
   const [skuSearch, setSkuSearch] = useState('');
@@ -260,23 +283,39 @@ export const OrderCreate = () => {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto space-y-8">
-      <div className="flex items-center gap-4">
-        <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-          <ArrowLeft className="w-6 h-6 text-slate-600" />
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900">Create New Order</h1>
+    <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Fixed Header */}
+      <div className={cn(
+        "flex-shrink-0 bg-white border-b border-slate-200 z-20 transition-all duration-300 ease-in-out group",
+        isScrolled ? "py-3 shadow-md" : "py-6 shadow-sm"
+      )}>
+        <div className="max-w-4xl mx-auto px-4 md:px-8 flex items-center gap-4">
+          <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+            <ArrowLeft className={cn("transition-all duration-300", isScrolled ? "w-5 h-5" : "w-6 h-6")} />
+          </Link>
+          <h1 className={cn(
+            "font-bold text-slate-900 transition-all duration-300",
+            isScrolled ? "text-lg" : "text-2xl"
+          )}>
+            Create New Order
+          </h1>
+        </div>
       </div>
 
-      {error && (
-        <div className="p-4 bg-red-50 border-2 border-red-500 rounded-xl flex items-start gap-3 text-red-700 text-sm animate-shake">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="font-bold mb-1">Error Occurred</p>
-            <p>{error}</p>
-          </div>
-        </div>
-      )}
+      {/* Content Area (Scrolling) */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* Sentinel for Scroll Detection */}
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
+        <div className="max-w-4xl mx-auto space-y-8">
+          {error && (
+            <div className="p-4 bg-red-50 border-2 border-red-500 rounded-xl flex items-start gap-3 text-red-700 text-sm animate-shake">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-bold mb-1">Error Occurred</p>
+                <p>{error}</p>
+              </div>
+            </div>
+          )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Basic Info Section */}
@@ -658,5 +697,7 @@ export const OrderCreate = () => {
         </div>
       </form>
     </div>
+  </div>
+</div>
   );
 };

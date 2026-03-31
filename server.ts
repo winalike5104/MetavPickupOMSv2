@@ -149,7 +149,7 @@ async function startServer() {
     next();
   });
 
-  // System Logs Endpoints
+  // Operation Logs Endpoints
   app.get("/api/admin/logs", authenticate, (req: any, res) => {
     const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
     if (!isSuper) return res.status(403).json({ error: "Forbidden" });

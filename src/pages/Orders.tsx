@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { collection, query, getDocs, orderBy, where, writeBatch, doc, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Order } from '../types';
@@ -60,6 +60,28 @@ export const Orders = () => {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const menuRef = React.useRef<HTMLDivElement>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -491,7 +513,7 @@ export const Orders = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden font-sans">
       {/* Notification Toast */}
       {notification && (
         <div className={cn(
@@ -531,88 +553,131 @@ export const Orders = () => {
         </div>
       )}
 
-      {/* 🚀 Optimized Header Section (Fixed) */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-md px-4 md:px-8 py-6 space-y-6 z-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Order Management</h1>
-            <div className="flex items-center gap-2 text-slate-500">
-              <MapPin className="w-4 h-4" />
-              <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
+      {/* 🚀 Collapsible Header Section with Scroll Effects */}
+      <header className={cn(
+        "flex-shrink-0 border-b border-slate-200 z-30 transition-all duration-300 ease-in-out group sticky top-0",
+        isScrolled 
+          ? "shadow-lg backdrop-blur-md bg-white/80" 
+          : "shadow-sm bg-white"
+      )}>
+        <div className={cn(
+          "max-w-[1600px] mx-auto px-4 md:px-8 transition-all duration-300 ease-in-out",
+          isScrolled ? "py-3 group-hover:py-6" : "py-6"
+        )}>
+          <div className={cn(
+            "flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300",
+            isScrolled ? "mb-2 group-hover:mb-6" : "mb-6"
+          )}>
+            <div>
+              <h1 className={cn(
+                "font-bold text-slate-900 tracking-tight transition-all duration-300",
+                isScrolled ? "text-xl group-hover:text-3xl" : "text-3xl"
+              )}>
+                Order Management
+              </h1>
+              <div className={cn(
+                "flex items-center gap-2 text-slate-500 transition-all duration-300 overflow-hidden ease-in-out",
+                isScrolled 
+                  ? "h-0 opacity-0 group-hover:h-5 group-hover:opacity-100" 
+                  : "h-5 opacity-100"
+              )}>
+                <MapPin className="w-4 h-4" />
+                <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className={cn(
+                "bg-white border border-slate-200 p-1 rounded-xl flex gap-1 shadow-sm transition-all",
+                isScrolled ? "scale-90 group-hover:scale-100" : ""
+              )}>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={cn(
+                    "p-2 rounded-lg transition-all",
+                    viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+                  )}
+                  title="Table View"
+                >
+                  <TableIcon className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('card')}
+                  className={cn(
+                    "p-2 rounded-lg transition-all",
+                    viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+                  )}
+                  title="Card View"
+                >
+                  <LayoutGrid className="w-5 h-5" />
+                </button>
+              </div>
+              <Link 
+                to="/orders/bulk-import"
+                className={cn(
+                  "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
+                  isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
+                )}
+              >
+                <Upload className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+                <span className={cn(
+                  "transition-all",
+                  isScrolled ? "hidden group-hover:inline" : "inline"
+                )}>Bulk Import</span>
+              </Link>
+              <Link 
+                to="/orders/create"
+                className={cn(
+                  "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200",
+                  isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
+                )}
+              >
+                <Plus className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+                New Order
+              </Link>
+              <button 
+                onClick={exportToCSV}
+                className={cn(
+                  "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
+                  isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
+                )}
+              >
+                <Download className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+                <span className={cn(
+                  "transition-all",
+                  isScrolled ? "hidden group-hover:inline" : "inline"
+                )}>Export</span>
+              </button>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="bg-white border border-slate-200 p-1 rounded-xl flex gap-1 shadow-sm">
-              <button
-                onClick={() => setViewMode('table')}
-                className={cn(
-                  "p-2 rounded-lg transition-all",
-                  viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
-                )}
-                title="Table View"
-              >
-                <TableIcon className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setViewMode('card')}
-                className={cn(
-                  "p-2 rounded-lg transition-all",
-                  viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
-                )}
-                title="Card View"
-              >
-                <LayoutGrid className="w-5 h-5" />
-              </button>
-            </div>
-            <Link 
-              to="/orders/bulk-import"
-              className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
-            >
-              <Upload className="w-4 h-4" />
-              Bulk Import
-            </Link>
-            <Link 
-              to="/orders/create"
-              className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              New Order
-            </Link>
-            <button 
-              onClick={exportToCSV}
-              className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-          </div>
-        </div>
 
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder="Search by Booking #, Customer, ID, or SKU..."
-            />
-            <button 
-              onClick={fetchOrders}
-              disabled={loading}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-200 rounded-lg transition-colors text-slate-400 hover:text-indigo-600 disabled:opacity-50"
-              title="Refresh orders"
-            >
-              <Loader2 className={cn("w-5 h-5", loading && "animate-spin")} />
-            </button>
-          </div>
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                placeholder="Search by Booking #, Customer, ID, or SKU..."
+              />
+              <button 
+                onClick={fetchOrders}
+                disabled={loading}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-200 rounded-lg transition-colors text-slate-400 hover:text-indigo-600 disabled:opacity-50"
+                title="Refresh orders"
+              >
+                <Loader2 className={cn("w-5 h-5", loading && "animate-spin")} />
+              </button>
+            </div>
             {selectedOrderIds.length > 0 && (
               <div className="flex gap-2">
                 <button
                   onClick={handleBulkReviewClick}
                   disabled={bulkUpdating || isTaskRunning}
-                  className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 text-sm"
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50",
+                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-3 group-hover:text-sm" : "px-4 py-3 text-sm"
+                  )}
                 >
                   {bulkUpdating ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -624,7 +689,10 @@ export const Orders = () => {
                 <button
                   onClick={handleBulkEmailClick}
                   disabled={bulkUpdating || isTaskRunning}
-                  className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 text-sm"
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50",
+                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-3 group-hover:text-sm" : "px-4 py-3 text-sm"
+                  )}
                 >
                   {isTaskRunning ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -635,72 +703,81 @@ export const Orders = () => {
                 </button>
               </div>
             )}
+          </div>
+
+          <div className={cn(
+            "grid grid-cols-1 md:grid-cols-4 gap-4 transition-all duration-300 ease-in-out overflow-hidden",
+            isScrolled 
+              ? "h-0 opacity-0 mt-0 group-hover:h-auto group-hover:opacity-100 group-hover:mt-4" 
+              : "h-auto opacity-100 mt-4"
+          )}>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <Filter className="w-5 h-5 text-slate-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-transparent outline-none text-sm flex-1 font-medium"
+              >
+                <option value="Active">Active Orders</option>
+                <option value="All">All Orders</option>
+                <option value="Overdue">Overdue Orders</option>
+                <option value="Created">Created</option>
+                <option value="Picked Up">Picked Up</option>
+                <option value="Reviewed">Reviewed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <Calendar className="w-5 h-5 text-slate-400" />
+              <input 
+                type="date" 
+                value={dateRange.start} 
+                onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+                className="bg-transparent outline-none text-xs flex-1"
+              />
+              <span className="text-slate-400">to</span>
+              <input 
+                type="date" 
+                value={dateRange.end} 
+                onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+                className="bg-transparent outline-none text-xs flex-1"
+              />
+            </div>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <CreditCard className="w-5 h-5 text-slate-400" />
+              <select
+                value={paymentMethodFilter}
+                onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                className="bg-transparent outline-none text-sm flex-1 font-medium"
+              >
+                <option value="All">All Payments</option>
+                <option value="Cash">Cash</option>
+                <option value="EFTPOS">EFTPOS</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Online Payment">Online Payment</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <StoreIcon className="w-5 h-5 text-slate-400" />
+              <select
+                value={storeFilter}
+                onChange={(e) => setStoreFilter(e.target.value)}
+                className="bg-transparent outline-none text-sm flex-1 font-medium"
+              >
+                <option value="All">All Stores</option>
+                {stores.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-            <Filter className="w-5 h-5 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent outline-none text-sm flex-1 font-medium"
-            >
-              <option value="Active">Active Orders</option>
-              <option value="All">All Orders</option>
-              <option value="Overdue">Overdue Orders</option>
-              <option value="Created">Created</option>
-              <option value="Picked Up">Picked Up</option>
-              <option value="Reviewed">Reviewed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-            <Calendar className="w-5 h-5 text-slate-400" />
-            <input 
-              type="date" 
-              value={dateRange.start} 
-              onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-              className="bg-transparent outline-none text-xs flex-1"
-            />
-            <span className="text-slate-400">to</span>
-            <input 
-              type="date" 
-              value={dateRange.end} 
-              onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-              className="bg-transparent outline-none text-xs flex-1"
-            />
-          </div>
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-            <CreditCard className="w-5 h-5 text-slate-400" />
-            <select
-              value={paymentMethodFilter}
-              onChange={(e) => setPaymentMethodFilter(e.target.value)}
-              className="bg-transparent outline-none text-sm flex-1 font-medium"
-            >
-              <option value="All">All Payments</option>
-              <option value="Cash">Cash</option>
-              <option value="EFTPOS">EFTPOS</option>
-              <option value="Bank Transfer">Bank Transfer</option>
-              <option value="Online Payment">Online Payment</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-            <StoreIcon className="w-5 h-5 text-slate-400" />
-            <select
-              value={storeFilter}
-              onChange={(e) => setStoreFilter(e.target.value)}
-              className="bg-transparent outline-none text-sm flex-1 font-medium"
-            >
-              <option value="All">All Stores</option>
-              {stores.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
+      </header>
 
       {/* Content Area (Scrolling) */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* Sentinel for Scroll Detection */}
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         {loading ? (
           <div className="space-y-4">
             {[1,2,3,4,5].map(i => <div key={i} className="h-20 bg-slate-100 animate-pulse rounded-2xl"></div>)}

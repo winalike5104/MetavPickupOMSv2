@@ -12,7 +12,7 @@ import { Settings } from './pages/Settings';
 import { UserManagement } from './pages/UserManagement';
 import UserGroups from './pages/UserGroups';
 import { StoreManagement } from './pages/StoreManagement';
-import SystemLogs from './pages/SystemLogs';
+import OperationLogs from './pages/OperationLogs';
 import { BulkOrderUpload } from './pages/BulkOrderUpload';
 import { WarehouseSelection } from './pages/WarehouseSelection';
 import { ReloadPrompt } from './components/ReloadPrompt';
@@ -121,7 +121,7 @@ export default function App() {
               <Route path="/groups" element={<ProtectedRoute><UserGroups /></ProtectedRoute>} />
               <Route path="/stores" element={<ProtectedRoute><StoreManagement /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-              <Route path="/logs" element={<ProtectedRoute><SystemLogs /></ProtectedRoute>} />
+              <Route path="/logs" element={<ProtectedRoute><OperationLogs /></ProtectedRoute>} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </Router>

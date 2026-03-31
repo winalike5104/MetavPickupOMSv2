@@ -68,7 +68,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       name: 'System',
       icon: FileText,
       items: [
-        { name: 'System Logs', path: '/logs', icon: FileText, visible: isAdmin(profile, user?.username) || isSystemAdmin(user?.username) },
+        { name: 'Operation Logs', path: '/logs', icon: FileText, visible: isAdmin(profile, user?.username) || isSystemAdmin(user?.username) },
         { name: 'Guest Display', path: '/guest-display', icon: Monitor, visible: isAdmin(profile, user?.username) || hasPermission(profile, 'Capture Signature', user?.username) },
         { name: 'Settings', path: '/settings', icon: Settings, visible: true },
       ]
@@ -106,9 +106,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="h-screen w-full bg-slate-50 flex flex-col overflow-hidden">
       {/* Top Header */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-sm">
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between flex-shrink-0 z-30 shadow-sm">
         <div className="flex items-center gap-4">
           <button 
             className="md:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors"
@@ -132,7 +132,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 w-full overflow-hidden">
         {/* Sidebar for Desktop */}
         <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 flex-shrink-0">
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -219,7 +219,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         )}
 
         {/* Main Content */}
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main className="flex-1 h-full w-full overflow-hidden flex flex-col min-w-0">
           {children}
         </main>
       </div>

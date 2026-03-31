@@ -101,6 +101,29 @@ export const BulkOrderUpload = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'valid' | 'invalid' | 'duplicate'>('all');
   const [availableStoreIds, setAvailableStoreIds] = useState<string[]>([]);
 
+  // Scroll state for collapsible header
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
+
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs(prev => [{
       timestamp: new Date().toLocaleTimeString(),
@@ -362,24 +385,40 @@ export const BulkOrderUpload = () => {
   }, [rows, activeTab]);
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 p-4 md:p-8">
-      <div className="max-w-[1600px] mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Fixed Header */}
+      <div className={cn(
+        "flex-shrink-0 bg-white border-b border-slate-200 z-20 transition-all duration-300 ease-in-out group",
+        isScrolled ? "py-2 shadow-md" : "py-6 shadow-sm"
+      )}>
+        <div className="max-w-[1600px] mx-auto px-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Link to="/orders" className="p-2 hover:bg-white rounded-full transition-colors">
-              <ArrowLeft className="w-6 h-6 text-slate-600" />
+            <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <ArrowLeft className={cn("transition-all duration-300", isScrolled ? "w-5 h-5" : "w-6 h-6")} />
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Bulk Order Upload</h1>
-              <p className="text-slate-500">Import orders using CSV with atomic transaction safety</p>
+              <h1 className={cn(
+                "font-bold text-slate-900 transition-all duration-300",
+                isScrolled ? "text-lg" : "text-2xl"
+              )}>
+                Bulk Order Upload
+              </h1>
+              <p className={cn(
+                "text-slate-500 transition-all duration-300",
+                isScrolled ? "text-[10px] opacity-0 h-0 overflow-hidden group-hover:opacity-100 group-hover:h-auto group-hover:text-xs" : "text-sm"
+              )}>
+                Import orders using CSV with atomic transaction safety
+              </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className={cn(
+            "flex items-center gap-3 transition-all duration-300",
+            isScrolled ? "scale-90 origin-right" : "scale-100"
+          )}>
             <button
               onClick={() => setRows([])}
-              className="px-4 py-2 text-slate-600 hover:bg-white rounded-xl transition-all flex items-center gap-2"
+              className="px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-xl transition-all flex items-center gap-2 text-sm"
             >
               <Trash2 className="w-4 h-4" />
               Clear
@@ -387,13 +426,20 @@ export const BulkOrderUpload = () => {
             <button
               onClick={handleImport}
               disabled={isImporting || isChecking || stats.valid === 0}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg shadow-indigo-200"
+              className="px-5 py-1.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg shadow-indigo-200 text-sm"
             >
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
               Start Import ({stats.valid})
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Content Area (Scrolling) */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* Sentinel for Scroll Detection */}
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
+        <div className="max-w-[1600px] mx-auto space-y-6">
 
         {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -690,6 +736,7 @@ export const BulkOrderUpload = () => {
             </div>
           </div>
 
+          </div>
         </div>
       </div>
     </div>

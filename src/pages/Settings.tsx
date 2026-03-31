@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
@@ -21,7 +21,7 @@ import {
   ExternalLink,
   Megaphone
 } from 'lucide-react';
-import { logAction, isSystemAdmin, isAdmin, hasPermission, handleFirestoreError, OperationType } from '../utils';
+import { logAction, isSystemAdmin, isAdmin, hasPermission, handleFirestoreError, OperationType, cn } from '../utils';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import { BugReportModal } from '../components/BugReportModal';
 
@@ -35,6 +35,29 @@ export const Settings = () => {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
+
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showBugModal, setShowBugModal] = useState(false);
   const [pairingPassword, setPairingPassword] = useState(localStorage.getItem('pairing_password') || '');
@@ -88,34 +111,58 @@ export const Settings = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Fixed Header */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm px-4 md:px-8 py-6 z-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Account Settings</h1>
-            <p className="text-slate-500">Manage your personal preferences and account details.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {success && (
-              <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm animate-bounce">
-                <CheckCircle2 className="w-5 h-5" /> Settings saved!
-              </div>
-            )}
-            <button 
-              onClick={handleSave}
-              disabled={submitting}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
-            >
-              <Save className="w-5 h-5" />
-              {submitting ? 'Saving...' : 'Save Changes'}
-            </button>
+    <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Collapsible Header */}
+      <div className={cn(
+        "flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-200 z-30 transition-all duration-300 ease-in-out group",
+        isScrolled ? "py-3 shadow-md" : "py-6 shadow-sm",
+        "hover:py-6 hover:shadow-lg"
+      )}>
+        <div className="px-4 md:px-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="transition-all duration-300">
+              <h1 className={cn(
+                "font-bold text-slate-900 transition-all duration-300",
+                isScrolled ? "text-lg md:text-xl" : "text-2xl",
+                "group-hover:text-2xl"
+              )}>
+                Account Settings
+              </h1>
+              <p className={cn(
+                "text-slate-500 transition-all duration-300 overflow-hidden",
+                isScrolled ? "max-h-0 opacity-0" : "max-h-10 opacity-100",
+                "group-hover:max-h-10 group-hover:opacity-100"
+              )}>
+                Manage your personal preferences and account details.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {success && (
+                <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm animate-bounce">
+                  <CheckCircle2 className="w-5 h-5" /> Settings saved!
+                </div>
+              )}
+              <button 
+                onClick={handleSave}
+                disabled={submitting}
+                className={cn(
+                  "inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 disabled:opacity-50",
+                  isScrolled ? "px-4 py-2 text-sm" : "px-6 py-2.5",
+                  "group-hover:px-6 group-hover:py-2.5 group-hover:text-base"
+                )}
+              >
+                <Save className={cn("transition-all", isScrolled ? "w-4 h-4" : "w-5 h-5", "group-hover:w-5 group-hover:h-5")} />
+                {submitting ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* 🚀 Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* Sentinel for Scroll Detection */}
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-4xl mx-auto space-y-8">
           {error && (
             <div className="flex items-center gap-2 text-red-600 font-bold text-sm bg-red-50 p-4 rounded-xl border border-red-100">

@@ -309,7 +309,7 @@ export const BulkImport = () => {
               const orderRef = doc(db, 'orders', bookingNumber);
               batch.set(orderRef, orderData);
               
-              // Add to System Logs for each order
+              // Add to Operation Logs for each order
               const logRef = doc(collection(db, 'logs'));
               batch.set(logRef, {
                 timestamp: new Date().toISOString(),

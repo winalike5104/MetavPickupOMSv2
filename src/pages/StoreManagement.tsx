@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { Store } from '../types';
-import { logAction, hasPermission, isAdmin, handleFirestoreError, OperationType } from '../utils';
+import { logAction, hasPermission, isAdmin, handleFirestoreError, OperationType, cn } from '../utils';
 import { StoreConfigModal } from '../components/StoreConfigModal';
 import { 
   Plus, 
@@ -25,6 +25,28 @@ export const StoreManagement = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<Store | null>(null);
@@ -118,28 +140,52 @@ export const StoreManagement = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Fixed Header */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm px-4 md:px-8 py-6 z-20">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Store Management</h1>
-            <p className="text-slate-500">Manage store-specific SMTP settings and email templates.</p>
+    <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Collapsible Header */}
+      <div className={cn(
+        "flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-200 z-30 transition-all duration-300 ease-in-out group",
+        isScrolled ? "py-3 shadow-md" : "py-6 shadow-sm",
+        "hover:py-6 hover:shadow-lg"
+      )}>
+        <div className="px-4 md:px-8">
+          <div className="flex justify-between items-center">
+            <div className="transition-all duration-300">
+              <h1 className={cn(
+                "font-bold text-slate-900 transition-all duration-300",
+                isScrolled ? "text-lg md:text-xl" : "text-2xl",
+                "group-hover:text-2xl"
+              )}>
+                Store Management
+              </h1>
+              <p className={cn(
+                "text-slate-500 transition-all duration-300 overflow-hidden",
+                isScrolled ? "max-h-0 opacity-0" : "max-h-10 opacity-100",
+                "group-hover:max-h-10 group-hover:opacity-100"
+              )}>
+                Manage store-specific SMTP settings and email templates.
+              </p>
+            </div>
+            {canManage && (
+              <button
+                onClick={handleAdd}
+                className={cn(
+                  "bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 flex items-center gap-2",
+                  isScrolled ? "px-4 py-2 text-sm" : "px-6 py-3",
+                  "group-hover:px-6 group-hover:py-3 group-hover:text-base"
+                )}
+              >
+                <Plus className={cn("transition-all", isScrolled ? "w-4 h-4" : "w-5 h-5", "group-hover:w-5 group-hover:h-5")} />
+                Add Store
+              </button>
+            )}
           </div>
-          {canManage && (
-            <button
-              onClick={handleAdd}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Add Store
-            </button>
-          )}
         </div>
       </div>
 
       {/* 🚀 Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* Sentinel for Scroll Detection */}
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-6xl mx-auto space-y-8">
           {error && (
         <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-700 text-sm animate-in fade-in duration-300">
@@ -284,7 +330,7 @@ export const StoreManagement = () => {
         </div>
       )}
       </div>
-      </div>
     </div>
-  );
+  </div>
+);
 };

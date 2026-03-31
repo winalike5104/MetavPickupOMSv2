@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, writeBatch, orderBy, limit, startAfter, getCountFromServer, where, setDoc, documentId } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
@@ -62,6 +62,27 @@ export const SKUDatabase = () => {
   const [cleaningHealth, setCleaningHealth] = useState(false);
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [clearing, setClearing] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
   
   // Form states
   const [formSku, setFormSku] = useState('');
@@ -788,118 +809,187 @@ export const SKUDatabase = () => {
     setShowEditModal(true);
   };
 
-  return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Optimized Header Section (Fixed) */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-md px-4 md:px-8 py-6 space-y-6 z-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">SKU Database ({totalCount})</h1>
-            <p className="text-slate-500">Manage product information and locations.</p>
-          </div>
-          <div className="flex gap-3">
-            {isSystemAdmin(profile?.email) && (
-            <button 
-              onClick={() => setShowClearModal(true)}
-              className="inline-flex items-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 px-6 py-3 rounded-xl font-semibold hover:bg-rose-100 transition-all"
-            >
-              <Trash2 className="w-5 h-5" />
-              Clear Database
-            </button>
-          )}
-          {isAdmin(profile, profile?.email) && (
-            <button 
-              onClick={handleDataHealthCheck}
-              disabled={checkingHealth}
-              className="inline-flex items-center gap-2 bg-white border border-slate-200 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all disabled:opacity-50"
-            >
-              <ShieldAlert className={`w-5 h-5 text-amber-500 ${checkingHealth ? "animate-pulse" : ""}`} />
-              {checkingHealth ? 'Checking...' : 'Data Health Check'}
-            </button>
-          )}
-          {hasPermission(profile, 'Upload SKU', profile?.email) && (
-            <button 
-              onClick={() => setShowUploadModal(true)}
-              className="inline-flex items-center gap-2 bg-white border border-slate-200 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all"
-            >
-              <Upload className="w-5 h-5" />
-              Batch Upload
-            </button>
-          )}
-          {hasPermission(profile, 'Edit SKU', profile?.email) && (
-            <button 
-              onClick={() => openEdit()}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200"
-            >
-              <Plus className="w-5 h-5" />
-              Add SKU
-            </button>
-          )}
-        </div>
-        </div>
+  const canView = hasPermission(profile, 'View SKU', profile?.email) || isAdmin(profile, profile?.email);
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder="Filter currently loaded SKUs..."
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
-                <MapPin className="w-3 h-3" /> Filter Location
-              </label>
-              <select
-                value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-              >
-                {locations.map(loc => (
-                  <option key={loc} value={loc}>{loc}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
-                <ArrowUpDown className="w-3 h-3" /> Sort By
-              </label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-              >
-                <option value="sku">SKU Code</option>
-                <option value="productName">Product Name</option>
-                <option value="location">Location</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
-                <ArrowUpDown className="w-3 h-3" /> Direction
-              </label>
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as any)}
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
-            </div>
-          </div>
-        </div>
+  if (!canView && !loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+        <ShieldAlert className="w-16 h-16 mb-4 opacity-20" />
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Access Denied</h2>
+        <p>You do not have permission to view the SKU Database.</p>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden font-sans">
+      {/* 🚀 Collapsible Header Section with Scroll Effects */}
+      <header className={cn(
+        "flex-shrink-0 border-b border-slate-200 z-30 transition-all duration-300 ease-in-out group sticky top-0",
+        isScrolled 
+          ? "shadow-lg backdrop-blur-md bg-white/80" 
+          : "shadow-sm bg-white"
+      )}>
+        <div className={cn(
+          "max-w-[1600px] mx-auto px-4 md:px-8 transition-all duration-300 ease-in-out",
+          isScrolled ? "py-3 group-hover:py-6" : "py-6"
+        )}>
+          <div className={cn(
+            "flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300",
+            isScrolled ? "mb-2 group-hover:mb-6" : "mb-6"
+          )}>
+            <div>
+              <h1 className={cn(
+                "font-bold text-slate-900 tracking-tight transition-all duration-300",
+                isScrolled ? "text-xl group-hover:text-3xl" : "text-3xl"
+              )}>
+                SKU Database ({totalCount})
+              </h1>
+              <p className={cn(
+                "text-slate-500 mt-1 transition-all duration-300 overflow-hidden ease-in-out",
+                isScrolled 
+                  ? "h-0 opacity-0 group-hover:h-5 group-hover:opacity-100" 
+                  : "h-5 opacity-100"
+              )}>
+                Manage product information and locations.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {isSystemAdmin(profile?.email) && (
+                <button 
+                  onClick={() => setShowClearModal(true)}
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl font-semibold hover:bg-rose-100 transition-all",
+                    isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                  )}
+                >
+                  <Trash2 className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
+                  <span className={cn(
+                    "transition-all",
+                    isScrolled ? "hidden group-hover:inline" : "inline"
+                  )}>Clear Database</span>
+                </button>
+              )}
+              {isAdmin(profile, profile?.email) && (
+                <button 
+                  onClick={handleDataHealthCheck}
+                  disabled={checkingHealth}
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all disabled:opacity-50",
+                    isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                  )}
+                >
+                  <ShieldAlert className={cn(
+                    "text-amber-500",
+                    checkingHealth ? "animate-pulse" : "",
+                    isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"
+                  )} />
+                  <span className={cn(
+                    "transition-all",
+                    isScrolled ? "hidden group-hover:inline" : "inline"
+                  )}>{checkingHealth ? 'Checking...' : 'Data Health Check'}</span>
+                </button>
+              )}
+              {hasPermission(profile, 'Upload SKU', profile?.email) && (
+                <button 
+                  onClick={() => setShowUploadModal(true)}
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all",
+                    isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                  )}
+                >
+                  <Upload className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
+                  <span className={cn(
+                    "transition-all",
+                    isScrolled ? "hidden group-hover:inline" : "inline"
+                  )}>Batch Upload</span>
+                </button>
+              )}
+              {hasPermission(profile, 'Edit SKU', profile?.email) && (
+                <button 
+                  onClick={() => openEdit()}
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200",
+                    isScrolled ? "px-4 py-2 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                  )}
+                >
+                  <Plus className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
+                  Add SKU
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                placeholder="Filter currently loaded SKUs..."
+              />
+            </div>
+
+            <div className={cn(
+              "grid grid-cols-1 md:grid-cols-3 gap-4 transition-all duration-300 ease-in-out overflow-hidden",
+              isScrolled 
+                ? "h-0 opacity-0 mt-0 group-hover:h-auto group-hover:opacity-100 group-hover:mt-4" 
+                : "h-auto opacity-100 mt-4"
+            )}>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> Filter Location
+                </label>
+                <select
+                  value={locationFilter}
+                  onChange={(e) => setLocationFilter(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                >
+                  {locations.map(loc => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                  <ArrowUpDown className="w-3 h-3" /> Sort By
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                >
+                  <option value="sku">SKU Code</option>
+                  <option value="productName">Product Name</option>
+                  <option value="location">Location</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                  <ArrowUpDown className="w-3 h-3" /> Direction
+                </label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as any)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                >
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
 
       {/* Content Area (Scrolling) */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* Sentinel for Scroll Detection */}
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         {selectedSkuIds.length > 0 && isAdmin(profile, profile?.email) && (
           <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-center justify-between animate-in fade-in slide-in-from-top-2 mb-6">
             <div className="flex items-center gap-3 text-rose-700">

@@ -11,7 +11,7 @@ The following modules are within the scope of this test plan:
 - SKU Database Management
 - User & Group Management
 - Store & SMTP Configuration
-- System Logs & Status
+- Operation Logs & Status
 - Guest Display & Signature Capture
 - Settings & Notifications
 - Bulk Data Import
