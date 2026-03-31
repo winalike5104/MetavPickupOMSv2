@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { 
   initializeFirestore, 
-  enableIndexedDbPersistence,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDocFromServer
 } from 'firebase/firestore';
@@ -14,20 +15,13 @@ const app = initializeApp(firebaseConfig);
 
 // 2. 初始化 Firestore
 // 保持长轮询，这对 AI Studio 的代理环境非常重要
+// 同时配置新版的离线持久化缓存
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
 }); 
-
-// 3. 离线持久化 (仅限浏览器环境)
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn("⚠️ 多标签页打开，仅第一个标签页开启持久化");
-    } else if (err.code === 'unimplemented') {
-      console.warn("⚠️ 当前浏览器不支持持久化");
-    }
-  });
-}
 
 export const storage = getStorage(app);
 
