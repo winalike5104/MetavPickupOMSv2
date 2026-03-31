@@ -15,10 +15,7 @@ import { StoreManagement } from './pages/StoreManagement';
 import OperationLogs from './pages/OperationLogs';
 import { BulkOrderUpload } from './pages/BulkOrderUpload';
 import { WarehouseSelection } from './pages/WarehouseSelection';
-import { ReloadPrompt } from './components/ReloadPrompt';
-
 import { GuestDisplay } from './pages/GuestDisplay';
-
 import { TaskProvider } from './components/TaskProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -104,7 +101,6 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <TaskProvider>
-          <ReloadPrompt />
           <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
