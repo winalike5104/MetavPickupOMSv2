@@ -195,25 +195,30 @@ export const UserManagement = () => {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
-          <p className="text-slate-500">Manage employee accounts and permissions.</p>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Fixed Header */}
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm px-4 md:px-8 py-6 z-20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
+            <p className="text-slate-500">Manage employee accounts and permissions.</p>
+          </div>
+          {canManage && (
+            <button 
+              onClick={() => openEdit()}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200"
+            >
+              <UserPlus className="w-5 h-5" />
+              Create Account
+            </button>
+          )}
         </div>
-        {canManage && (
-          <button 
-            onClick={() => openEdit()}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200"
-          >
-            <UserPlus className="w-5 h-5" />
-            Create Account
-          </button>
-        )}
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* 🚀 Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
               <tr>
@@ -454,6 +459,7 @@ export const UserManagement = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

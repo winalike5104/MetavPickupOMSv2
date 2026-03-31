@@ -362,7 +362,7 @@ export const BulkOrderUpload = () => {
   }, [rows, activeTab]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+    <div className="h-full overflow-y-auto bg-slate-50 p-4 md:p-8">
       <div className="max-w-[1600px] mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

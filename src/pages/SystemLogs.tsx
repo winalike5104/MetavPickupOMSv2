@@ -86,45 +86,50 @@ export default function SystemLogs() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Terminal className="w-6 h-6 text-indigo-600" />
-            System Logs
-          </h1>
-          <p className="text-slate-500 text-sm">Real-time backend activity and header debugging</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium cursor-pointer hover:bg-slate-50 transition-all">
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            Auto-refresh (3s)
-          </label>
-          <button
-            onClick={fetchLogs}
-            disabled={loading}
-            className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
-            title="Refresh now"
-          >
-            <RefreshCw className={`w-5 h-5 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={clearLogs}
-            className="p-2.5 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-all text-red-600"
-            title="Clear logs"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Fixed Header */}
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm px-4 md:px-8 py-6 z-20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+              <Terminal className="w-6 h-6 text-indigo-600" />
+              System Logs
+            </h1>
+            <p className="text-slate-500 text-sm">Real-time backend activity and header debugging</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium cursor-pointer hover:bg-slate-50 transition-all">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Auto-refresh (3s)
+            </label>
+            <button
+              onClick={fetchLogs}
+              disabled={loading}
+              className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
+              title="Refresh now"
+            >
+              <RefreshCw className={`w-5 h-5 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={clearLogs}
+              className="p-2.5 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-all text-red-600"
+              title="Clear logs"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col h-[70vh]">
-        <div className="p-4 bg-slate-800 border-b border-slate-700 flex items-center gap-4">
+      {/* 🚀 Scrollable Content */}
+      <div className="flex-1 overflow-hidden p-4 md:p-8">
+        <div className="bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col h-full">
+          <div className="p-4 bg-slate-800 border-b border-slate-700 flex items-center gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
@@ -189,6 +194,7 @@ export default function SystemLogs() {
              </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

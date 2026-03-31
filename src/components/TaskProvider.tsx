@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { Loader2, CheckCircle, XCircle, Plus } from 'lucide-react';
 import { cn } from '../utils';
 
-interface EmailProgress {
+interface TaskProgress {
+  type: 'email' | 'bulk-update';
   total: number;
   current: number;
   success: number;
@@ -13,8 +14,8 @@ interface EmailProgress {
 }
 
 interface TaskContextType {
-  emailProgress: EmailProgress | null;
-  setEmailProgress: React.Dispatch<React.SetStateAction<EmailProgress | null>>;
+  taskProgress: TaskProgress | null;
+  setTaskProgress: React.Dispatch<React.SetStateAction<TaskProgress | null>>;
   isMinimized: boolean;
   setIsMinimized: (minimized: boolean) => void;
   isTaskRunning: boolean;
@@ -24,14 +25,14 @@ interface TaskContextType {
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [emailProgress, setEmailProgress] = useState<EmailProgress | null>(null);
+  const [taskProgress, setTaskProgress] = useState<TaskProgress | null>(null);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isTaskRunning, setIsTaskRunning] = useState(false);
 
   return (
     <TaskContext.Provider value={{ 
-      emailProgress, 
-      setEmailProgress, 
+      taskProgress, 
+      setTaskProgress, 
       isMinimized, 
       setIsMinimized,
       isTaskRunning,
@@ -40,7 +41,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {children}
       
       {/* Global Task Card */}
-      {emailProgress && (
+      {taskProgress && (
         <div className={cn(
           "fixed bottom-4 right-4 z-[100] bg-white rounded-2xl shadow-2xl border border-slate-200 transition-all duration-300 overflow-hidden",
           isMinimized ? "w-64" : "w-80 md:w-96"
@@ -48,13 +49,15 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           {/* Header */}
           <div className="bg-slate-900 px-4 py-3 flex items-center justify-between text-white">
             <div className="flex items-center gap-2">
-              {!emailProgress.isComplete ? (
+              {!taskProgress.isComplete ? (
                 <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
               ) : (
                 <CheckCircle className="w-4 h-4 text-emerald-400" />
               )}
               <span className="text-sm font-bold">
-                {emailProgress.isComplete ? 'Emails Sent' : 'Sending Emails...'}
+                {taskProgress.isComplete 
+                  ? (taskProgress.type === 'email' ? 'Emails Sent' : 'Orders Updated') 
+                  : (taskProgress.type === 'email' ? 'Sending Emails...' : 'Updating Orders...')}
               </span>
             </div>
             <div className="flex items-center gap-1">
@@ -68,10 +71,10 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   <div className="w-4 h-0.5 bg-white rounded-full" />
                 )}
               </button>
-              {emailProgress.isComplete && (
+              {taskProgress.isComplete && (
                 <button 
                   onClick={() => {
-                    setEmailProgress(null);
+                    setTaskProgress(null);
                     setIsMinimized(false);
                     setIsTaskRunning(false);
                   }}
@@ -89,15 +92,15 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-medium">
                   <span className="text-slate-500">Progress</span>
-                  <span className="text-slate-900">{emailProgress.current} / {emailProgress.total}</span>
+                  <span className="text-slate-900">{taskProgress.current} / {taskProgress.total}</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                   <div 
                     className={cn(
                       "h-full transition-all duration-500",
-                      emailProgress.isComplete ? "bg-emerald-500" : "bg-indigo-600"
+                      taskProgress.isComplete ? "bg-emerald-500" : "bg-indigo-600"
                     )}
-                    style={{ width: `${(emailProgress.current / emailProgress.total) * 100}%` }}
+                    style={{ width: `${(taskProgress.current / taskProgress.total) * 100}%` }}
                   />
                 </div>
               </div>
@@ -105,22 +108,22 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-emerald-50 p-2 rounded-xl border border-emerald-100">
                   <p className="text-[9px] font-bold text-emerald-600 uppercase mb-0.5">Success</p>
-                  <p className="text-lg font-bold text-emerald-700">{emailProgress.success}</p>
+                  <p className="text-lg font-bold text-emerald-700">{taskProgress.success}</p>
                 </div>
                 <div className="bg-amber-50 p-2 rounded-xl border border-amber-100">
                   <p className="text-[9px] font-bold text-amber-600 uppercase mb-0.5">Skipped</p>
-                  <p className="text-lg font-bold text-amber-700">{emailProgress.skipped}</p>
+                  <p className="text-lg font-bold text-amber-700">{taskProgress.skipped}</p>
                 </div>
                 <div className="bg-red-50 p-2 rounded-xl border border-red-100">
                   <p className="text-[9px] font-bold text-red-600 uppercase mb-0.5">Failed</p>
-                  <p className="text-lg font-bold text-red-700">{emailProgress.failed}</p>
+                  <p className="text-lg font-bold text-red-700">{taskProgress.failed}</p>
                 </div>
               </div>
 
-              {emailProgress.errors.length > 0 && (
+              {taskProgress.errors.length > 0 && (
                 <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                   <p className="text-[10px] font-bold text-slate-400 uppercase">Error Details</p>
-                  {emailProgress.errors.map((err, idx) => (
+                  {taskProgress.errors.map((err, idx) => (
                     <div key={idx} className="text-[10px] bg-red-50 text-red-600 p-2 rounded border border-red-100">
                       <span className="font-bold">{err.booking}:</span> {err.error}
                     </div>
@@ -128,11 +131,11 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 </div>
               )}
 
-              {emailProgress.isComplete && (
+              {taskProgress.isComplete && (
                 <div className="pt-2">
                   <button
                     onClick={() => {
-                      setEmailProgress(null);
+                      setTaskProgress(null);
                       setIsMinimized(false);
                       setIsTaskRunning(false);
                     }}
@@ -151,9 +154,9 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
               <div 
                 className={cn(
                   "h-full transition-all duration-500",
-                  emailProgress.isComplete ? "bg-emerald-500" : "bg-indigo-600"
+                  taskProgress.isComplete ? "bg-emerald-500" : "bg-indigo-600"
                 )}
-                style={{ width: `${(emailProgress.current / emailProgress.total) * 100}%` }}
+                style={{ width: `${(taskProgress.current / taskProgress.total) * 100}%` }}
               />
             </div>
           )}

@@ -260,7 +260,7 @@ export const OrderCreate = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="h-full overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto space-y-8">
       <div className="flex items-center gap-4">
         <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
           <ArrowLeft className="w-6 h-6 text-slate-600" />

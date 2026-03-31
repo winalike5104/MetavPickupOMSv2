@@ -636,6 +636,54 @@ async function startServer() {
     }
   });
 
+  /**
+   * 🚀 V2 批量更新订单状态
+   * 解决前端直接写库权限不足的问题
+   */
+  app.post("/api/v2/orders/bulk-update-status", authenticate, async (req: any, res) => {
+    const { orderIds, status } = req.body;
+    const currentDb = await initDb();
+
+    if (!orderIds || !Array.isArray(orderIds) || !status) {
+      return res.status(400).json({ success: false, error: "Missing orderIds or status" });
+    }
+
+    if (!currentDb) return res.status(503).json({ error: "Database Offline" });
+
+    try {
+      const batch = currentDb.batch();
+      const timestamp = new Date().toISOString();
+
+      for (const id of orderIds) {
+        const orderRef = currentDb.collection("orders").doc(id);
+        batch.update(orderRef, {
+          status: status,
+          updatedAt: timestamp,
+          updatedBy: req.user.username // 这里的 req.user 来自我们的 jwt.verify
+        });
+
+        // 同时写入操作日志 (复用你之前的 logAction 逻辑)
+        const logRef = currentDb.collection("logs").doc();
+        batch.set(logRef, {
+          timestamp,
+          userId: req.user.uid,
+          userName: req.user.name || req.user.username,
+          action: 'Bulk Status Update',
+          details: `Set status to ${status} for order ${id}`,
+          orderId: id
+        });
+      }
+
+      await batch.commit();
+      console.log(`✅ [V2 Update] ${orderIds.length} orders updated to ${status} by ${req.user.username}`);
+      
+      res.json({ success: true, message: `Successfully updated ${orderIds.length} orders` });
+    } catch (error: any) {
+      console.error("🔥 [V2 Update Error]:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Confirm Pickup Endpoint
   app.post("/api/orders/confirm-pickup", authenticate, async (req: any, res) => {
     const currentDb = await initDb();
@@ -1453,6 +1501,11 @@ async function startServer() {
         }
       }
     }));
+
+    // Ensure static assets return 404 if not found, instead of falling back to index.html
+    app.get(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|json|txt|map)$/, (req, res) => {
+      res.status(404).send('Not Found');
+    });
 
     app.get('*', (req, res) => {
       noCacheHeaders(res);

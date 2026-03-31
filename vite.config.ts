@@ -24,16 +24,20 @@ export default defineConfig(({mode}) => {
           short_name: 'Metav',
           description: 'Metav Order Management and Guest Display System',
           theme_color: '#4f46e5',
+          background_color: '#ffffff',
+          display: 'standalone',
           icons: [
             {
-              src: 'pwa-192x192.png',
+              src: 'icons/icon-192x192.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
             },
             {
-              src: 'pwa-512x512.png',
+              src: 'icons/icon-512x512.png',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
             }
           ]
         },

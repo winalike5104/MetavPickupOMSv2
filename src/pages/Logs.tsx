@@ -73,7 +73,7 @@ export const Logs = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="h-full overflow-y-auto p-4 md:p-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">System Logs</h1>
         <p className="text-slate-500">Audit trail of all system activities.</p>

@@ -30,6 +30,7 @@ export const authenticate = (req: any, res: Response, next: NextFunction) => {
 
   // 2. 尝试从多个可能的 Key 中读取（防止网关改名或大小写问题）
   const authHeader = 
+    req.headers['x-v2-auth-token'] as string ||
     req.headers['x-custom-auth-token'] as string || 
     req.headers['X-Custom-Auth-Token'] as string || 
     req.headers['authorization'] as string;

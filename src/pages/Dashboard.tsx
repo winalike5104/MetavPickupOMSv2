@@ -249,43 +249,48 @@ export const Dashboard = () => {
   console.log(`Dashboard - Rendering JSX. Loading: ${loading} IsAdmin: ${isSystemAdmin(profile?.email)}`);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
-          <p className="text-slate-500">Welcome back to the Pickup Management System.</p>
-        </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={() => {
-              setLoading(true);
-              fetchData();
-            }}
-            className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all"
-            title="Refresh Data"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          {isSystemAdmin(profile?.email) && !announcement?.isActive && (
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Fixed Header */}
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm px-4 md:px-8 py-6 z-20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
+            <p className="text-slate-500">Welcome back to the Pickup Management System.</p>
+          </div>
+          <div className="flex gap-3">
             <button 
-              onClick={() => setShowAnnouncementModal(true)}
-              className="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all"
+              onClick={() => {
+                setLoading(true);
+                fetchData();
+              }}
+              className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all"
+              title="Refresh Data"
             >
-              <Megaphone className="w-5 h-5" />
-              Post Announcement
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-          )}
-          <Link 
-            to="/orders/create"
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200"
-          >
-            <Plus className="w-5 h-5" />
-            Create New Order
-          </Link>
+            {isSystemAdmin(profile?.email) && !announcement?.isActive && (
+              <button 
+                onClick={() => setShowAnnouncementModal(true)}
+                className="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all"
+              >
+                <Megaphone className="w-5 h-5" />
+                Post Announcement
+              </button>
+            )}
+            <Link 
+              to="/orders/create"
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200"
+            >
+              <Plus className="w-5 h-5" />
+              Create New Order
+            </Link>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* 🚀 Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           title="Total Orders" 
           value={stats.total} 
@@ -566,6 +571,7 @@ export const Dashboard = () => {
         currentAnnouncement={announcement}
         onUpdate={fetchData}
       />
+      </div>
     </div>
   );
 };

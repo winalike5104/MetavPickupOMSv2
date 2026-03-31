@@ -118,24 +118,30 @@ export const StoreManagement = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Store Management</h1>
-          <p className="text-slate-500">Manage store-specific SMTP settings and email templates.</p>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      {/* 🚀 Fixed Header */}
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm px-4 md:px-8 py-6 z-20">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Store Management</h1>
+            <p className="text-slate-500">Manage store-specific SMTP settings and email templates.</p>
+          </div>
+          {canManage && (
+            <button
+              onClick={handleAdd}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Add Store
+            </button>
+          )}
         </div>
-        {canManage && (
-          <button
-            onClick={handleAdd}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Add Store
-          </button>
-        )}
       </div>
 
-      {error && (
+      {/* 🚀 Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="max-w-6xl mx-auto space-y-8">
+          {error && (
         <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-700 text-sm animate-in fade-in duration-300">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p>{error}</p>
@@ -277,6 +283,8 @@ export const StoreManagement = () => {
           </div>
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 };

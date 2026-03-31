@@ -31,13 +31,15 @@ import {
 } from 'lucide-react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
+import { useOrderService } from '../hooks/useOrderService';
 import { API_BASE_URL } from '../constants';
 
 import { useTask } from '../components/TaskProvider';
 
 export const Orders = () => {
   const { profile, user, activeWarehouse, token } = useAuth();
-  const { emailProgress, setEmailProgress, isMinimized, setIsMinimized, isTaskRunning, setIsTaskRunning } = useTask();
+  const { bulkUpdateStatus } = useOrderService(token, API_BASE_URL);
+  const { taskProgress, setTaskProgress, isMinimized, setIsMinimized, isTaskRunning, setIsTaskRunning } = useTask();
   const location = useLocation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,8 +54,8 @@ export const Orders = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
-  const [confirmMessage, setConfirmMessage] = useState('');
+  const [executeBulkAction, setExecuteBulkAction] = useState<() => void>(() => () => {});
+  const [bulkActionType, setBulkActionType] = useState<'review' | 'email' | null>(null);
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
@@ -246,6 +248,25 @@ export const Orders = () => {
     );
   };
 
+  const handleBulkReviewClick = () => {
+    const reviewableIds = selectedOrderIds.filter(id => {
+      const order = orders.find(o => o.id === id);
+      return order?.status === 'Picked Up';
+    });
+
+    if (reviewableIds.length === 0) {
+      setNotification({ message: 'Only orders with "Picked Up" status can be marked as Reviewed.', type: 'error' });
+      return;
+    }
+
+    setBulkActionType('review');
+    setExecuteBulkAction(() => () => {
+      setShowConfirmModal(false);
+      handleBulkReview();
+    });
+    setShowConfirmModal(true);
+  };
+
   const handleBulkReview = async () => {
     const reviewableIds = selectedOrderIds.filter(id => {
       const order = orders.find(o => o.id === id);
@@ -258,21 +279,41 @@ export const Orders = () => {
     }
 
     setBulkUpdating(true);
+    setIsTaskRunning(true);
+    setTaskProgress({
+      type: 'bulk-update',
+      total: reviewableIds.length,
+      current: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [],
+      isComplete: false
+    });
+
     try {
-      const batch = writeBatch(db);
-      reviewableIds.forEach(id => {
-        batch.update(doc(db, 'orders', id), { status: 'Reviewed' });
-      });
-      await batch.commit();
+      // 🚀 使用 V2 API 进行批量更新
+      await bulkUpdateStatus(reviewableIds, 'Reviewed');
       
-      await logAction(profile, 'Bulk Update', `Updated ${reviewableIds.length} orders to Reviewed status.`);
-      
+      setTaskProgress(prev => prev ? {
+        ...prev,
+        current: reviewableIds.length,
+        success: reviewableIds.length,
+        isComplete: true
+      } : null);
+
       setSelectedOrderIds([]);
       fetchOrders();
       setNotification({ message: `Successfully updated ${reviewableIds.length} orders to Reviewed.`, type: 'success' });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error bulk updating orders:', err);
-      setNotification({ message: 'Failed to update orders. Please try again.', type: 'error' });
+      setTaskProgress(prev => prev ? {
+        ...prev,
+        failed: reviewableIds.length,
+        errors: [{ id: 'bulk', booking: 'Bulk Update', error: err.message }],
+        isComplete: true
+      } : null);
+      setNotification({ message: `Failed to update orders: ${err.message}`, type: 'error' });
     } finally {
       setBulkUpdating(false);
     }
@@ -303,7 +344,8 @@ export const Orders = () => {
 
     setIsTaskRunning(true);
     if (!overrideIds) setSelectedOrderIds([]);
-    setEmailProgress({
+    setTaskProgress({
+      type: 'email',
       total: queue.length,
       current: 0,
       success: 0,
@@ -322,7 +364,7 @@ export const Orders = () => {
 
     for (let i = 0; i < queue.length; i++) {
       const order = queue[i];
-      setEmailProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+      setTaskProgress(prev => prev ? { ...prev, current: i + 1 } : null);
 
       try {
         // Client-side validation before sending
@@ -352,11 +394,11 @@ export const Orders = () => {
 
         const result = await response.json();
         if (result.success && result.emailStatus === 'sent') {
-          setEmailProgress(prev => prev ? { ...prev, success: prev.success + 1 } : null);
+          setTaskProgress(prev => prev ? { ...prev, success: prev.success + 1 } : null);
           // Update local state immediately for better UI feedback
           setOrders(prev => prev.map(o => o.id === order.id ? { ...o, emailStatus: 'sent', lastEmailSentAt: new Date().toISOString(), lastEmailError: null } : o));
         } else if (result.success && result.emailStatus === 'skipped') {
-          setEmailProgress(prev => prev ? { ...prev, skipped: prev.skipped + 1 } : null);
+          setTaskProgress(prev => prev ? { ...prev, skipped: prev.skipped + 1 } : null);
           // Optionally mark as skipped in local state if you want to show it
           setOrders(prev => prev.map(o => o.id === order.id ? { ...o, emailStatus: 'skipped', lastEmailError: result.message } : o));
         } else {
@@ -364,7 +406,7 @@ export const Orders = () => {
         }
       } catch (err: any) {
         console.error(`Error sending email to ${order.bookingNumber}:`, err);
-        setEmailProgress(prev => prev ? { 
+        setTaskProgress(prev => prev ? { 
           ...prev, 
           failed: prev.failed + 1,
           errors: [...prev.errors, { id: order.id!, booking: order.bookingNumber, error: err.message }]
@@ -380,7 +422,7 @@ export const Orders = () => {
       }
     }
 
-    setEmailProgress(prev => prev ? { ...prev, isComplete: true } : null);
+    setTaskProgress(prev => prev ? { ...prev, isComplete: true } : null);
     fetchOrders();
   };
 
@@ -398,8 +440,16 @@ export const Orders = () => {
       return true;
     }).length;
 
-    setConfirmMessage(`Send pickup notification emails to ${eligibleCount} eligible orders? (Successfully sent within 24h or missing email will be skipped)`);
-    setConfirmAction(() => () => {
+    if (eligibleCount === 0) {
+      setNotification({ 
+        message: 'No eligible orders found. (Already sent in last 24h or missing email)', 
+        type: 'error' 
+      });
+      return;
+    }
+
+    setBulkActionType('email');
+    setExecuteBulkAction(() => () => {
       setShowConfirmModal(false);
       handleBulkEmail();
     });
@@ -441,7 +491,7 @@ export const Orders = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
       {/* Notification Toast */}
       {notification && (
         <div className={cn(
@@ -455,19 +505,24 @@ export const Orders = () => {
       {/* Confirmation Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Confirm Action</h3>
-            <p className="text-slate-500 mb-6">{confirmMessage}</p>
-            <div className="flex justify-end gap-3">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl border border-slate-100">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Confirm Action</h3>
+            <p className="text-slate-500 text-center mb-8">
+              Are you sure you want to {bulkActionType === 'review' ? 'mark these orders as reviewed' : 'send emails for these orders'}?
+            </p>
+            <div className="flex gap-4">
               <button
                 onClick={() => setShowConfirmModal(false)}
-                className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-100 rounded-lg transition-colors"
+                className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-semibold hover:bg-slate-200 transition-all"
               >
                 Cancel
               </button>
               <button
-                onClick={confirmAction}
-                className="px-4 py-2 bg-indigo-600 text-white font-semibold hover:bg-indigo-700 rounded-lg transition-colors shadow-lg shadow-indigo-200"
+                onClick={executeBulkAction}
+                className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
               >
                 Confirm
               </button>
@@ -476,62 +531,63 @@ export const Orders = () => {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Order Management</h1>
-          <div className="flex items-center gap-2 text-slate-500">
-            <MapPin className="w-4 h-4" />
-            <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
+      {/* 🚀 Optimized Header Section (Fixed) */}
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-md px-4 md:px-8 py-6 space-y-6 z-20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Order Management</h1>
+            <div className="flex items-center gap-2 text-slate-500">
+              <MapPin className="w-4 h-4" />
+              <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-white border border-slate-200 p-1 rounded-xl flex gap-1 shadow-sm">
+              <button
+                onClick={() => setViewMode('table')}
+                className={cn(
+                  "p-2 rounded-lg transition-all",
+                  viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+                )}
+                title="Table View"
+              >
+                <TableIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('card')}
+                className={cn(
+                  "p-2 rounded-lg transition-all",
+                  viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+                )}
+                title="Card View"
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </button>
+            </div>
+            <Link 
+              to="/orders/bulk-import"
+              className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
+            >
+              <Upload className="w-4 h-4" />
+              Bulk Import
+            </Link>
+            <Link 
+              to="/orders/create"
+              className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              New Order
+            </Link>
+            <button 
+              onClick={exportToCSV}
+              className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-white border border-slate-200 p-1 rounded-xl flex gap-1 shadow-sm">
-            <button
-              onClick={() => setViewMode('table')}
-              className={cn(
-                "p-2 rounded-lg transition-all",
-                viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
-              )}
-              title="Table View"
-            >
-              <TableIcon className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('card')}
-              className={cn(
-                "p-2 rounded-lg transition-all",
-                viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
-              )}
-              title="Card View"
-            >
-              <LayoutGrid className="w-5 h-5" />
-            </button>
-          </div>
-          <Link 
-            to="/orders/bulk-import"
-            className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
-          >
-            <Upload className="w-4 h-4" />
-            Bulk Import
-          </Link>
-          <Link 
-            to="/orders/create"
-            className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            New Order
-          </Link>
-          <button 
-            onClick={exportToCSV}
-            className="inline-flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </button>
-        </div>
-      </div>
 
-      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -554,7 +610,7 @@ export const Orders = () => {
             {selectedOrderIds.length > 0 && (
               <div className="flex gap-2">
                 <button
-                  onClick={handleBulkReview}
+                  onClick={handleBulkReviewClick}
                   disabled={bulkUpdating || isTaskRunning}
                   className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 text-sm"
                 >
@@ -640,271 +696,262 @@ export const Orders = () => {
               ))}
             </select>
           </div>
-          {statusFilter === 'Overdue' && (
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-              <Clock className="w-5 h-5 text-amber-500" />
-              <select
-                value={overdueThreshold}
-                onChange={(e) => setOverdueThreshold(Number(e.target.value))}
-                className="bg-transparent outline-none text-sm flex-1 font-bold text-amber-700"
-              >
-                <option value={7}>Overdue &gt; 1 Week</option>
-                <option value={14}>Overdue &gt; 2 Weeks</option>
-                <option value={30}>Overdue &gt; 1 Month</option>
-              </select>
-            </div>
-          )}
         </div>
       </div>
 
-      {loading ? (
-        <div className="space-y-4">
-          {[1,2,3,4,5].map(i => <div key={i} className="h-20 bg-slate-100 animate-pulse rounded-2xl"></div>)}
-        </div>
-      ) : filteredOrders.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-2xl border border-slate-100 border-dashed">
-          <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500 font-medium mb-4">No orders found.</p>
-          <button 
-            onClick={fetchOrders}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-medium"
-          >
-            Refresh List
-          </button>
-        </div>
-      ) : viewMode === 'table' ? (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-                <tr>
-                  <th className="px-6 py-4 w-10">
-                    <input 
-                      type="checkbox"
-                      checked={eligibleOrders.length > 0 && selectedOrderIds.length === eligibleOrders.length}
-                      onChange={toggleSelectAll}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-6 py-4">Booking #</th>
-                  <th className="px-6 py-4">Customer</th>
-                  <th className="px-6 py-4">Store</th>
-                  <th className="px-6 py-4">Pickup Date</th>
-                  <th className="px-6 py-4">Payment</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filteredOrders.map((order) => (
-                  <tr 
-                    key={order.id} 
-                    className={cn(
-                      "hover:bg-slate-50 transition-colors cursor-pointer",
-                      selectedOrderIds.includes(order.id!) && "bg-indigo-50/50"
-                    )}
-                  >
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <input 
-                        type="checkbox"
-                        checked={selectedOrderIds.includes(order.id!)}
-                        onChange={() => toggleSelectOrder(order.id!, order.status)}
-                        disabled={order.status === 'Cancelled'}
+      {/* Content Area (Scrolling) */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {loading ? (
+          <div className="space-y-4">
+            {[1,2,3,4,5].map(i => <div key={i} className="h-20 bg-slate-100 animate-pulse rounded-2xl"></div>)}
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-2xl border border-slate-100 border-dashed">
+            <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500 font-medium mb-4">No orders found.</p>
+            <button 
+              onClick={fetchOrders}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-medium"
+            >
+              Refresh List
+            </button>
+          </div>
+        ) : (
+          viewMode === 'table' ? (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-6 py-4 w-10">
+                        <input 
+                          type="checkbox"
+                          checked={eligibleOrders.length > 0 && selectedOrderIds.length === eligibleOrders.length}
+                          onChange={toggleSelectAll}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                      </th>
+                      <th className="px-6 py-4">Booking #</th>
+                      <th className="px-6 py-4">Customer</th>
+                      <th className="px-6 py-4">Store</th>
+                      <th className="px-6 py-4">Pickup Date</th>
+                      <th className="px-6 py-4">Payment</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {filteredOrders.map((order) => (
+                      <tr 
+                        key={order.id} 
                         className={cn(
-                          "rounded border-slate-300 text-indigo-600 focus:ring-indigo-500",
-                          order.status !== 'Cancelled' ? "cursor-pointer" : "cursor-not-allowed opacity-30"
+                          "hover:bg-slate-50 transition-colors cursor-pointer",
+                          selectedOrderIds.includes(order.id!) && "bg-indigo-50/50"
                         )}
-                      />
-                    </td>
-                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900">{order.bookingNumber}</span>
-                        {order.notes && <FileText className="w-4 h-4 text-indigo-500" />}
-                        {order.emailStatus === 'sent' && (
-                          <div className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-emerald-100">
-                            <Mail className="w-3 h-3" />
-                            SENT
+                      >
+                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                          <input 
+                            type="checkbox"
+                            checked={selectedOrderIds.includes(order.id!)}
+                            onChange={() => toggleSelectOrder(order.id!, order.status)}
+                            disabled={order.status === 'Cancelled'}
+                            className={cn(
+                              "rounded border-slate-300 text-indigo-600 focus:ring-indigo-500",
+                              order.status !== 'Cancelled' ? "cursor-pointer" : "cursor-not-allowed opacity-30"
+                            )}
+                          />
+                        </td>
+                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{order.bookingNumber}</span>
+                            {order.notes && <FileText className="w-4 h-4 text-indigo-500" />}
+                            {order.emailStatus === 'sent' && (
+                              <div className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-emerald-100">
+                                <Mail className="w-3 h-3" />
+                                SENT
+                              </div>
+                            )}
+                            {order.emailStatus === 'failed' && (
+                              <div 
+                                className="flex items-center gap-1 bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-red-100"
+                                title={order.lastEmailError || 'Unknown error'}
+                              >
+                                <AlertCircle className="w-3 h-3" />
+                                FAILED
+                              </div>
+                            )}
+                            {order.emailStatus === 'skipped' && (
+                              <div 
+                                className="flex items-center gap-1 bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-amber-100"
+                                title={order.lastEmailError || 'Already sent or disabled'}
+                              >
+                                <AlertCircle className="w-3 h-3" />
+                                SKIPPED
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {order.emailStatus === 'failed' && (
-                          <div 
-                            className="flex items-center gap-1 bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-red-100"
-                            title={order.lastEmailError || 'Unknown error'}
-                          >
-                            <AlertCircle className="w-3 h-3" />
-                            FAILED
+                        </td>
+                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                          <p className="font-medium text-slate-700">{order.customerName}</p>
+                          <p className="text-xs text-slate-500">{order.customerId}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
+                          {stores.find(s => s.id === order.storeId)?.name || order.storeId || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
+                          {formatDate(order.pickupDateScheduled, 'yyyy-MM-dd')}
+                        </td>
+                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                          <span className={cn(
+                            "px-2 py-1 rounded text-[10px] font-bold",
+                            order.paymentStatus === 'Paid' ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                          )}>
+                            {order.paymentStatus}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                          <span className={cn(
+                            "px-3 py-1 rounded-full text-xs font-bold",
+                            order.status === 'Created' ? "bg-amber-100 text-amber-700" :
+                            order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-700" :
+                            order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-700" :
+                            "bg-red-100 text-red-700"
+                          )}>
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="relative" ref={activeMenuId === order.id ? menuRef : null}>
+                              <button
+                                onClick={() => setActiveMenuId(activeMenuId === order.id ? null : order.id!)}
+                                className="p-2 hover:bg-slate-200 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
+                              >
+                                <MoreVertical className="w-5 h-5" />
+                              </button>
+                              
+                              {activeMenuId === order.id && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-30 py-1 overflow-hidden">
+                                  <button
+                                    onClick={() => handleSingleEmail(order)}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                  >
+                                    <Mail className="w-4 h-4 text-emerald-500" />
+                                    Send Pickup Email
+                                  </button>
+                                  <button
+                                    onClick={() => navigate(`/orders/${order.id}`)}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                  >
+                                    <FileText className="w-4 h-4 text-indigo-500" />
+                                    View Details
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            <ChevronRight 
+                              className="w-5 h-5 text-slate-300 cursor-pointer hover:text-indigo-500" 
+                              onClick={() => navigate(`/orders/${order.id}`)}
+                            />
                           </div>
-                        )}
-                        {order.emailStatus === 'skipped' && (
-                          <div 
-                            className="flex items-center gap-1 bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-amber-100"
-                            title={order.lastEmailError || 'Already sent or disabled'}
-                          >
-                            <AlertCircle className="w-3 h-3" />
-                            SKIPPED
-                          </div>
-                        )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredOrders.map((order) => (
+                <div
+                  key={order.id}
+                  onClick={() => navigate(`/orders/${order.id}`)}
+                  className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center",
+                        order.status === 'Created' ? "bg-amber-100 text-amber-600" :
+                        order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-600" :
+                        order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-600" :
+                        "bg-red-100 text-red-600"
+                      )}>
+                        {order.status === 'Created' ? <Clock className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
                       </div>
-                    </td>
-                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
-                      <p className="font-medium text-slate-700">{order.customerName}</p>
-                      <p className="text-xs text-slate-500">{order.customerId}</p>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
-                      {stores.find(s => s.id === order.storeId)?.name || order.storeId || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
-                      {formatDate(order.pickupDateScheduled, 'yyyy-MM-dd')}
-                    </td>
-                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-slate-900">{order.bookingNumber}</h3>
+                          {order.emailStatus === 'sent' && (
+                            <Mail className="w-3 h-3 text-emerald-500" />
+                          )}
+                          {order.emailStatus === 'failed' && (
+                            <span title={order.lastEmailError || 'Failed'}>
+                              <AlertCircle className="w-3 h-3 text-red-500" />
+                            </span>
+                          )}
+                          {order.emailStatus === 'skipped' && (
+                            <span title={order.lastEmailError || 'Skipped'}>
+                              <AlertCircle className="w-3 h-3 text-amber-500" />
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500">{formatDate(order.createdTime, 'MMM d, HH:mm')}</p>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                      order.status === 'Created' ? "bg-amber-100 text-amber-700" :
+                      order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-700" :
+                      order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-700" :
+                      "bg-red-100 text-red-700"
+                    )}>
+                      {order.status}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Customer</span>
+                      <span className="font-bold text-slate-900">{order.customerName}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Scheduled Pickup</span>
+                      <span className="font-bold text-slate-900">{formatDate(order.pickupDateScheduled, 'MMM d, yyyy')}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Payment</span>
                       <span className={cn(
-                        "px-2 py-1 rounded text-[10px] font-bold",
+                        "px-2 py-0.5 rounded text-[10px] font-bold",
                         order.paymentStatus === 'Paid' ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
                       )}>
                         {order.paymentStatus}
                       </span>
-                    </td>
-                    <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-xs font-bold",
-                        order.status === 'Created' ? "bg-amber-100 text-amber-700" :
-                        order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-700" :
-                        order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-700" :
-                        "bg-red-100 text-red-700"
-                      )}>
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="relative" ref={activeMenuId === order.id ? menuRef : null}>
-                          <button
-                            onClick={() => setActiveMenuId(activeMenuId === order.id ? null : order.id!)}
-                            className="p-2 hover:bg-slate-200 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
-                          >
-                            <MoreVertical className="w-5 h-5" />
-                          </button>
-                          
-                          {activeMenuId === order.id && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-30 py-1 overflow-hidden">
-                              <button
-                                onClick={() => handleSingleEmail(order)}
-                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                              >
-                                <Mail className="w-4 h-4 text-emerald-500" />
-                                Send Pickup Email
-                              </button>
-                              <button
-                                onClick={() => navigate(`/orders/${order.id}`)}
-                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                              >
-                                <FileText className="w-4 h-4 text-indigo-500" />
-                                View Details
-                              </button>
-                            </div>
-                          )}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
+                    <div className="flex -space-x-2">
+                      {order.items.slice(0, 3).map((item, i) => (
+                        <div key={i} className="w-8 h-8 rounded-lg bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600" title={item.sku}>
+                          {item.sku.substring(0, 2)}
                         </div>
-                        <ChevronRight 
-                          className="w-5 h-5 text-slate-300 cursor-pointer hover:text-indigo-500" 
-                          onClick={() => navigate(`/orders/${order.id}`)}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredOrders.map((order) => (
-            <div
-              key={order.id}
-              onClick={() => navigate(`/orders/${order.id}`)}
-              className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center",
-                    order.status === 'Created' ? "bg-amber-100 text-amber-600" :
-                    order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-600" :
-                    order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-600" :
-                    "bg-red-100 text-red-600"
-                  )}>
-                    {order.status === 'Created' ? <Clock className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-slate-900">{order.bookingNumber}</h3>
-                      {order.emailStatus === 'sent' && (
-                        <Mail className="w-3 h-3 text-emerald-500" />
-                      )}
-                      {order.emailStatus === 'failed' && (
-                        <span title={order.lastEmailError || 'Failed'}>
-                          <AlertCircle className="w-3 h-3 text-red-500" />
-                        </span>
-                      )}
-                      {order.emailStatus === 'skipped' && (
-                        <span title={order.lastEmailError || 'Skipped'}>
-                          <AlertCircle className="w-3 h-3 text-amber-500" />
-                        </span>
+                      ))}
+                      {order.items.length > 3 && (
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-600">
+                          +{order.items.length - 3}
+                        </div>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500">{formatDate(order.createdTime, 'MMM d, HH:mm')}</p>
+                    <ChevronRight className="w-5 h-5 text-slate-300" />
                   </div>
                 </div>
-                <span className={cn(
-                  "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                  order.status === 'Created' ? "bg-amber-100 text-amber-700" :
-                  order.status === 'Picked Up' ? "bg-emerald-100 text-emerald-700" :
-                  order.status === 'Reviewed' ? "bg-indigo-100 text-indigo-700" :
-                  "bg-red-100 text-red-700"
-                )}>
-                  {order.status}
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Customer</span>
-                  <span className="font-bold text-slate-900">{order.customerName}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Scheduled Pickup</span>
-                  <span className="font-bold text-slate-900">{formatDate(order.pickupDateScheduled, 'MMM d, yyyy')}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Payment</span>
-                  <span className={cn(
-                    "px-2 py-0.5 rounded text-[10px] font-bold",
-                    order.paymentStatus === 'Paid' ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                  )}>
-                    {order.paymentStatus}
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-                <div className="flex -space-x-2">
-                  {order.items.slice(0, 3).map((item, i) => (
-                    <div key={i} className="w-8 h-8 rounded-lg bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600" title={item.sku}>
-                      {item.sku.substring(0, 2)}
-                    </div>
-                  ))}
-                  {order.items.length > 3 && (
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-600">
-                      +{order.items.length - 3}
-                    </div>
-                  )}
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-300" />
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )
+        )}
+      </div>
     </div>
   );
 };
