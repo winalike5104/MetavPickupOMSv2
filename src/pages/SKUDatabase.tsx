@@ -3,6 +3,7 @@ import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, 
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { SKU } from '../types';
+import html2canvas from 'html2canvas-pro';
 import { logAction, hasPermission, isAdmin, isSystemAdmin } from '../utils';
 import { 
   Search, 
@@ -63,7 +64,9 @@ export const SKUDatabase = () => {
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [clearing, setClearing] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -91,6 +94,30 @@ export const SKUDatabase = () => {
   const [csvData, setCsvData] = useState('');
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState('');
+
+  const handleExportAsImage = async () => {
+    if (!tableRef.current) return;
+    setExporting(true);
+    try {
+      const canvas = await html2canvas(tableRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false,
+        useCORS: true
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `SKU_Database_${new Date().toISOString().split('T')[0]}.png`;
+      link.href = dataUrl;
+      link.click();
+      await logAction(profile, 'Export SKU Table', `Exported SKU table as image`);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Failed to export table as image.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleDataHealthCheck = async () => {
     if (!profile || !isAdmin(profile, profile?.email)) return;
@@ -917,6 +944,24 @@ export const SKUDatabase = () => {
                   Add SKU
                 </button>
               )}
+              <button 
+                onClick={handleExportAsImage}
+                disabled={exporting}
+                className={cn(
+                  "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all disabled:opacity-50",
+                  isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                )}
+              >
+                {exporting ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                ) : (
+                  <Download className={cn("text-indigo-500", isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5")} />
+                )}
+                <span className={cn(
+                  "transition-all",
+                  isScrolled ? "hidden group-hover:inline" : "inline"
+                )}>{exporting ? 'Exporting...' : 'Export Image'}</span>
+              </button>
             </div>
           </div>
 
@@ -1014,7 +1059,7 @@ export const SKUDatabase = () => {
           </div>
         )}
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div ref={tableRef} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase">

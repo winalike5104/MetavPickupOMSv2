@@ -46,6 +46,7 @@ import {
 import { formatDate, hasPermission, cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 import SignatureCanvas from 'react-signature-canvas';
+import html2canvas from 'html2canvas-pro';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../constants';
 
@@ -390,6 +391,8 @@ export const OrderDetail: React.FC = () => {
     }
   };
 
+  const signatureAreaRef = React.useRef<HTMLDivElement>(null);
+
   const handleConfirmPickup = async () => {
     if (!id || !profile || !order || !signatureRef.current || !token) return;
     
@@ -400,7 +403,18 @@ export const OrderDetail: React.FC = () => {
 
     try {
       setSignatureLoading(true);
-      const signatureData = signatureRef.current.toDataURL();
+      
+      let signatureData = '';
+      if (signatureAreaRef.current) {
+        const canvas = await html2canvas(signatureAreaRef.current, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+          logging: false
+        });
+        signatureData = canvas.toDataURL('image/png');
+      } else {
+        signatureData = signatureRef.current.toDataURL();
+      }
       
       const response = await fetch('/api/orders/confirm-pickup', {
         method: 'POST',
@@ -940,7 +954,7 @@ export const OrderDetail: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 overflow-hidden">
+                  <div ref={signatureAreaRef} className="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 overflow-hidden">
                     <SignatureCanvas
                       ref={signatureRef}
                       penColor="black"

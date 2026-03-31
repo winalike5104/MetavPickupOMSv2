@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 import { io, Socket } from 'socket.io-client';
 import SignatureCanvas from 'react-signature-canvas';
+import html2canvas from 'html2canvas-pro';
 import { X, Check, Megaphone, User, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -14,6 +15,7 @@ export const GuestDisplay = () => {
   const [request, setRequest] = useState<{ orderId: string; bookingNumber: string; customerName: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const sigPad = useRef<SignatureCanvas>(null);
+  const signatureAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Try to get pairingId or storeId from URL or localStorage
@@ -112,11 +114,22 @@ export const GuestDisplay = () => {
 
   const clear = () => sigPad.current?.clear();
 
-  const submit = () => {
+  const submit = async () => {
     if (!sigPad.current || sigPad.current.isEmpty() || !request || !socket) return;
     
     setSubmitting(true);
-    const signatureData = sigPad.current.toDataURL();
+    
+    let signatureData = '';
+    if (signatureAreaRef.current) {
+      const canvas = await html2canvas(signatureAreaRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false
+      });
+      signatureData = canvas.toDataURL('image/png');
+    } else {
+      signatureData = sigPad.current.toDataURL();
+    }
     
     const pid = localStorage.getItem('guest_display_pairing_id');
     const sid = localStorage.getItem('guest_display_store_id');
@@ -239,7 +252,7 @@ export const GuestDisplay = () => {
               </div>
             </div>
 
-            <div className="flex-1 relative bg-slate-50">
+            <div ref={signatureAreaRef} className="flex-1 relative bg-slate-50">
               {submitting ? (
                 <div className="absolute inset-0 z-20 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
                   <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4 animate-bounce">
