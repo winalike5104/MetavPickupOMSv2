@@ -226,7 +226,7 @@ export const OrderCreate = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${localStorage.getItem('your_app_token')}`,
+          'x-v2-auth-token': `Bearer ${localStorage.getItem('x-v2-auth-token')}`,
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({

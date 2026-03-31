@@ -31,8 +31,6 @@ export const authenticate = (req: any, res: Response, next: NextFunction) => {
   // 2. 尝试从多个可能的 Key 中读取（防止网关改名或大小写问题）
   const authHeader = 
     req.headers['x-v2-auth-token'] as string ||
-    req.headers['x-custom-auth-token'] as string || 
-    req.headers['X-Custom-Auth-Token'] as string || 
     req.headers['authorization'] as string;
 
   // 🔍 [核心调试] 在服务器终端打印出收到的所有 Header
@@ -47,7 +45,7 @@ export const authenticate = (req: any, res: Response, next: NextFunction) => {
       error: 'Unauthorized: Missing token',
       debug: {
         received_keys: receivedKeys,
-        msg: "I looked for 'x-custom-auth-token' and 'authorization' but they are not here."
+        msg: "I looked for 'x-v2-auth-token' and 'authorization' but they are not here."
       }
     });
   }

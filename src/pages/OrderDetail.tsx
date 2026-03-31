@@ -154,7 +154,7 @@ export const OrderDetail: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`,
+          'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
@@ -285,7 +285,7 @@ export const OrderDetail: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`,
+          'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
@@ -317,7 +317,7 @@ export const OrderDetail: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`,
+          'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
@@ -369,7 +369,7 @@ export const OrderDetail: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`,
+          'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
@@ -420,7 +420,7 @@ export const OrderDetail: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`,
+          'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
@@ -453,7 +453,7 @@ export const OrderDetail: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`,
+          'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({

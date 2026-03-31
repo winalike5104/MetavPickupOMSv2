@@ -100,12 +100,12 @@ export const StoreConfigModal: React.FC<Props> = ({ isOpen, onClose, onSave, edi
     setSaving(true);
     setError('');
     try {
-      const token = localStorage.getItem('your_app_token');
+      const token = localStorage.getItem('x-v2-auth-token');
       const response = await fetch('/api/stores/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`
+          'x-v2-auth-token': `Bearer ${token}`
         },
         body: JSON.stringify(store)
       });

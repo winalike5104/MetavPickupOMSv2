@@ -128,12 +128,12 @@ export default function UserGroups() {
     };
 
     try {
-      const token = localStorage.getItem('your_app_token');
+      const token = localStorage.getItem('x-v2-auth-token');
       const response = await fetch('/api/user-groups/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`
+          'x-v2-auth-token': `Bearer ${token}`
         },
         body: JSON.stringify({ id: editingGroup?.id, ...data })
       });
@@ -152,12 +152,12 @@ export default function UserGroups() {
 
   const handleDelete = async (id: string) => {
     try {
-      const token = localStorage.getItem('your_app_token');
+      const token = localStorage.getItem('x-v2-auth-token');
       const response = await fetch('/api/user-groups/delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`
+          'x-v2-auth-token': `Bearer ${token}`
         },
         body: JSON.stringify({ id })
       });

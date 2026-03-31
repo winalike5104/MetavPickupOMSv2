@@ -124,7 +124,7 @@ async function startServer() {
   app.use(cors({
     origin: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-custom-auth-token', 'x-warehouse-id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-v2-auth-token', 'x-warehouse-id'],
     credentials: true
   }));
 

@@ -43,7 +43,7 @@ export const AdminChangePasswordModal: React.FC<AdminChangePasswordModalProps> =
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-custom-auth-token': `Bearer ${token}`
+          'x-v2-auth-token': `Bearer ${token}`
         },
         body: JSON.stringify({
           targetUid: targetUser.uid,

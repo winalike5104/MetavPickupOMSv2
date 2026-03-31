@@ -402,7 +402,7 @@ export const Orders = () => {
           headers: {
             'Content-Type': 'application/json',
             // 方案 A：自定义头
-            'x-custom-auth-token': `Bearer ${token}`,
+            'x-v2-auth-token': `Bearer ${token}`,
             // 方案 B：标准头（双重保险）
             'Authorization': `Bearer ${token}`,
             'x-warehouse-id': activeWarehouse || ''

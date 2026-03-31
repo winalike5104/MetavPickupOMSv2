@@ -250,7 +250,7 @@ export const BulkOrderUpload = () => {
     setProgress(0);
 
     try {
-      const token = localStorage.getItem('your_app_token');
+      const token = localStorage.getItem('x-v2-auth-token');
       const BATCH_SIZE = 50;
       let totalSuccess = 0;
       let totalFailed = 0;
@@ -285,7 +285,7 @@ export const BulkOrderUpload = () => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-custom-auth-token': `Bearer ${token}`
+              'x-v2-auth-token': `Bearer ${token}`
             },
             body: JSON.stringify({ orders: ordersToCreate })
           });

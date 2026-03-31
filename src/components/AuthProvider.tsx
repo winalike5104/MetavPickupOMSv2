@@ -40,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Initialize auth state from localStorage
   useEffect(() => {
-    const savedToken = localStorage.getItem('your_app_token');
+    const savedToken = localStorage.getItem('x-v2-auth-token');
     const savedUser = localStorage.getItem('user_info');
 
     if (savedToken && savedUser) {
@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       } catch (e) {
         console.error('Failed to parse saved user info', e);
-        localStorage.removeItem('your_app_token');
+        localStorage.removeItem('x-v2-auth-token');
         localStorage.removeItem('user_info');
       }
     }
@@ -96,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(data.error || 'Login failed');
     }
 
-    localStorage.setItem('your_app_token', data.token);
+    localStorage.setItem('x-v2-auth-token', data.token);
     localStorage.setItem('user_info', JSON.stringify(data.user));
     setToken(data.token);
     setUser(data.user);
@@ -116,7 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    localStorage.removeItem('your_app_token');
+    localStorage.removeItem('x-v2-auth-token');
     localStorage.removeItem('user_info');
     sessionStorage.removeItem('activeWarehouse');
     setToken(null);
@@ -128,8 +128,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sync state if localStorage changes in other tabs
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'your_app_token' || e.key === 'user_info') {
-        const savedToken = localStorage.getItem('your_app_token');
+      if (e.key === 'x-v2-auth-token' || e.key === 'user_info') {
+        const savedToken = localStorage.getItem('x-v2-auth-token');
         const savedUser = localStorage.getItem('user_info');
         
         if (!savedToken || !savedUser) {
