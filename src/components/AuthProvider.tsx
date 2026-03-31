@@ -13,7 +13,7 @@ interface AuthContextType {
   activeWarehouse: string | null;
   setActiveWarehouse: (id: string) => void;
   clearActiveWarehouse: () => void;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<any>;
   logout: () => void;
 }
 
@@ -113,6 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permissions: data.user.permissions || (ROLE_TEMPLATES as any)[data.user.role] || []
     };
     setProfile(userProfile);
+    return data;
   };
 
   const logout = () => {

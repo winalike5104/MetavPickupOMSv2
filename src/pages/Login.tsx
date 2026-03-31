@@ -11,22 +11,22 @@ export const Login = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { user, profile, loading: authLoading, isAuthReady, activeWarehouse, setActiveWarehouse, clearActiveWarehouse, login, logout } = useAuth();
+  const { user, profile, loading: authLoading, activeWarehouse, setActiveWarehouse, clearActiveWarehouse, login, logout } = useAuth();
   const navigate = useNavigate();
   const [showWarehouseSelector, setShowWarehouseSelector] = useState(false);
 
   useEffect(() => {
-    if (isAuthReady && user && profile) {
+    if (user && profile) {
       if (activeWarehouse) {
         navigate('/');
       } else {
         navigate('/select-warehouse');
       }
     }
-  }, [user, profile, activeWarehouse, navigate, isAuthReady]);
+  }, [user, profile, activeWarehouse, navigate]);
 
   useEffect(() => {
-    if (isAuthReady && !user) {
+    if (!user) {
       clearActiveWarehouse();
     }
 
@@ -35,7 +35,7 @@ export const Login = () => {
       setUsername(savedUsername);
       setRememberMe(true);
     }
-  }, [isAuthReady]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,14 +44,30 @@ export const Login = () => {
     setLoading(true);
 
     try {
-      await login(username, password);
+      const result = await login(username, password);
       
+      console.log("API 返回的全量数据:", result);
+
+      if (result && result.token) {
+        console.log("正在存入 Token:", result.token);
+        localStorage.setItem('x-v2-auth-token', result.token);
+        localStorage.setItem('user_info', JSON.stringify(result.user));
+        
+        // 确认存进去了
+        if (localStorage.getItem('x-v2-auth-token')) {
+           navigate('/dashboard');
+        } else {
+           alert("LocalStorage 写入失败！");
+        }
+      } else {
+        alert("API 返回的数据里没有 Token！");
+      }
+
       if (rememberMe) {
         localStorage.setItem('remembered_username', username);
       } else {
         localStorage.removeItem('remembered_username');
       }
-      // Navigation is handled by the useEffect
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Invalid username or password.');
@@ -60,11 +76,10 @@ export const Login = () => {
     }
   };
 
-  if (!isAuthReady || authLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="ml-4 text-slate-600 animate-pulse">Verifying session...</p>
       </div>
     );
   }
