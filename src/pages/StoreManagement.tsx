@@ -104,7 +104,7 @@ export const StoreManagement = () => {
     setActionLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('your_app_token');
       const response = await fetch('/api/stores/delete', {
         method: 'POST',
         headers: {

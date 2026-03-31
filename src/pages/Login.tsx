@@ -11,22 +11,22 @@ export const Login = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { user, profile, loading: authLoading, activeWarehouse, setActiveWarehouse, clearActiveWarehouse, login, logout } = useAuth();
+  const { user, profile, loading: authLoading, isAuthReady, activeWarehouse, setActiveWarehouse, clearActiveWarehouse, login, logout } = useAuth();
   const navigate = useNavigate();
   const [showWarehouseSelector, setShowWarehouseSelector] = useState(false);
 
   useEffect(() => {
-    if (user && profile) {
+    if (isAuthReady && user && profile) {
       if (activeWarehouse) {
         navigate('/');
       } else {
         navigate('/select-warehouse');
       }
     }
-  }, [user, profile, activeWarehouse, navigate]);
+  }, [user, profile, activeWarehouse, navigate, isAuthReady]);
 
   useEffect(() => {
-    if (!user) {
+    if (isAuthReady && !user) {
       clearActiveWarehouse();
     }
 
@@ -35,7 +35,7 @@ export const Login = () => {
       setUsername(savedUsername);
       setRememberMe(true);
     }
-  }, []);
+  }, [isAuthReady]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,10 +60,11 @@ export const Login = () => {
     }
   };
 
-  if (authLoading) {
+  if (!isAuthReady || authLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="ml-4 text-slate-600 animate-pulse">Verifying session...</p>
       </div>
     );
   }

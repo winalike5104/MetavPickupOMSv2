@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { 
   initializeFirestore, 
   persistentLocalCache,
@@ -13,7 +14,10 @@ import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' 
 // 1. 初始化 App
 const app = initializeApp(firebaseConfig);
 
-// 2. 初始化 Firestore
+// 2. 初始化 Auth
+export const auth = getAuth(app);
+
+// 3. 初始化 Firestore
 // 保持长轮询，这对 AI Studio 的代理环境非常重要
 // 同时配置新版的离线持久化缓存
 export const db = initializeFirestore(app, {

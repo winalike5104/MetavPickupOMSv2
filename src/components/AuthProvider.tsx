@@ -31,24 +31,24 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
-  const [user, setUser] = useState<{ uid: string; username: string; email: string; role: string; allowedWarehouses: string[] } | null>(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      try {
-        return JSON.parse(savedUser);
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  });
-  const [profile, setProfile] = useState<UserProfile | null>(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<{ uid: string; username: string; email: string; role: string; allowedWarehouses: string[] } | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [activeWarehouse, setActiveWarehouseState] = useState<string | null>(() => sessionStorage.getItem('activeWarehouse'));
+
+  // Initialize auth state from localStorage
+  useEffect(() => {
+    const savedToken = localStorage.getItem('your_app_token');
+    const savedUser = localStorage.getItem('user_info');
+
+    if (savedToken && savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
-        return {
+        setToken(savedToken);
+        setUser(parsedUser);
+        setProfile({
           uid: parsedUser.uid,
           username: parsedUser.username,
           email: parsedUser.email,
@@ -57,16 +57,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           allowedWarehouses: parsedUser.allowedWarehouses,
           roleTemplate: parsedUser.role,
           permissions: parsedUser.permissions || (ROLE_TEMPLATES as any)[parsedUser.role] || []
-        };
+        });
       } catch (e) {
-        return null;
+        console.error('Failed to parse saved user info', e);
+        localStorage.removeItem('your_app_token');
+        localStorage.removeItem('user_info');
       }
     }
-    return null;
-  });
-  const [loading, setLoading] = useState(false);
-  const [isAuthReady, setIsAuthReady] = useState(true);
-  const [activeWarehouse, setActiveWarehouseState] = useState<string | null>(() => sessionStorage.getItem('activeWarehouse'));
+    
+    setLoading(false);
+    setIsAuthReady(true);
+  }, []);
 
   const setActiveWarehouse = (id: string) => {
     if (!id) {
@@ -95,8 +96,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(data.error || 'Login failed');
     }
 
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    localStorage.setItem('your_app_token', data.token);
+    localStorage.setItem('user_info', JSON.stringify(data.user));
     setToken(data.token);
     setUser(data.user);
     
@@ -115,8 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem('your_app_token');
+    localStorage.removeItem('user_info');
     sessionStorage.removeItem('activeWarehouse');
     setToken(null);
     setUser(null);
@@ -127,9 +128,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sync state if localStorage changes in other tabs
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'token' || e.key === 'user') {
-        const savedToken = localStorage.getItem('token');
-        const savedUser = localStorage.getItem('user');
+      if (e.key === 'your_app_token' || e.key === 'user_info') {
+        const savedToken = localStorage.getItem('your_app_token');
+        const savedUser = localStorage.getItem('user_info');
         
         if (!savedToken || !savedUser) {
           logout();

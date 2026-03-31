@@ -250,7 +250,7 @@ export const BulkOrderUpload = () => {
     setProgress(0);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('your_app_token');
       const BATCH_SIZE = 50;
       let totalSuccess = 0;
       let totalFailed = 0;

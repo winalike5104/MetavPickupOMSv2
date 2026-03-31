@@ -85,7 +85,7 @@ export const Settings = () => {
     setError('');
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('your_app_token');
       const response = await fetch('/api/user/settings', {
         method: 'POST',
         headers: {

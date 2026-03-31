@@ -128,7 +128,7 @@ export default function UserGroups() {
     };
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('your_app_token');
       const response = await fetch('/api/user-groups/save', {
         method: 'POST',
         headers: {
@@ -152,7 +152,7 @@ export default function UserGroups() {
 
   const handleDelete = async (id: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('your_app_token');
       const response = await fetch('/api/user-groups/delete', {
         method: 'POST',
         headers: {

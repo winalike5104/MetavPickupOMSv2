@@ -20,20 +20,20 @@ import { TaskProvider } from './components/TaskProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading, profile, activeWarehouse } = useAuth();
+  const { user, isAuthReady, profile, activeWarehouse } = useAuth();
   const [timedOut, setTimedOut] = React.useState(false);
 
   React.useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (loading) {
+    if (!isAuthReady) {
       timer = setTimeout(() => {
         setTimedOut(true);
       }, 10000); // 10 seconds timeout
     }
     return () => clearTimeout(timer);
-  }, [loading]);
+  }, [isAuthReady]);
 
-  if (loading && !timedOut) {
+  if (!isAuthReady && !timedOut) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
@@ -42,7 +42,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     );
   }
 
-  if (loading && timedOut) {
+  if (!isAuthReady && timedOut) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
         <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 max-w-md">
