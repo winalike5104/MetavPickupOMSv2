@@ -877,8 +877,11 @@ async function startServer() {
     }
 
     try {
-      if (!hasPermission(req.user, 'Manage User Groups')) {
-        return res.status(403).json({ error: "Permission denied" });
+      const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+      const isAdmin = req.user.role === 'Admin' || isSuper;
+
+      if (!isAdmin && !hasPermission(req.user, 'Manage User Groups')) {
+        return res.status(403).json({ success: false, error: "Permission denied: Manage User Groups permission required" });
       }
 
       const { id, ...data } = req.body;
@@ -898,7 +901,7 @@ async function startServer() {
 
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 
@@ -909,15 +912,18 @@ async function startServer() {
     }
 
     try {
-      if (!hasPermission(req.user, 'Manage User Groups')) {
-        return res.status(403).json({ error: "Permission denied" });
+      const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+      const isAdmin = req.user.role === 'Admin' || isSuper;
+
+      if (!isAdmin && !hasPermission(req.user, 'Manage User Groups')) {
+        return res.status(403).json({ success: false, error: "Permission denied: Manage User Groups permission required" });
       }
 
       const { id } = req.body;
       await currentDb.collection('userGroups').doc(id).delete();
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 
@@ -1333,8 +1339,11 @@ async function startServer() {
     }
 
     try {
-      // Check if caller is admin
-      if (req.user.role !== 'Admin') {
+      const callerUsername = req.user.username.toLowerCase();
+      const isSuper = SUPER_ADMINS.includes(callerUsername);
+      const isAdmin = req.user.role === 'Admin' || isSuper;
+
+      if (!isAdmin) {
         return res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
       }
 
@@ -1347,6 +1356,27 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "Password must be at least 6 characters" });
       }
 
+      // Fetch target user to check their role
+      const targetDoc = await currentDb.collection("users").doc(targetUid).get();
+      if (!targetDoc.exists) {
+        return res.status(404).json({ success: false, error: "Target user not found" });
+      }
+
+      const targetData = targetDoc.data() || {};
+      const targetUsername = (targetData.username || "").toLowerCase();
+      const targetIsSuper = SUPER_ADMINS.includes(targetUsername);
+      const targetIsAdmin = targetData.roleTemplate === 'Admin' || targetIsSuper;
+
+      // Restriction: SUPER_ADMINS cannot be managed via API
+      if (targetIsSuper && !isSuper) {
+        return res.status(403).json({ success: false, error: "Forbidden: System administrators cannot be managed." });
+      }
+
+      // Restriction: Admin cannot be managed by other admins (only by SUPER_ADMIN)
+      if (targetIsAdmin && !isSuper) {
+        return res.status(403).json({ success: false, error: "Forbidden: Admin accounts can only be managed by system administrators." });
+      }
+
       // Hash the new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
 
@@ -1357,6 +1387,7 @@ async function startServer() {
       });
       
       console.log(`Admin ${req.user.uid} updated password for user ${targetUid}`);
+      await logAction(req.user, 'Admin Change Password', `Admin changed password for user ${targetUsername}`);
       
       return res.json({ success: true, message: "Password updated successfully" });
     } catch (error: any) {
@@ -1420,6 +1451,136 @@ async function startServer() {
       return res.json({ success: true, message: "User created successfully", uid: newUserRef.id });
     } catch (error: any) {
       console.error("Admin Create User Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin: Update User
+  app.post("/api/admin/update-user", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const callerUsername = req.user.username.toLowerCase();
+      const isSuper = SUPER_ADMINS.includes(callerUsername);
+      const isAdmin = req.user.role === 'Admin' || isSuper;
+
+      if (!isAdmin && !hasPermission(req.user, 'Manage Users')) {
+        return res.status(403).json({ success: false, error: "Forbidden: Manage Users permission required" });
+      }
+
+      const { uid, name, status, permissions, allowedWarehouses, roleTemplate } = req.body;
+      if (!uid) {
+        return res.status(400).json({ success: false, error: "Missing uid" });
+      }
+
+      // Prevent self-revocation of Manage Users permission
+      if (uid === req.user.uid && !permissions.includes('Manage Users')) {
+        return res.status(400).json({ success: false, error: "To avoid system lockouts, you cannot revoke your own 'Manage Users' permission." });
+      }
+
+      // Fetch target user to check their role
+      const targetDoc = await currentDb.collection("users").doc(uid).get();
+      if (!targetDoc.exists) {
+        return res.status(404).json({ success: false, error: "Target user not found" });
+      }
+
+      const targetData = targetDoc.data() || {};
+      const targetUsername = (targetData.username || "").toLowerCase();
+      const targetIsSuper = SUPER_ADMINS.includes(targetUsername);
+      const targetIsAdmin = targetData.roleTemplate === 'Admin' || targetIsSuper;
+
+      // Restriction: SUPER_ADMINS cannot be managed via API
+      if (targetIsSuper && !isSuper) {
+        return res.status(403).json({ success: false, error: "Forbidden: System administrators cannot be managed." });
+      }
+
+      // Restriction: Admin cannot be managed by other admins (only by SUPER_ADMIN)
+      if (targetIsAdmin && !isSuper) {
+        return res.status(403).json({ success: false, error: "Forbidden: Admin accounts can only be managed by system administrators." });
+      }
+
+      await currentDb.collection("users").doc(uid).update({
+        name,
+        status,
+        permissions,
+        allowedWarehouses,
+        roleTemplate,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      console.log(`Admin ${req.user.uid} updated user ${uid} (${targetUsername})`);
+      await logAction(req.user, 'Update User', `Updated user profile: ${targetUsername}`);
+      
+      return res.json({ success: true, message: "User updated successfully" });
+    } catch (error: any) {
+      console.error("Admin Update User Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin: Delete User
+  app.post("/api/admin/delete-user", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const callerUsername = req.user.username.toLowerCase();
+      const isSuper = SUPER_ADMINS.includes(callerUsername);
+      const isAdmin = req.user.role === 'Admin' || isSuper;
+      
+      console.log(`[Delete User] Caller: ${callerUsername}, Role: ${req.user.role}, isAdmin: ${isAdmin}, isSuper: ${isSuper}`);
+
+      if (!isAdmin && !hasPermission(req.user, 'Manage Users')) {
+        console.warn(`[Delete User] Permission denied for ${callerUsername}`);
+        return res.status(403).json({ success: false, error: "Forbidden: Manage Users permission required" });
+      }
+
+      const { uid } = req.body;
+      if (!uid) {
+        return res.status(400).json({ success: false, error: "Missing uid" });
+      }
+
+      // Prevent self-deletion
+      if (uid === req.user.uid) {
+        return res.status(400).json({ success: false, error: "You cannot delete your own account." });
+      }
+
+      // Fetch target user to check their role
+      const targetDoc = await currentDb.collection("users").doc(uid).get();
+      if (!targetDoc.exists) {
+        return res.status(404).json({ success: false, error: "Target user not found" });
+      }
+
+      const targetData = targetDoc.data() || {};
+      const targetUsername = (targetData.username || "").toLowerCase();
+      const targetIsSuper = SUPER_ADMINS.includes(targetUsername);
+      const targetIsAdmin = targetData.roleTemplate === 'Admin' || targetIsSuper;
+
+      console.log(`[Delete User] Target: ${targetUsername}, targetIsAdmin: ${targetIsAdmin}, targetIsSuper: ${targetIsSuper}`);
+
+      // Restriction: SUPER_ADMINS cannot be deleted via API
+      if (targetIsSuper) {
+        return res.status(403).json({ success: false, error: "Forbidden: System administrators cannot be deleted." });
+      }
+
+      // Restriction: Admin cannot be deleted by other admins (only by SUPER_ADMIN)
+      if (targetIsAdmin && !isSuper) {
+        return res.status(403).json({ success: false, error: "Forbidden: Admin accounts can only be deleted by system administrators." });
+      }
+
+      await currentDb.collection("users").doc(uid).delete();
+      
+      console.log(`Admin ${req.user.uid} deleted user ${uid} (${targetUsername})`);
+      await logAction(req.user, 'Delete User', `Deleted user account: ${targetUsername}`);
+      
+      return res.json({ success: true, message: "User deleted successfully" });
+    } catch (error: any) {
+      console.error("Admin Delete User Error:", error);
       return res.status(500).json({ success: false, error: error.message });
     }
   });

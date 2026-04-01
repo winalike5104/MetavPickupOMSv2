@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { UserProfile, PERMISSIONS, ROLE_TEMPLATES, UserStatus, AccountType } from '../types';
@@ -102,14 +102,28 @@ export const UserManagement = () => {
           return;
         }
 
-        // Update existing user
-        await updateDoc(doc(db, 'users', editingUser.uid), {
-          name: formName,
-          status: formStatus,
-          permissions: formPermissions,
-          allowedWarehouses: formAllowedWarehouses,
-          roleTemplate: formAccountType
+        // Update existing user via backend API
+        const response = await fetch('/api/admin/update-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-v2-auth-token': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            uid: editingUser.uid,
+            name: formName,
+            status: formStatus,
+            permissions: formPermissions,
+            allowedWarehouses: formAllowedWarehouses,
+            roleTemplate: formAccountType
+          })
         });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to update user');
+        }
+        
         await logAction(currentProfile, 'Update User', `Updated permissions for ${formUsername}`);
       } else {
         // Create new user via backend API
@@ -205,14 +219,26 @@ export const UserManagement = () => {
     }
 
     try {
-      await deleteDoc(doc(db, 'users', user.uid));
+      const response = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-v2-auth-token': `Bearer ${token}`
+        },
+        body: JSON.stringify({ uid: user.uid })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete user');
+      }
+
       await logAction(currentProfile, 'Delete User', `Deleted user profile for ${user.username}`);
       setShowDeleteConfirm(null);
       fetchUsers();
     } catch (err: any) {
       console.error(err);
-      handleFirestoreError(err, OperationType.DELETE, `users/${user.uid}`);
-      setError('Failed to delete user profile.');
+      setError(err.message || 'Failed to delete user profile.');
     }
   };
 
@@ -356,6 +382,36 @@ export const UserManagement = () => {
         }} 
         targetUser={passwordTargetUser} 
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Delete Account?</h3>
+            <p className="text-slate-600 text-center mb-8">
+              Are you sure you want to delete <span className="font-bold text-slate-900">{showDeleteConfirm.name}</span>? 
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowDeleteConfirm(null)} 
+                className="flex-1 px-4 py-3 text-slate-600 font-semibold hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => handleDeleteUser(showDeleteConfirm)} 
+                className="flex-1 px-4 py-3 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {showEditModal && (
