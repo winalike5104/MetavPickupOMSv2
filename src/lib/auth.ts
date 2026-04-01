@@ -95,27 +95,52 @@ export const authenticate = (req: any, res: Response, next: NextFunction) => {
  * @param db - The firebase-admin firestore instance
  */
 export const loginUser = async (db: any, { username, password }: any) => {
-  // Admin SDK uses .doc() and .get()
-  const userRef = db.collection('users').doc(username);
-  const userDoc = await userRef.get();
+  const normalizedUsername = username.toLowerCase();
   
-  if (!userDoc.exists) {
-    // Fallback to query if document ID is not the username
-    const userQuery = await db.collection('users').where('username', '==', username).limit(1).get();
-    
-    if (userQuery.empty) {
-      throw new Error('Invalid username or password');
-    }
-    
+  console.log(`Attempting login for: ${username} (normalized: ${normalizedUsername})`);
+
+  // 1. Try to find by normalized username in the 'username' field (New Standard)
+  const userQuery = await db.collection('users').where('username', '==', normalizedUsername).limit(1).get();
+  
+  if (!userQuery.empty) {
     const foundDoc = userQuery.docs[0];
     const foundData = foundDoc.data();
-    console.log('Fetched User Data (via query):', foundData);
+    console.log('User found via normalized username query');
     return processUserLogin(foundDoc, foundData, password);
   }
 
-  const userData = userDoc.data();
-  console.log('Fetched User Data (via doc ID):', userData);
-  return processUserLogin(userDoc, userData, password);
+  // 2. Fallback: Try to find by EXACT username (Legacy Support)
+  // This handles users created before the normalization was implemented
+  const legacyQuery = await db.collection('users').where('username', '==', username).limit(1).get();
+  
+  if (!legacyQuery.empty) {
+    const foundDoc = legacyQuery.docs[0];
+    const foundData = foundDoc.data();
+    console.log('User found via legacy exact username query');
+    return processUserLogin(foundDoc, foundData, password);
+  }
+
+  // 3. Fallback: Try using the username as a Document ID (Oldest Standard)
+  const userRef = db.collection('users').doc(username);
+  const userDoc = await userRef.get();
+  
+  if (userDoc.exists) {
+    const userData = userDoc.data();
+    console.log('User found via document ID');
+    return processUserLogin(userDoc, userData, password);
+  }
+
+  // 4. Fallback: Try using the normalized username as a Document ID
+  const normalizedUserRef = db.collection('users').doc(normalizedUsername);
+  const normalizedUserDoc = await normalizedUserRef.get();
+  
+  if (normalizedUserDoc.exists) {
+    const normalizedUserData = normalizedUserDoc.data();
+    console.log('User found via normalized document ID');
+    return processUserLogin(normalizedUserDoc, normalizedUserData, password);
+  }
+
+  throw new Error('Invalid username or password');
 };
 
 const processUserLogin = async (userDoc: any, userData: any, password: any) => {

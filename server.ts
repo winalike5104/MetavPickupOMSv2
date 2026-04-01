@@ -1409,15 +1409,18 @@ async function startServer() {
         return res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
       }
 
-      const { username, password, name, roleTemplate, permissions, allowedWarehouses } = req.body;
+      const { username: rawUsername, password, name, roleTemplate, permissions, allowedWarehouses } = req.body;
+      const username = (rawUsername || "").toLowerCase();
       
       if (!username || !password || !name) {
         return res.status(400).json({ success: false, error: "Missing required fields" });
       }
 
-      // Check if user already exists
+      // Check if user already exists (case-insensitive check)
       const userSnap = await currentDb.collection("users").where("username", "==", username).limit(1).get();
-      if (!userSnap.empty) {
+      const legacySnap = await currentDb.collection("users").where("username", "==", rawUsername).limit(1).get();
+      
+      if (!userSnap.empty || !legacySnap.empty) {
         return res.status(400).json({ success: false, error: "Username already exists" });
       }
 
