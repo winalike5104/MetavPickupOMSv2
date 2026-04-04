@@ -8,6 +8,7 @@ import { Orders } from './pages/Orders';
 import { OrderCreate } from './pages/OrderCreate';
 import { OrderDetail } from './pages/OrderDetail';
 import { SKUDatabase } from './pages/SKUDatabase';
+import SKULogs from './pages/SKULogs';
 import { Settings } from './pages/Settings';
 import { UserManagement } from './pages/UserManagement';
 import UserGroups from './pages/UserGroups';
@@ -112,6 +113,7 @@ export default function App() {
               <Route path="/orders/bulk-import" element={<ProtectedRoute><BulkOrderUpload /></ProtectedRoute>} />
               <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
               <Route path="/skus" element={<ProtectedRoute><SKUDatabase /></ProtectedRoute>} />
+              <Route path="/skus/logs" element={<ProtectedRoute><SKULogs /></ProtectedRoute>} />
               <Route path="/history" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
               <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
               <Route path="/groups" element={<ProtectedRoute><UserGroups /></ProtectedRoute>} />

@@ -172,13 +172,22 @@ export const BulkOrderUpload = () => {
       'unit_price'
     ];
     
+    const instructions = [
+      '# === IMPORT TEMPLATE RULES ===',
+      '# [BLUE AREA] Order Info: booking_number, customer_name, customer_email, customer_ref, customer_id, scheduled_pickup_date, store_id, payment_state, payment_method, order_note, warehouse_id',
+      '# -> RULE: booking_number MUST be filled on EVERY row. Other order info only needs to be on the FIRST row of an order.',
+      '# [AMBER AREA] Product Info: sku, quantity, unit_price',
+      '# -> RULE: These MUST be filled on EVERY row for product details.',
+      '# ============================='
+    ];
+    
     const sampleData = [
       ['BK-2026-001', 'Angus Dorahy', 'ceci@machter.com.au', 'REF-9988', 'CUST-102', '2026-03-25', 'NZ-METAV', 'Paid', 'EFTPOS', 'Handle with care', 'AKL', 'WPKIT-TA005', '2', '45.50'],
       ['BK-2026-001', '', '', '', '', '', '', '', '', '', '', 'SKU-B', '1', '50.00'],
       ['BK-2026-002', 'Shivnesh Chand', 'shiv@test.com', 'REF-1001', 'CUST-103', '2026-03-26', 'NZ-METAV', 'Unpaid', 'Bank Transfer', '', 'AKL', 'SKU-C', '1', '299.99']
     ];
 
-    const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
+    const csvContent = [...instructions, headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -200,6 +209,7 @@ export const BulkOrderUpload = () => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      comments: "#",
       complete: async (results) => {
         addLog(`Parsed ${results.data.length} rows from CSV`, 'success');
         
@@ -908,28 +918,46 @@ export const BulkOrderUpload = () => {
               </div>
             )}
 
-            {/* Info Card */}
-            <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <Info className="w-5 h-5" />
+            {/* Template Guide Card */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-50 rounded-lg">
+                  <Info className="w-5 h-5 text-indigo-600" />
                 </div>
-                <h3 className="font-bold">Import Tips</h3>
+                <h3 className="font-bold text-slate-900">Template Guide</h3>
               </div>
-              <ul className="text-sm text-indigo-100 space-y-3">
-                <li className="flex gap-2">
-                  <ChevronRight className="w-4 h-4 shrink-0" />
-                  Ensure CSV headers match the required format exactly.
-                </li>
-                <li className="flex gap-2">
-                  <ChevronRight className="w-4 h-4 shrink-0" />
-                  Duplicates are checked against both Booking # and Customer Ref.
-                </li>
-                <li className="flex gap-2">
-                  <ChevronRight className="w-4 h-4 shrink-0" />
-                  Transactions are processed in batches of 50 for stability.
-                </li>
-              </ul>
+              
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <div className="w-1.5 h-auto bg-blue-500 rounded-full shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1.5">Order Info Area (Blue)</p>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {['booking_number', 'customer_name', 'email', 'ref', 'store_id'].map(f => (
+                        <span key={f} className="text-[10px] font-mono bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-blue-600">{f}</span>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      <span className="font-bold text-slate-700">booking_number</span> must be on <span className="font-bold text-slate-700">EVERY row</span>. Other fields only on the 1st row.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-4">
+                  <div className="w-1.5 h-auto bg-amber-500 rounded-full shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1.5">Product Details Area (Amber)</p>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {['sku', 'quantity', 'unit_price'].map(f => (
+                        <span key={f} className="text-[10px] font-mono bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 text-amber-600">{f}</span>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      <span className="font-bold text-slate-700">MUST be filled on every row</span> to record line items.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

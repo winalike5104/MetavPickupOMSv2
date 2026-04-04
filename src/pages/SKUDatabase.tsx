@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, writeBatch, orderBy, limit, startAfter, getCountFromServer, where, setDoc, documentId } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { SKU } from '../types';
-import html2canvas from 'html2canvas-pro';
 import { logAction, hasPermission, isAdmin, isSystemAdmin } from '../utils';
 import { 
   Search, 
@@ -21,11 +21,13 @@ import {
   ArrowUpDown,
   MapPin,
   Loader2,
-  ShieldAlert
+  ShieldAlert,
+  History
 } from 'lucide-react';
 
 export const SKUDatabase = () => {
   const { profile, user } = useAuth();
+  const navigate = useNavigate();
   const [skus, setSkus] = useState<SKU[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [lastDoc, setLastDoc] = useState<any>(null);
@@ -64,9 +66,7 @@ export const SKUDatabase = () => {
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [clearing, setClearing] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -94,30 +94,6 @@ export const SKUDatabase = () => {
   const [csvData, setCsvData] = useState('');
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState('');
-
-  const handleExportAsImage = async () => {
-    if (!tableRef.current) return;
-    setExporting(true);
-    try {
-      const canvas = await html2canvas(tableRef.current, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        logging: false,
-        useCORS: true
-      });
-      const dataUrl = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `SKU_Database_${new Date().toISOString().split('T')[0]}.png`;
-      link.href = dataUrl;
-      link.click();
-      await logAction(profile, 'Export SKU Table', `Exported SKU table as image`);
-    } catch (err) {
-      console.error("Export failed:", err);
-      alert("Failed to export table as image.");
-    } finally {
-      setExporting(false);
-    }
-  };
 
   const handleDataHealthCheck = async () => {
     if (!profile || !isAdmin(profile, profile?.email)) return;
@@ -679,12 +655,13 @@ export const SKUDatabase = () => {
       const CHUNK_SIZE = 450;
       let totalUploaded = 0;
       let unmodifiedSkipped = 0;
+      const addedSkus: string[] = [];
+      const updatedSkus: string[] = [];
 
       for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
         const chunk = entries.slice(i, i + CHUNK_SIZE);
         const batch = writeBatch(db);
         
-        // 2. 批量读取现有数据 (用便宜的 Read 换昂贵的 Write)
         const docRefs = chunk.map(([skuUpper]) => {
           const safeDocId = skuUpper.replace(/\//g, '_');
           return doc(db, 'skus', safeDocId);
@@ -699,13 +676,13 @@ export const SKUDatabase = () => {
           
           let finalName, finalLocation;
           let needsUpdate = false;
+          let isNew = !currentSnap.exists();
 
           if (currentSnap.exists()) {
             const currentData = currentSnap.data() as SKU;
             const dbName = (currentData.productName || "").toString().trim();
             const dbLocation = (currentData.location || "").toString().trim().toUpperCase();
 
-            // 规则：有新值用新值，没新值保老值
             finalName = data.rawName !== "" ? data.rawName : dbName;
             finalLocation = data.rawLocation !== "" ? data.rawLocation : dbLocation;
 
@@ -713,7 +690,6 @@ export const SKUDatabase = () => {
               needsUpdate = true;
             }
           } else {
-            // 完全陌生的新 SKU：触发 Fallback
             finalName = data.rawName !== "" ? data.rawName : skuUpper;
             finalLocation = data.rawLocation !== "" ? data.rawLocation : "N/A";
             needsUpdate = true;
@@ -721,11 +697,14 @@ export const SKUDatabase = () => {
 
           if (!needsUpdate) {
             unmodifiedSkipped++;
-            continue; // 🚀 成功省下一次写配额！
+            continue;
           }
 
+          if (isNew) addedSkus.push(skuUpper);
+          else updatedSkus.push(skuUpper);
+
           const skuData: SKU = {
-            sku: skuUpper, // 存入原始 SKU (带斜杠)
+            sku: skuUpper,
             productName: finalName,
             location: finalLocation
           };
@@ -748,7 +727,21 @@ export const SKUDatabase = () => {
         }
       }
       
-      await logAction(profile, 'Upload SKU', `Batch uploaded/updated ${totalUploaded} SKUs. Skipped ${unmodifiedSkipped} unchanged.`);
+      // Create detailed log message
+      let logDetails = `Batch processed ${totalUploaded} items. `;
+      if (addedSkus.length > 0) {
+        const addedList = addedSkus.length > 20 ? `${addedSkus.slice(0, 20).join(', ')}... (+${addedSkus.length - 20} more)` : addedSkus.join(', ');
+        logDetails += `Added (${addedSkus.length}): [${addedList}]. `;
+      }
+      if (updatedSkus.length > 0) {
+        const updatedList = updatedSkus.length > 20 ? `${updatedSkus.slice(0, 20).join(', ')}... (+${updatedSkus.length - 20} more)` : updatedSkus.join(', ');
+        logDetails += `Updated (${updatedSkus.length}): [${updatedList}]. `;
+      }
+      if (unmodifiedSkipped > 0) {
+        logDetails += `Skipped ${unmodifiedSkipped} unchanged items.`;
+      }
+
+      await logAction(profile, 'Upload SKU', logDetails);
       setShowUploadModal(false);
       setCsvData('');
       setSelectedFileName('');
@@ -917,6 +910,21 @@ export const SKUDatabase = () => {
                   )}>{checkingHealth ? 'Checking...' : 'Data Health Check'}</span>
                 </button>
               )}
+              {isAdmin(profile, profile?.email) && (
+                <button 
+                  onClick={() => navigate('/skus/logs')}
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all",
+                    isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                  )}
+                >
+                  <History className={cn("text-indigo-500", isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5")} />
+                  <span className={cn(
+                    "transition-all",
+                    isScrolled ? "hidden group-hover:inline" : "inline"
+                  )}>View Logs</span>
+                </button>
+              )}
               {hasPermission(profile, 'Upload SKU', profile?.email) && (
                 <button 
                   onClick={() => setShowUploadModal(true)}
@@ -944,24 +952,6 @@ export const SKUDatabase = () => {
                   Add SKU
                 </button>
               )}
-              <button 
-                onClick={handleExportAsImage}
-                disabled={exporting}
-                className={cn(
-                  "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all disabled:opacity-50",
-                  isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
-                )}
-              >
-                {exporting ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
-                ) : (
-                  <Download className={cn("text-indigo-500", isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5")} />
-                )}
-                <span className={cn(
-                  "transition-all",
-                  isScrolled ? "hidden group-hover:inline" : "inline"
-                )}>{exporting ? 'Exporting...' : 'Export Image'}</span>
-              </button>
             </div>
           </div>
 
@@ -1059,7 +1049,7 @@ export const SKUDatabase = () => {
           </div>
         )}
 
-      <div ref={tableRef} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
