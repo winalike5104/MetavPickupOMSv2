@@ -28,21 +28,23 @@ import {
   ChevronRight,
   Database,
   History,
-  AlertTriangle
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Order, OrderItem, OrderStatus, PaymentStatus, PaymentMethod } from '../types';
+import { Order, OrderItem, OrderStatus, PaymentStatus, PaymentMethod, SKU } from '../types';
 import { cn } from '../utils';
+import { API_BASE_URL } from '../constants';
 
 // 1. Zod Schema for Validation
 const orderRowSchema = z.object({
-  'booking number': z.string().min(1, "Booking number is required"),
-  'Customer Name': z.string().min(1, "Customer name is required"),
-  'customer ref': z.string().min(1, "Customer ref is required"),
-  'customer id': z.string().optional(),
-  'Email': z.string().email("Invalid email format"),
-  'scheduled pickup date': z.string().optional().transform(val => {
+  'booking_number': z.string().min(1, "Booking number is required"),
+  'customer_name': z.string().min(1, "Customer name is required"),
+  'customer_ref': z.string().min(1, "Customer ref is required"),
+  'customer_id': z.string().optional(),
+  'customer_email': z.string().email("Invalid email format"),
+  'scheduled_pickup_date': z.string().optional().transform(val => {
     if (!val || val.trim() === '' || val.toLowerCase() === 'n/a') {
       return new Date().toISOString().split('T')[0];
     }
@@ -50,27 +52,31 @@ const orderRowSchema = z.object({
     if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0];
     return d.toISOString().split('T')[0];
   }),
-  'Store ID': z.string().min(1, "Store ID is required"),
-  'payment state': z.string().refine(val => ['paid', 'unpaid'].includes(val.toLowerCase()), {
+  'store_id': z.string().min(1, "Store ID is required"),
+  'payment_state': z.string().refine(val => ['paid', 'unpaid'].includes(val.toLowerCase()), {
     message: "Payment state must be Paid or Unpaid"
   }),
-  'method': z.string().optional(),
-  'SKU 1': z.string().min(1, "SKU 1 is required"),
-  'quantity 1': z.string().transform(val => parseInt(val, 10)).refine(val => !isNaN(val) && val > 0, {
-    message: "Quantity 1 must be a positive number"
+  'payment_method': z.string().optional(),
+  'sku': z.string().min(1, "SKU is required"),
+  'quantity': z.string().transform(val => parseInt(val, 10)).refine(val => !isNaN(val) && val > 0, {
+    message: "Quantity must be a positive number"
   }),
-  'Warehouse': z.string().refine(val => ['AKL', 'CHC'].includes(val), {
+  'unit_price': z.string().transform(val => parseFloat(val)).refine(val => !isNaN(val) && val >= 0, {
+    message: "Unit price must be a non-negative number"
+  }),
+  'warehouse_id': z.string().refine(val => ['AKL', 'CHC'].includes(val.toUpperCase()), {
     message: "Warehouse must be AKL or CHC"
-  })
+  }),
+  'order_note': z.string().optional()
 }).refine(data => {
-  if (data['payment state'].toLowerCase() === 'paid') {
+  if (data['payment_state'].toLowerCase() === 'paid') {
     const validMethods = ['Cash', 'EFTPOS', 'Bank Transfer', 'Online Payment'];
-    return data.method && validMethods.some(m => data.method?.toLowerCase().includes(m.toLowerCase()));
+    return data.payment_method && validMethods.some(m => data.payment_method?.toLowerCase().includes(m.toLowerCase()));
   }
   return true;
 }, {
-  message: "Method is required and must be valid if payment state is Paid",
-  path: ['method']
+  message: "Payment method is required and must be valid if payment state is Paid",
+  path: ['payment_method']
 });
 
 type OrderRow = z.infer<typeof orderRowSchema>;
@@ -144,8 +150,46 @@ export const BulkOrderUpload = () => {
         addLog("Failed to load store configurations", 'warning');
       }
     };
+
     fetchStores();
   }, [addLog]);
+
+  const downloadTemplate = () => {
+    const headers = [
+      'booking_number',
+      'customer_name',
+      'customer_email',
+      'customer_ref',
+      'customer_id',
+      'scheduled_pickup_date',
+      'store_id',
+      'payment_state',
+      'payment_method',
+      'order_note',
+      'warehouse_id',
+      'sku',
+      'quantity',
+      'unit_price'
+    ];
+    
+    const sampleData = [
+      ['BK-2026-001', 'Angus Dorahy', 'ceci@machter.com.au', 'REF-9988', 'CUST-102', '2026-03-25', 'NZ-METAV', 'Paid', 'EFTPOS', 'Handle with care', 'AKL', 'WPKIT-TA005', '2', '45.50'],
+      ['BK-2026-001', '', '', '', '', '', '', '', '', '', '', 'SKU-B', '1', '50.00'],
+      ['BK-2026-002', 'Shivnesh Chand', 'shiv@test.com', 'REF-1001', 'CUST-103', '2026-03-26', 'NZ-METAV', 'Unpaid', 'Bank Transfer', '', 'AKL', 'SKU-C', '1', '299.99']
+    ];
+
+    const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'order_import_template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addLog('CSV template downloaded', 'info');
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -156,26 +200,98 @@ export const BulkOrderUpload = () => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         addLog(`Parsed ${results.data.length} rows from CSV`, 'success');
         
+        // 1. Extract unique SKUs from CSV to fetch on-demand (Quota optimization)
+        const uniqueSkusInCsv = Array.from(new Set(
+          results.data
+            .map((row: any) => row['sku']?.trim()?.toUpperCase())
+            .filter((sku: string) => !!sku)
+        )) as string[];
+
+        addLog(`Fetching definitions for ${uniqueSkusInCsv.length} unique SKUs...`, 'info');
+        
+        const fetchedSkusMap = new Map<string, SKU>();
+        
+        // Firestore 'in' query limit is 30
+        const SKU_CHUNK_SIZE = 30;
+        for (let i = 0; i < uniqueSkusInCsv.length; i += SKU_CHUNK_SIZE) {
+          const chunk = uniqueSkusInCsv.slice(i, i + SKU_CHUNK_SIZE);
+          try {
+            const q = query(collection(db, 'skus'), where('sku', 'in', chunk));
+            const snap = await getDocs(q);
+            snap.docs.forEach(doc => {
+              const data = doc.data() as SKU;
+              fetchedSkusMap.set(data.sku.toUpperCase(), data);
+            });
+          } catch (err) {
+            console.error("Error fetching SKU chunk:", err);
+          }
+        }
+        
+        addLog(`Auto-fill data retrieved for ${fetchedSkusMap.size} SKUs`, 'success');
+
+        // 2. Track order metadata for inheritance
+        const orderMetadataMap = new Map<string, any>();
+        
+        // First pass: Collect metadata from rows that have it
+        results.data.forEach((row: any) => {
+          const bookingNumber = row['booking_number']?.trim();
+          if (bookingNumber && row['customer_name']?.trim() && row['customer_ref']?.trim()) {
+            if (!orderMetadataMap.has(bookingNumber)) {
+              orderMetadataMap.set(bookingNumber, {
+                customer_name: row['customer_name'],
+                customer_email: row['customer_email'],
+                customer_ref: row['customer_ref'],
+                customer_id: row['customer_id'],
+                scheduled_pickup_date: row['scheduled_pickup_date'],
+                store_id: row['store_id'],
+                payment_state: row['payment_state'],
+                payment_method: row['payment_method'],
+                order_note: row['order_note'],
+                warehouse_id: row['warehouse_id']
+              });
+            }
+          }
+        });
+
         const processed: ProcessedRow[] = results.data.map((row: any, index: number) => {
-          const validation = orderRowSchema.safeParse(row);
-          const errors = validation.success ? [] : validation.error.issues.map(e => e.message);
+          const bookingNumber = row['booking_number']?.trim();
+          let enrichedRow = { ...row };
+
+          // If this row is missing metadata but we have it for this booking number, inherit it
+          if (bookingNumber && (!row['customer_name']?.trim() || !row['customer_ref']?.trim())) {
+            const inherited = orderMetadataMap.get(bookingNumber);
+            if (inherited) {
+              enrichedRow = { ...enrichedRow, ...inherited };
+            }
+          }
+
+          const validation = orderRowSchema.safeParse(enrichedRow);
+          const errors = validation.success ? [] : validation.error.issues.map(e => `Row ${index + 2}: ${e.message}`);
           
           // Additional store validation
-          const storeId = row['Store ID']?.toUpperCase().replace(/\s+/g, '_');
+          const storeId = enrichedRow['store_id']?.toUpperCase().replace(/\s+/g, '_');
           if (storeId && availableStoreIds.length > 0 && !availableStoreIds.includes(storeId)) {
-            errors.push(`Store ID "${storeId}" not found in system`);
+            errors.push(`Row ${index + 2}: Store ID "${storeId}" not found in system`);
+          }
+
+          // Auto-fill Location and Product Name from the fetched map
+          const skuCode = enrichedRow['sku']?.toUpperCase();
+          const matchedSku = fetchedSkusMap.get(skuCode);
+          if (matchedSku) {
+            enrichedRow.productName = matchedSku.productName;
+            enrichedRow.location = matchedSku.location;
           }
 
           return {
             id: Math.random().toString(36).substr(2, 9),
-            data: row,
+            data: enrichedRow,
             errors,
             isDuplicate: false,
             status: (validation.success && errors.length === 0) ? 'pending' : 'failed',
-            rowNumber: index + 2 // +1 for header, +1 for 1-based index
+            rowNumber: index + 2
           };
         });
 
@@ -186,7 +302,7 @@ export const BulkOrderUpload = () => {
         addLog(`CSV Parsing Error: ${err.message}`, 'error');
       }
     });
-  }, [addLog]);
+  }, [addLog, availableStoreIds]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -199,8 +315,8 @@ export const BulkOrderUpload = () => {
     addLog('Starting database duplicate pre-check...', 'info');
     
     const validRows = dataRows.filter(r => r.errors.length === 0);
-    const bookingNumbers = validRows.map(r => r.data['booking number']);
-    const customerRefs = validRows.map(r => r.data['customer ref']);
+    const bookingNumbers = validRows.map(r => r.data['booking_number']);
+    const customerRefs = validRows.map(r => r.data['customer_ref']);
 
     const duplicates = new Set<string>();
 
@@ -222,8 +338,8 @@ export const BulkOrderUpload = () => {
     }
 
     setRows(prev => prev.map(row => {
-      const isBnDup = duplicates.has(`bn_${row.data['booking number']}`);
-      const isRefDup = duplicates.has(`ref_${row.data['customer ref']}`);
+      const isBnDup = duplicates.has(`bn_${row.data['booking_number']}`);
+      const isRefDup = duplicates.has(`ref_${row.data['customer_ref']}`);
       const isDuplicate = isBnDup || isRefDup;
       
       return {
@@ -246,48 +362,68 @@ export const BulkOrderUpload = () => {
     }
 
     setIsImporting(true);
-    addLog(`Starting import of ${readyRows.length} orders...`, 'info');
+    addLog(`Starting import of ${readyRows.length} rows...`, 'info');
     setProgress(0);
 
     try {
       const token = localStorage.getItem('x-v2-auth-token');
+      
+      // Group rows by booking_number to handle multi-line orders
+      const groupedOrdersMap = new Map<string, any>();
+      
+      readyRows.forEach(row => {
+        const data = row.data;
+        const bn = (data['booking_number'] || '').toString().trim().toUpperCase();
+        
+        if (!bn) return; // Skip if somehow empty
+
+        if (!groupedOrdersMap.has(bn)) {
+          groupedOrdersMap.set(bn, {
+            booking_number: bn,
+            customer_ref: (data['customer_ref'] || '').toString().trim().toUpperCase(),
+            customer_name: data['customer_name'] || '',
+            customer_id: data['customer_id'] || '',
+            customer_email: data['customer_email'] || '',
+            store_id: (data['store_id'] || '').toString().toUpperCase().replace(/\s+/g, '_'),
+            scheduled_pickup_date: data['scheduled_pickup_date'] || '',
+            warehouse_id: (data['warehouse_id'] || '').toString().toUpperCase(),
+            payment_state: (data['payment_state'] || '').toString().toLowerCase() === 'paid' ? 'Paid' : 'Unpaid',
+            payment_method: data.payment_method || null,
+            order_note: data.order_note || '',
+            items: [],
+            sendPickupEmail: false,
+            rowIds: [] // Track which rows are part of this order
+          });
+        }
+        
+        const order = groupedOrdersMap.get(bn);
+        order.items.push({
+          sku: (data['sku'] || '').toString().toUpperCase(),
+          qty: parseInt(data['quantity'] || '0', 10),
+          unit_price: parseFloat(data['unit_price'] || '0'),
+          productName: '',
+          location: ''
+        });
+        order.rowIds.push(row.id);
+      });
+
+      const ordersToCreate = Array.from(groupedOrdersMap.values());
       const BATCH_SIZE = 50;
       let totalSuccess = 0;
       let totalFailed = 0;
 
-      for (let i = 0; i < readyRows.length; i += BATCH_SIZE) {
-        const chunkRows = readyRows.slice(i, i + BATCH_SIZE);
-        const ordersToCreate = chunkRows.map(row => {
-          const data = row.data;
-          return {
-            bookingNumber: data['booking number'].trim().toUpperCase(),
-            refNumber: data['customer ref'].trim().toUpperCase(),
-            customerName: data['Customer Name'],
-            customerId: data['customer id'] || '',
-            customerEmail: data['Email'],
-            storeId: data['Store ID'].toUpperCase().replace(/\s+/g, '_'),
-            pickupDateScheduled: data['scheduled pickup date'],
-            warehouseId: data['Warehouse'],
-            paymentStatus: data['payment state'].toLowerCase() === 'paid' ? 'Paid' : 'Unpaid',
-            paymentMethod: data.method || null,
-            items: [{
-              sku: data['SKU 1'].toUpperCase(),
-              qty: parseInt(data['quantity 1'], 10),
-              productName: '',
-              location: ''
-            }],
-            sendPickupEmail: false
-          };
-        });
+      for (let i = 0; i < ordersToCreate.length; i += BATCH_SIZE) {
+        const chunkOrders = ordersToCreate.slice(i, i + BATCH_SIZE);
+        const payload = chunkOrders.map(({ rowIds, ...order }) => order);
 
         try {
-          const response = await fetch('/api/orders/bulk-create', {
+          const response = await fetch(`${API_BASE_URL}/api/orders/bulk-create`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-v2-auth-token': `Bearer ${token}`
+              'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ orders: ordersToCreate })
+            body: JSON.stringify({ orders: payload })
           });
 
           const result = await response.json();
@@ -297,40 +433,43 @@ export const BulkOrderUpload = () => {
             addLog(`Batch ${Math.floor(i / BATCH_SIZE) + 1} imported successfully (${result.success} orders)`, 'success');
             
             // Mark these rows as success
+            const successRowIds = new Set(chunkOrders.flatMap(o => o.rowIds));
             setRows(prev => prev.map(r => {
-              if (chunkRows.some(c => c.id === r.id)) {
+              if (successRowIds.has(r.id)) {
                 return { ...r, status: 'success' };
               }
               return r;
             }));
           } else {
-            totalFailed += chunkRows.length;
+            totalFailed += chunkOrders.length;
             const errorMsg = result.errors?.[0] || result.error || 'Unknown error';
             addLog(`Batch ${Math.floor(i / BATCH_SIZE) + 1} failed: ${errorMsg}`, 'error');
             
             // Mark these rows as failed
+            const failedRowIds = new Set(chunkOrders.flatMap(o => o.rowIds));
             setRows(prev => prev.map(r => {
-              if (chunkRows.some(c => c.id === r.id)) {
+              if (failedRowIds.has(r.id)) {
                 return { ...r, status: 'failed', errors: [...r.errors, errorMsg] };
               }
               return r;
             }));
           }
         } catch (err: any) {
-          totalFailed += chunkRows.length;
+          totalFailed += chunkOrders.length;
           addLog(`Network error in batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err.message}`, 'error');
+          const errorRowIds = new Set(chunkOrders.flatMap(o => o.rowIds));
           setRows(prev => prev.map(r => {
-            if (chunkRows.some(c => c.id === r.id)) {
+            if (errorRowIds.has(r.id)) {
               return { ...r, status: 'failed', errors: [...r.errors, err.message] };
             }
             return r;
           }));
         }
         
-        setProgress(Math.round(((i + chunkRows.length) / readyRows.length) * 100));
+        setProgress(Math.round(((i + chunkOrders.length) / ordersToCreate.length) * 100));
       }
 
-      addLog(`Import process finished. Total Success: ${totalSuccess}, Total Failed: ${totalFailed}`, totalSuccess > 0 ? 'success' : 'error');
+      addLog(`Import process finished. Total Orders: ${ordersToCreate.length}, Success: ${totalSuccess}, Failed: ${totalFailed}`, totalSuccess > 0 ? 'success' : 'error');
     } catch (err: any) {
       addLog(`Import process encountered a critical error: ${err.message}`, 'error');
     } finally {
@@ -340,28 +479,63 @@ export const BulkOrderUpload = () => {
 
   const updateRow = (id: string, field: string, value: string) => {
     setRows(prev => {
-      const newRows = prev.map(row => {
+      // 1. Update the target row's raw data
+      const updatedRows = prev.map(row => {
         if (row.id !== id) return row;
+        return { ...row, data: { ...row.data, [field]: value } };
+      });
+
+      // 2. Re-collect metadata map from all rows
+      const orderMetadataMap = new Map<string, any>();
+      updatedRows.forEach(row => {
+        const bn = row.data['booking_number']?.trim();
+        if (bn && row.data['customer_name']?.trim() && row.data['customer_ref']?.trim()) {
+          if (!orderMetadataMap.has(bn)) {
+            orderMetadataMap.set(bn, {
+              customer_name: row.data['customer_name'],
+              customer_email: row.data['customer_email'],
+              customer_ref: row.data['customer_ref'],
+              customer_id: row.data['customer_id'],
+              scheduled_pickup_date: row.data['scheduled_pickup_date'],
+              store_id: row.data['store_id'],
+              payment_state: row.data['payment_state'],
+              payment_method: row.data['payment_method'],
+              order_note: row.data['order_note'],
+              warehouse_id: row.data['warehouse_id']
+            });
+          }
+        }
+      });
+
+      // 3. Re-enrich and re-validate all rows to ensure consistency
+      return updatedRows.map(row => {
+        const bn = row.data['booking_number']?.trim();
+        let enrichedData = { ...row.data };
         
-        const newData = { ...row.data, [field]: value };
-        const validation = orderRowSchema.safeParse(newData);
+        // If this row is missing metadata but we have it for this booking number, inherit it
+        if (bn && (!row.data['customer_name']?.trim() || !row.data['customer_ref']?.trim())) {
+          const inherited = orderMetadataMap.get(bn);
+          if (inherited) {
+            enrichedData = { ...enrichedData, ...inherited };
+          }
+        }
+
+        const validation = orderRowSchema.safeParse(enrichedData);
+        const errors = validation.success ? [] : validation.error.issues.map(e => e.message);
         
+        // Additional store validation
+        const storeId = enrichedData['store_id']?.toUpperCase().replace(/\s+/g, '_');
+        if (storeId && availableStoreIds.length > 0 && !availableStoreIds.includes(storeId)) {
+          errors.push(`Store ID "${storeId}" not found in system`);
+        }
+
         return {
           ...row,
-          data: newData,
-          errors: validation.success ? [] : validation.error.issues.map(e => e.message),
-          status: (validation.success ? 'pending' : 'failed') as ProcessedRow['status']
+          data: enrichedData,
+          errors,
+          status: (validation.success && errors.length === 0 ? 'pending' : 'failed') as ProcessedRow['status']
         };
       });
-      
-      // Re-trigger duplicate check for the updated row if it's now valid
-      const updatedRow = newRows.find(r => r.id === id);
-      if (updatedRow && updatedRow.errors.length === 0) {
-        // We could optimize this to only check the specific row
-        // but for simplicity we'll just mark it as pending and let the user re-check or we can auto-check
-      }
-      
-      return newRows;
     });
   };
 
@@ -372,7 +546,18 @@ export const BulkOrderUpload = () => {
     const duplicates = rows.filter(r => r.isDuplicate).length;
     const success = rows.filter(r => r.status === 'success').length;
     
-    return { total, valid, invalid, duplicates, success };
+    // Grouped order count
+    const uniqueBookings = new Set(rows.map(r => r.data['booking_number']?.trim().toUpperCase()).filter(Boolean));
+    const totalOrders = uniqueBookings.size;
+    
+    const validBookings = new Set(
+      rows.filter(r => r.errors.length === 0 && !r.isDuplicate)
+          .map(r => r.data['booking_number']?.trim().toUpperCase())
+          .filter(Boolean)
+    );
+    const readyOrders = validBookings.size;
+
+    return { total, valid, invalid, duplicates, success, totalOrders, readyOrders };
   }, [rows]);
 
   const filteredRows = useMemo(() => {
@@ -417,6 +602,13 @@ export const BulkOrderUpload = () => {
             isScrolled ? "scale-90 origin-right" : "scale-100"
           )}>
             <button
+              onClick={downloadTemplate}
+              className="px-3 py-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all flex items-center gap-2 text-sm font-bold"
+            >
+              <Download className="w-4 h-4" />
+              Download Template
+            </button>
+            <button
               onClick={() => setRows([])}
               className="px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-xl transition-all flex items-center gap-2 text-sm"
             >
@@ -425,11 +617,11 @@ export const BulkOrderUpload = () => {
             </button>
             <button
               onClick={handleImport}
-              disabled={isImporting || isChecking || stats.valid === 0}
+              disabled={isImporting || isChecking || stats.readyOrders === 0}
               className="px-5 py-1.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg shadow-indigo-200 text-sm"
             >
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Start Import ({stats.valid})
+              Start Import ({stats.readyOrders} Orders)
             </button>
           </div>
         </div>
@@ -467,6 +659,11 @@ export const BulkOrderUpload = () => {
                   <span className="font-bold">{stats.total}</span>
                 </button>
 
+                <div className="px-3 py-1 flex items-center justify-between text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                  <span>Grouped Orders</span>
+                  <span>{stats.totalOrders}</span>
+                </div>
+
                 <button 
                   onClick={() => setActiveTab('valid')}
                   className={cn(
@@ -476,9 +673,9 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
-                    Ready to Import
+                    Ready Orders
                   </span>
-                  <span className="font-bold">{stats.valid}</span>
+                  <span className="font-bold">{stats.readyOrders}</span>
                 </button>
 
                 <button 
@@ -490,7 +687,7 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4" />
-                    Duplicate found
+                    Duplicates
                   </span>
                   <span className="font-bold">{stats.duplicates}</span>
                 </button>
@@ -504,7 +701,7 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
-                    Invalid data
+                    Invalid Rows
                   </span>
                   <span className="font-bold">{stats.invalid}</span>
                 </button>
@@ -579,8 +776,8 @@ export const BulkOrderUpload = () => {
                           <td className="px-4 py-3">
                             <input 
                               type="text"
-                              value={row.data['booking number']}
-                              onChange={(e) => updateRow(row.id, 'booking number', e.target.value)}
+                              value={row.data['booking_number']}
+                              onChange={(e) => updateRow(row.id, 'booking_number', e.target.value)}
                               className={cn(
                                 "w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-medium",
                                 row.isDuplicate ? "text-amber-700" : "text-slate-900"
@@ -590,24 +787,24 @@ export const BulkOrderUpload = () => {
                           <td className="px-4 py-3">
                             <input 
                               type="text"
-                              value={row.data['Customer Name']}
-                              onChange={(e) => updateRow(row.id, 'Customer Name', e.target.value)}
+                              value={row.data['customer_name']}
+                              onChange={(e) => updateRow(row.id, 'customer_name', e.target.value)}
                               className="w-full bg-transparent border-none p-0 focus:ring-0 text-sm text-slate-600"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input 
                               type="text"
-                              value={row.data['customer ref']}
-                              onChange={(e) => updateRow(row.id, 'customer ref', e.target.value)}
+                              value={row.data['customer_ref']}
+                              onChange={(e) => updateRow(row.id, 'customer_ref', e.target.value)}
                               className="w-full bg-transparent border-none p-0 focus:ring-0 text-sm text-slate-600"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input 
                               type="text"
-                              value={row.data['Email']}
-                              onChange={(e) => updateRow(row.id, 'Email', e.target.value)}
+                              value={row.data['customer_email']}
+                              onChange={(e) => updateRow(row.id, 'customer_email', e.target.value)}
                               className={cn(
                                 "w-full bg-transparent border-none p-0 focus:ring-0 text-sm",
                                 row.errors.some(e => e.includes('Email')) ? "text-red-600" : "text-slate-600"
@@ -663,7 +860,7 @@ export const BulkOrderUpload = () => {
 
           {/* Right Pane: Log Window */}
           <div className="lg:col-span-3 space-y-6">
-            {(profile?.roleTemplate === 'Admin' || profile?.allowedWarehouses?.includes('*')) ? (
+            {(profile?.roleTemplate === 'Admin') ? (
               <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col h-[600px]">
                 <div className="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex items-center justify-between">
                   <h3 className="font-bold text-white flex items-center gap-2">
@@ -735,10 +932,9 @@ export const BulkOrderUpload = () => {
               </ul>
             </div>
           </div>
-
-          </div>
         </div>
       </div>
+    </div>
     </div>
   );
 };

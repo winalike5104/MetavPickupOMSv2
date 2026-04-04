@@ -60,7 +60,8 @@
               "sku": { "type": "string" },
               "productName": { "type": "string" },
               "location": { "type": "string" },
-              "qty": { "type": "number" }
+              "qty": { "type": "number" },
+              "price": { "type": "number", "description": "Price in NZD" }
             }
           }
         },

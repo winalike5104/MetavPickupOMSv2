@@ -813,6 +813,7 @@ export const Orders = () => {
                       <th className="px-6 py-4">Store</th>
                       <th className="px-6 py-4">Pickup Date</th>
                       <th className="px-6 py-4">Payment</th>
+                      <th className="px-6 py-4 text-right">Total</th>
                       <th className="px-6 py-4">Status</th>
                       <th className="px-6 py-4 text-right">Action</th>
                     </tr>
@@ -885,6 +886,9 @@ export const Orders = () => {
                           )}>
                             {order.paymentStatus}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-right" onClick={() => navigate(`/orders/${order.id}`)}>
+                          <span className="font-bold text-slate-900">${(order.totalAmount || 0).toFixed(2)}</span>
                         </td>
                         <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
                           <span className={cn(
@@ -996,6 +1000,10 @@ export const Orders = () => {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-500">Scheduled Pickup</span>
                       <span className="font-bold text-slate-900">{formatDate(order.pickupDateScheduled, 'MMM d, yyyy')}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Total Amount</span>
+                      <span className="font-bold text-indigo-600">${(order.totalAmount || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-500">Payment</span>

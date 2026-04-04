@@ -272,6 +272,12 @@ export const OrderDetail: React.FC = () => {
     try {
       // Handle payment metadata
       const updatedData = { ...editForm };
+      
+      // Recalculate totalAmount
+      if (updatedData.items) {
+        updatedData.totalAmount = updatedData.items.reduce((sum, item) => sum + (item.qty * (item.unit_price || 0)), 0);
+      }
+
       if (editForm.paymentStatus === 'Paid' && order.paymentStatus === 'Unpaid') {
         updatedData.paymentTime = new Date().toISOString();
         updatedData.paymentBy = profile.name;
@@ -507,7 +513,8 @@ export const OrderDetail: React.FC = () => {
       sku: sku.sku,
       productName: sku.productName,
       location: sku.location,
-      qty: 1
+      qty: 1,
+      unit_price: 0
     };
     
     setEditForm(prev => ({
@@ -529,6 +536,13 @@ export const OrderDetail: React.FC = () => {
     setEditForm(prev => ({
       ...prev,
       items: prev.items?.map((item, i) => i === index ? { ...item, qty: Math.max(1, qty) } : item)
+    }));
+  };
+
+  const updateItemPrice = (index: number, unit_price: number) => {
+    setEditForm(prev => ({
+      ...prev,
+      items: prev.items?.map((item, i) => i === index ? { ...item, unit_price: Math.max(0, unit_price) } : item)
     }));
   };
 
@@ -732,7 +746,8 @@ export const OrderDetail: React.FC = () => {
                 <div className="flex items-start gap-3">
                   <CreditCard className="w-5 h-5 text-gray-400 mt-0.5" />
                   <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</p>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Amount</p>
+                    <p className="text-lg font-bold text-slate-900">NZD ${(order.totalAmount || 0).toFixed(2)}</p>
                     <div className="flex items-center gap-2 mt-1">
                       {renderPaymentBadge(order.paymentStatus)}
                       {order.paymentMethod && (
@@ -801,7 +816,9 @@ export const OrderDetail: React.FC = () => {
                     <th className="px-6 py-3">SKU</th>
                     <th className="px-6 py-3">Product Name</th>
                     <th className="px-6 py-3">Location</th>
-                    <th className="px-6 py-3 text-right">Quantity</th>
+                    <th className="px-6 py-3 text-right">Qty</th>
+                    <th className="px-6 py-3 text-right">Price</th>
+                    <th className="px-6 py-3 text-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -815,9 +832,17 @@ export const OrderDetail: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 text-right font-semibold">{item.qty}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 text-right">${(item.unit_price || 0).toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900 text-right font-bold">${((item.qty || 0) * (item.unit_price || 0)).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="bg-gray-50/50">
+                  <tr>
+                    <td colSpan={5} className="px-6 py-4 text-right text-sm font-bold text-gray-500 uppercase tracking-wider">Total Amount</td>
+                    <td className="px-6 py-4 text-right text-lg font-bold text-indigo-600">${(order.totalAmount || 0).toFixed(2)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -1154,7 +1179,8 @@ export const OrderDetail: React.FC = () => {
                         <tr>
                           <th className="px-4 py-3">SKU</th>
                           <th className="px-4 py-3">Product</th>
-                          <th className="px-4 py-3 w-24 text-center">Qty</th>
+                          <th className="px-4 py-3 w-20 text-center">Qty</th>
+                          <th className="px-4 py-3 w-28 text-right">Price</th>
                           <th className="px-4 py-3 w-16"></th>
                         </tr>
                       </thead>
@@ -1171,6 +1197,19 @@ export const OrderDetail: React.FC = () => {
                                 onChange={e => updateItemQty(idx, parseInt(e.target.value))}
                                 className="w-full text-center px-2 py-1 border border-gray-300 rounded"
                               />
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="relative">
+                                <span className="absolute left-1 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">$</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.unit_price || 0}
+                                  onChange={e => updateItemPrice(idx, parseFloat(e.target.value))}
+                                  className="w-full text-right pl-3 pr-1 py-1 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-right">
                               <button onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700">

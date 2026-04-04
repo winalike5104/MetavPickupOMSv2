@@ -28,6 +28,7 @@ export interface OrderItem {
   productName?: string;
   location?: string;
   qty: number;
+  unit_price: number;
 }
 
 export interface EmailLog {
@@ -86,6 +87,7 @@ export interface Order {
   creatorUid?: string;
   createdTime: string;
   items: OrderItem[];
+  totalAmount: number;
   warehouseId: string;
   paymentStatus: PaymentStatus;
   paymentMethod?: PaymentMethod | null;

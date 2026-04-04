@@ -374,6 +374,7 @@ async function startServer() {
         pickupDateScheduled, 
         notes, 
         items, 
+        totalAmount,
         paymentStatus, 
         paymentMethod,
         notificationRecipients 
@@ -415,6 +416,9 @@ async function startServer() {
         }
       }
 
+      // Calculate totalAmount if not provided or to ensure accuracy
+      const calculatedTotal = (items || []).reduce((sum: number, item: any) => sum + ((item.qty || 0) * (item.unit_price || 0)), 0);
+
       const orderData = {
         bookingNumber,
         refNumber: refNumber || null,
@@ -431,6 +435,7 @@ async function startServer() {
         createdTime: new Date().toISOString(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         items: items || [],
+        totalAmount: totalAmount !== undefined ? totalAmount : calculatedTotal,
         paymentStatus,
         paymentMethod: paymentMethod || "Not Specified",
         paymentTime: paymentStatus === 'Paid' ? new Date().toISOString() : null,
@@ -771,8 +776,13 @@ async function startServer() {
           // Use Admin SDK for transaction
           await currentDb.runTransaction(async (transaction: any) => {
             const preparedOrders = chunk.map(orderData => {
-              const bookingNumber = orderData.bookingNumber.trim().toUpperCase();
-              const refNumber = orderData.refNumber.trim().toUpperCase();
+              // Support both snake_case and camelCase for better compatibility
+              const bookingNumber = (orderData.booking_number || orderData.bookingNumber || '').trim().toUpperCase();
+              const refNumber = (orderData.customer_ref || orderData.refNumber || '').trim().toUpperCase();
+              
+              if (!bookingNumber) throw new Error("Booking Number is missing in one of the orders");
+              if (!refNumber) throw new Error("Customer Ref is missing in one of the orders");
+
               return {
                 orderData,
                 bookingNumber,
@@ -792,14 +802,32 @@ async function startServer() {
               if (bSnaps[index].exists) throw new Error(`Booking Number ${p.bookingNumber} already exists`);
               if (rSnaps[index].exists) throw new Error(`Customer Ref ${p.refNumber} already exists`);
 
+              const raw = p.orderData;
               const finalOrderData = {
-                ...p.orderData,
                 bookingNumber: p.bookingNumber,
                 refNumber: p.refNumber,
+                customerName: raw.customer_name || raw.customerName || '',
+                customerId: raw.customer_id || raw.customerId || '',
+                customerEmail: raw.customer_email || raw.customerEmail || '',
+                storeId: raw.store_id || raw.storeId || '',
+                pickupDateScheduled: raw.scheduled_pickup_date || raw.pickupDateScheduled || '',
+                warehouseId: raw.warehouse_id || raw.warehouseId || '',
+                paymentStatus: raw.payment_state || raw.paymentStatus || 'Unpaid',
+                paymentMethod: raw.payment_method || raw.paymentMethod || null,
+                orderNote: raw.order_note || raw.orderNote || '',
+                items: (raw.items || []).map((item: any) => ({
+                  sku: item.sku || '',
+                  qty: item.qty || 0,
+                  unit_price: item.unit_price || 0,
+                  productName: item.productName || '',
+                  location: item.location || ''
+                })),
+                totalAmount: raw.totalAmount !== undefined ? raw.totalAmount : (raw.items || []).reduce((sum: number, item: any) => sum + ((item.qty || 0) * (item.unit_price || 0)), 0),
                 createdTime: new Date().toISOString(),
                 createdBy: req.user.name || 'System',
                 creatorUid: req.user.uid,
-                status: 'Created'
+                status: 'Created',
+                sendPickupEmail: raw.sendPickupEmail || false
               };
 
               transaction.set(p.bKeyRef, { createdAt: admin.firestore.FieldValue.serverTimestamp() });
@@ -808,6 +836,7 @@ async function startServer() {
             });
           });
           results.success += chunk.length;
+          await logAction(req.user, 'Bulk Import', `Bulk imported ${chunk.length} orders.`);
         } catch (err: any) {
           results.failed += chunk.length;
           results.errors.push(err.message);

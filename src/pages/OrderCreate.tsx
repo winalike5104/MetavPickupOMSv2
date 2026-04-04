@@ -168,13 +168,13 @@ export const OrderCreate = () => {
         newItems[existingIndex].qty = (newItems[existingIndex].qty || 0) + 1;
         setItems(newItems);
       } else {
-        setItems([...items, { ...sku, qty: 1 }]);
+        setItems([...items, { ...sku, qty: 1, unit_price: 0 }]);
       }
       setSkuSearch('');
       setShowSkuResults(false);
     } else {
       // Manual add
-      setItems([...items, { sku: '', productName: '', location: '', qty: 1 }]);
+      setItems([...items, { sku: '', productName: '', location: '', qty: 1, unit_price: 0 }]);
     }
   };
 
@@ -221,6 +221,8 @@ export const OrderCreate = () => {
     setLoading(true);
     setError('');
 
+    const totalAmount = items.reduce((sum, item) => sum + (item.qty * item.unit_price), 0);
+
     try {
       const response = await fetch('/api/orders/create', {
         method: 'POST',
@@ -240,6 +242,7 @@ export const OrderCreate = () => {
           pickupDateScheduled,
           notes,
           items,
+          totalAmount,
           paymentStatus,
           paymentMethod: paymentStatus === 'Paid' ? paymentMethod : null,
           notificationRecipients
@@ -480,6 +483,7 @@ export const OrderCreate = () => {
                       <th className="px-4 py-3">Product</th>
                       <th className="px-4 py-3">Location</th>
                       <th className="px-4 py-3 w-24">Qty</th>
+                      <th className="px-4 py-3 w-32">Price (NZD)</th>
                       <th className="px-4 py-3 w-16"></th>
                     </tr>
                   </thead>
@@ -524,6 +528,21 @@ export const OrderCreate = () => {
                             className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded outline-none text-sm"
                           />
                         </td>
+                        <td className="px-4 py-2">
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unit_price || 0}
+                              onChange={(e) => updateItemField(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                              className="w-full pl-5 pr-2 py-1 bg-slate-50 border border-slate-200 rounded outline-none text-sm"
+                              placeholder="0.00"
+                              required
+                            />
+                          </div>
+                        </td>
                         <td className="px-4 py-2 text-right">
                           <button
                             type="button"
@@ -537,6 +556,17 @@ export const OrderCreate = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            
+            {items.length > 0 && (
+              <div className="flex justify-end pt-4">
+                <div className="bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 min-w-[200px]">
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Total Amount (NZD)</p>
+                  <p className="text-2xl font-bold text-slate-900">
+                    ${items.reduce((sum, item) => sum + (item.qty * item.unit_price), 0).toFixed(2)}
+                  </p>
+                </div>
               </div>
             )}
           </div>
