@@ -219,16 +219,43 @@ export const OrderDetail: React.FC = () => {
       if (docSnap.exists()) {
         const orderData = { id: docSnap.id, ...docSnap.data() } as Order;
         
+        // Enrich items with SKU data if missing (for legacy or bulk imported orders)
+        const enrichedItems = [...(orderData.items || [])];
+        let needsEnrichment = false;
+        
+        for (let i = 0; i < enrichedItems.length; i++) {
+          const item = enrichedItems[i];
+          if (!item.productName || !item.location || item.location === 'N/A') {
+            needsEnrichment = true;
+            try {
+              const skuRef = doc(db, 'skus', item.sku.replace(/\//g, '_'));
+              const skuSnap = await getDoc(skuRef);
+              if (skuSnap.exists()) {
+                const skuData = skuSnap.data();
+                enrichedItems[i] = {
+                  ...item,
+                  productName: item.productName || skuData.productName || '',
+                  location: (item.location && item.location !== 'N/A') ? item.location : (skuData.location || 'N/A')
+                };
+              }
+            } catch (err) {
+              console.error(`Error enriching SKU ${item.sku}:`, err);
+            }
+          }
+        }
+
+        const finalOrderData = needsEnrichment ? { ...orderData, items: enrichedItems } : orderData;
+
         // Warehouse Isolation Check
         const isSuper = profile?.allowedWarehouses?.includes('*');
-        if (!isSuper && activeWarehouse && orderData.warehouseId !== activeWarehouse) {
+        if (!isSuper && activeWarehouse && finalOrderData.warehouseId !== activeWarehouse) {
           setError('Access Denied: Order belongs to a different warehouse');
           setLoading(false);
           return;
         }
 
-        setOrder(orderData);
-        setEditForm(orderData);
+        setOrder(finalOrderData);
+        setEditForm(finalOrderData);
       } else {
         setError('Order not found');
       }

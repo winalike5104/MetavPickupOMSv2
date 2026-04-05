@@ -69,13 +69,19 @@ const orderRowSchema = z.object({
   }),
   'order_note': z.string().optional()
 }).refine(data => {
-  if (data['payment_state'].toLowerCase() === 'paid') {
-    const validMethods = ['Cash', 'EFTPOS', 'Bank Transfer', 'Online Payment'];
-    return data.payment_method && validMethods.some(m => data.payment_method?.toLowerCase().includes(m.toLowerCase()));
+  const isPaid = data['payment_state'].toLowerCase() === 'paid';
+  const validMethods = ['Cash', 'EFTPOS', 'Bank Transfer', 'Online Payment'];
+  
+  if (isPaid) {
+    // If Paid, payment_method MUST be one of the valid methods
+    return data.payment_method && validMethods.some(m => data.payment_method?.toLowerCase() === m.toLowerCase());
   }
-  return true;
+  
+  // If Unpaid, payment_method can be empty or one of the valid methods
+  if (!data.payment_method || data.payment_method.trim() === '') return true;
+  return validMethods.some(m => data.payment_method?.toLowerCase() === m.toLowerCase());
 }, {
-  message: "Payment method is required and must be valid if payment state is Paid",
+  message: "Invalid payment method. For Paid orders, it must be one of: Cash, EFTPOS, Bank Transfer, Online Payment. For Unpaid, it can be empty.",
   path: ['payment_method']
 });
 
@@ -176,6 +182,10 @@ export const BulkOrderUpload = () => {
       '# === IMPORT TEMPLATE RULES ===',
       '# [BLUE AREA] Order Info: booking_number, customer_name, customer_email, customer_ref, customer_id, scheduled_pickup_date, store_id, payment_state, payment_method, order_note, warehouse_id',
       '# -> RULE: booking_number MUST be filled on EVERY row. Other order info only needs to be on the FIRST row of an order.',
+      '# -> store_id: Must match existing Store ID in system (e.g., NZ-METAV).',
+      '# -> payment_state: Must be "Paid" or "Unpaid".',
+      '# -> payment_method: If Paid, must be one of: Cash, EFTPOS, Bank Transfer, Online Payment. If Unpaid, can be empty.',
+      '# -> warehouse_id: Must be "AKL" or "CHC".',
       '# [AMBER AREA] Product Info: sku, quantity, unit_price',
       '# -> RULE: These MUST be filled on EVERY row for product details.',
       '# ============================='
@@ -398,7 +408,7 @@ export const BulkOrderUpload = () => {
             scheduled_pickup_date: data['scheduled_pickup_date'] || '',
             warehouse_id: (data['warehouse_id'] || '').toString().toUpperCase(),
             payment_state: (data['payment_state'] || '').toString().toLowerCase() === 'paid' ? 'Paid' : 'Unpaid',
-            payment_method: data.payment_method || null,
+            payment_method: data.payment_method || (data['payment_state']?.toLowerCase() === 'unpaid' ? 'Pending' : null),
             order_note: data.order_note || '',
             items: [],
             sendPickupEmail: false,
@@ -411,8 +421,8 @@ export const BulkOrderUpload = () => {
           sku: (data['sku'] || '').toString().toUpperCase(),
           qty: parseInt(data['quantity'] || '0', 10),
           unit_price: parseFloat(data['unit_price'] || '0'),
-          productName: '',
-          location: ''
+          productName: data.productName || '',
+          location: data.location || ''
         });
         order.rowIds.push(row.id);
       });
@@ -739,6 +749,31 @@ export const BulkOrderUpload = () => {
               <Upload className="w-10 h-10 text-slate-400 mx-auto mb-4" />
               <p className="text-slate-600 font-medium">Drag & drop CSV here</p>
               <p className="text-slate-400 text-sm mt-1">or click to browse files</p>
+            </div>
+
+            {/* Import Rules Info */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                <Info className="w-4 h-4 text-indigo-600" />
+                Import Rules
+              </h3>
+              <div className="space-y-3 text-xs text-slate-600">
+                <div className="p-3 bg-slate-50 rounded-xl space-y-2">
+                  <p className="font-bold text-slate-900">Fixed Fields:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li><span className="font-semibold">store_id:</span> Must match Store ID in system</li>
+                    <li><span className="font-semibold">payment_state:</span> Paid, Unpaid</li>
+                    <li><span className="font-semibold">payment_method:</span>
+                      <ul className="pl-4 mt-1 list-circle space-y-1">
+                        <li>If <span className="text-emerald-600">Paid</span>: Cash, EFTPOS, Bank Transfer, Online Payment</li>
+                        <li>If <span className="text-amber-600">Unpaid</span>: Can be empty (defaults to "Pending")</li>
+                      </ul>
+                    </li>
+                    <li><span className="font-semibold">warehouse_id:</span> AKL, CHC</li>
+                  </ul>
+                </div>
+                <p className="italic text-[10px]">Note: Values are case-insensitive during CSV import but will be normalized.</p>
+              </div>
             </div>
           </div>
 
