@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, AlertCircle, Key, Mail, Server, Hash, Code, Info } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { handleFirestoreError, OperationType } from '../utils';
-import { Store } from '../types';
+import { handleFirestoreError, OperationType, logAction } from '../utils';
+import { Store, UserProfile } from '../types';
+import { useAuth } from './AuthProvider';
 
 interface Props {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export const StoreConfigModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingStore }) => {
+  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState<'general' | 'template'>('general');
   const [store, setStore] = useState<Store>({
     storeId: '',
@@ -115,6 +117,9 @@ export const StoreConfigModal: React.FC<Props> = ({ isOpen, onClose, onSave, edi
         throw new Error(result.error || 'Failed to save store');
       }
 
+      if (profile) {
+        await logAction(profile, editingStore ? 'Edit Store' : 'Add Store', `${editingStore ? 'Updated' : 'Added'} store configuration for ${store.storeId}`, null, 'Store');
+      }
       onSave?.();
       onClose();
     } catch (err: any) {

@@ -1,6 +1,6 @@
 import { addDoc, collection, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebase';
-import { UserProfile, Permission, Notification, UserGroup } from './types';
+import { UserProfile, Permission, Notification, UserGroup, OperationLog } from './types';
 
 import { format, isValid, parseISO } from 'date-fns';
 
@@ -25,16 +25,25 @@ export const formatDate = (date: any, formatStr: string, fallback = 'N/A'): stri
   }
 };
 
-export const logAction = async (user: UserProfile, action: string, details: string, orderId?: string) => {
+export const logAction = async (user: UserProfile, action: string, details: string, orderId?: string, category?: OperationLog['category']) => {
   try {
-    await addDoc(collection(db, 'logs'), {
-      timestamp: new Date().toISOString(),
-      userId: user.uid,
-      userName: user.name,
-      action,
-      details,
-      orderId: orderId || null
+    const response = await fetch('/api/logs/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-v2-auth-token': localStorage.getItem('x-v2-auth-token') || ''
+      },
+      body: JSON.stringify({
+        action,
+        details,
+        orderId: orderId || null,
+        category
+      })
     });
+    const result = await response.json();
+    if (!result.success) {
+      console.error('Failed to log action:', result.error);
+    }
   } catch (error) {
     console.error('Failed to log action:', error);
   }

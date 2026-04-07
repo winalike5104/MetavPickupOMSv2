@@ -20,7 +20,8 @@ import {
   OperationLog, 
   PaymentStatus, 
   PaymentMethod,
-  OrderStatus
+  OrderStatus,
+  WarehouseStatus
 } from '../types';
 import { 
   ArrowLeft, 
@@ -41,7 +42,12 @@ import {
   AlertCircle,
   PenTool,
   Monitor,
-  Smartphone
+  Smartphone,
+  ShoppingCart,
+  AlertTriangle,
+  Mail,
+  Send,
+  MessageSquare
 } from 'lucide-react';
 import { formatDate, hasPermission, cn } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -72,6 +78,7 @@ export const OrderDetail: React.FC = () => {
   const [isGuestOnline, setIsGuestOnline] = useState(false);
   const [isProjecting, setIsProjecting] = useState(false);
   const [receivedRemoteSignature, setReceivedRemoteSignature] = useState<string | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
   
   // Scroll state for collapsible header
   const [isScrolled, setIsScrolled] = useState(false);
@@ -424,6 +431,84 @@ export const OrderDetail: React.FC = () => {
     }
   };
 
+  const handleRequestPicking = async () => {
+    if (!id || !profile || !order || !token) return;
+
+    try {
+      const response = await fetch('/api/orders/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        },
+        body: JSON.stringify({
+          orderId: id,
+          updateData: { 
+            warehouseStatus: 'Pending',
+            'pickingLog.requestedAt': new Date().toISOString()
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to request picking');
+      }
+
+      fetchOrder();
+      fetchLogs(id);
+    } catch (err: any) {
+      console.error('Error requesting picking:', err);
+      alert(err.message || 'Failed to request picking');
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!id || !order || !token || !profile) return;
+    
+    setSendingEmail(true);
+    try {
+      if (!order.customerEmail) {
+        throw new Error("Missing customer email address");
+      }
+      if (!order.warehouseId) {
+        throw new Error("Missing warehouse/shop selection");
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/orders/send-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-v2-auth-token': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        },
+        body: JSON.stringify({
+          orderId: id,
+          type: 'pickup_notification'
+        }),
+        mode: 'cors'
+      });
+
+      const result = await response.json();
+      if (result.success && result.emailStatus === 'sent') {
+        alert('Pickup email sent successfully!');
+        fetchOrder();
+        fetchLogs(id);
+      } else if (result.success && result.emailStatus === 'skipped') {
+        alert(`Email skipped: ${result.message}`);
+      } else {
+        throw new Error(result.error || 'Failed to send email');
+      }
+    } catch (err: any) {
+      console.error('Error sending email:', err);
+      alert(err.message || 'Failed to send email');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const signatureAreaRef = React.useRef<HTMLDivElement>(null);
 
   const handleConfirmPickup = async () => {
@@ -432,6 +517,13 @@ export const OrderDetail: React.FC = () => {
     if (signatureRef.current.isEmpty()) {
       alert('Please provide a signature to confirm pickup.');
       return;
+    }
+
+    // Warning if warehouse hasn't picked yet
+    if (order.warehouseStatus !== 'Picked') {
+      if (!window.confirm('Warehouse has not marked this order as "Ready". Are you sure you want to confirm pickup?')) {
+        return;
+      }
     }
 
     try {
@@ -625,6 +717,8 @@ export const OrderDetail: React.FC = () => {
     );
   }
 
+  console.log("OrderDetail - Status:", order.status, "WarehouseStatus:", order.warehouseStatus, "HasPermission:", hasPermission(profile, 'Request Picking', profile?.username || profile?.email));
+
   const store = stores.find(s => s.storeId === order.storeId);
 
   return (
@@ -665,7 +759,7 @@ export const OrderDetail: React.FC = () => {
             "flex flex-wrap items-center gap-2 transition-all duration-300",
             isScrolled ? "scale-90 origin-right" : "scale-100"
           )}>
-            {hasPermission(profile, 'Edit Order', profile?.email) && order.status !== 'Cancelled' && (
+            {hasPermission(profile, 'Edit Order', profile?.username || profile?.email) && order.status !== 'Cancelled' && (
               <button
                 onClick={() => setIsEditing(true)}
                 className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -675,7 +769,7 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
             
-            {hasPermission(profile, 'Print Pick List', profile?.email) && (
+            {hasPermission(profile, 'Print Pick List', profile?.username || profile?.email) && (
               <button
                 onClick={handlePrint}
                 className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -685,7 +779,17 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {hasPermission(profile, 'Confirm Pickup', profile?.email) && order.status === 'Created' && (
+            {hasPermission(profile, 'Request Picking', profile?.username || profile?.email) && !order.warehouseStatus && order.status === 'Created' && (
+              <button
+                onClick={handleRequestPicking}
+                className="inline-flex items-center px-3 py-1.5 bg-indigo-600 rounded-lg text-xs font-medium text-white hover:bg-indigo-700 transition-colors shadow-sm"
+              >
+                <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
+                Request Picking
+              </button>
+            )}
+
+            {hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email) && order.status === 'Created' && (
               <button
                 onClick={() => handleStatusChange('Picked Up')}
                 className="inline-flex items-center px-3 py-1.5 bg-green-600 rounded-lg text-xs font-medium text-white hover:bg-green-700 transition-colors"
@@ -695,7 +799,7 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {hasPermission(profile, 'Review Orders', profile?.email) && order.status === 'Picked Up' && (
+            {hasPermission(profile, 'Review Orders', profile?.username || profile?.email) && order.status === 'Picked Up' && (
               <button
                 onClick={() => handleStatusChange('Reviewed')}
                 className="inline-flex items-center px-3 py-1.5 bg-purple-600 rounded-lg text-xs font-medium text-white hover:bg-purple-700 transition-colors"
@@ -732,6 +836,71 @@ export const OrderDetail: React.FC = () => {
         {/* Sentinel for Scroll Detection */}
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-5xl mx-auto space-y-6">
+          
+          {/* Exception Warning: Picked Up but not Ready by Warehouse */}
+          {order.status === 'Picked Up' && order.warehouseStatus !== 'Picked' && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3 animate-pulse">
+              <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold text-red-900">Warehouse Confirmation Missing</h4>
+                <p className="text-xs text-red-700 mt-1">
+                  This order has been confirmed as "Picked Up" by Reception, but the Warehouse has not yet marked it as "Ready". 
+                  Please coordinate with the warehouse staff to ensure the items were correctly retrieved.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Inventory Issue Warning */}
+          {order.pickingLog?.inventoryIssue && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold text-amber-900">Inventory Issue Reported</h4>
+                <p className="text-xs text-amber-700 mt-1">
+                  Warehouse reported an issue: <span className="font-bold italic">"{order.pickingLog.inventoryIssue}"</span>
+                </p>
+                <p className="text-[10px] text-amber-600 mt-1 uppercase font-bold">
+                  Reported at {formatDate(order.pickingLog.issueReportedAt, 'PPp')}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Audit Log Section */}
+          {order.auditLog && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Audit Log</h3>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider font-bold">Manual Closure Details</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Closed By</p>
+                  <p className="text-sm font-bold text-slate-900">{order.auditLog.closed_by}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Closed At</p>
+                  <p className="text-sm font-bold text-slate-900">{formatDate(order.auditLog.closed_at, 'yyyy-MM-dd HH:mm')}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Reason</p>
+                  <p className="text-sm font-bold text-red-600">{order.auditLog.reason}</p>
+                </div>
+                {order.auditLog.note && (
+                  <div className="space-y-1 md:col-span-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Additional Notes</p>
+                    <p className="text-sm text-slate-600 bg-white p-3 rounded-xl border border-slate-100 italic">"{order.auditLog.note}"</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -765,6 +934,29 @@ export const OrderDetail: React.FC = () => {
                   <div>
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Store</p>
                     <p className="text-gray-900">{store?.name || order.storeId}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <ShoppingCart className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Warehouse Status</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase border",
+                        !order.warehouseStatus ? "bg-slate-50 text-slate-400 border-slate-200" :
+                        order.warehouseStatus === 'Pending' ? "bg-slate-100 text-slate-600 border-slate-200" :
+                        order.warehouseStatus === 'Picking' ? "bg-amber-50 text-amber-600 border-amber-100" :
+                        "bg-emerald-50 text-emerald-600 border-emerald-100"
+                      )}>
+                        {order.warehouseStatus === 'Picked' ? 'Ready' : (order.warehouseStatus || 'Not Requested')}
+                      </span>
+                    </div>
+                    {order.pickingLog?.requestedAt && (
+                      <p className="text-[10px] text-gray-400 mt-1">Requested: {formatDate(order.pickingLog.requestedAt, 'MMM d, HH:mm')}</p>
+                    )}
+                    {order.pickingLog?.pickerName && (
+                      <p className="text-[10px] text-gray-400">Picker: {order.pickingLog.pickerName}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -877,6 +1069,27 @@ export const OrderDetail: React.FC = () => {
 
         {/* Right Column: Logs & Metadata */}
         <div className="space-y-6">
+          {/* Follow-up Logs */}
+          {order.followUpLogs && order.followUpLogs.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-indigo-50/50 flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Follow-up Logs</h3>
+                <MessageSquare className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="p-4 max-h-[300px] overflow-y-auto space-y-4">
+                {order.followUpLogs.map((log, idx) => (
+                  <div key={idx} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] font-bold text-slate-900 uppercase">{log.staffName}</span>
+                      <span className="text-[10px] text-slate-400">{formatDate(log.timestamp, 'MMM d, HH:mm')}</span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">{log.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Operation Logs */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
@@ -925,6 +1138,21 @@ export const OrderDetail: React.FC = () => {
                 <div className="text-xs text-gray-400 text-right">
                   Last sent: {formatDate(order.lastEmailSentAt, 'PPp')}
                 </div>
+              )}
+              
+              {hasPermission(profile, 'Review Orders', profile?.username || profile?.email) && (
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail}
+                  className="w-full mt-4 inline-flex items-center justify-center px-4 py-2 bg-emerald-600 rounded-lg text-sm font-medium text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+                >
+                  {sendingEmail ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  Send Pickup Email
+                </button>
               )}
             </div>
           </div>

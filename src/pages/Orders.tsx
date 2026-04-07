@@ -3,7 +3,7 @@ import { collection, query, getDocs, orderBy, where, writeBatch, doc, limit } fr
 import { db } from '../firebase';
 import { Order } from '../types';
 import { useAuth } from '../components/AuthProvider';
-import { logAction, cn, safeSearch, handleFirestoreError, OperationType, formatDate } from '../utils';
+import { logAction, cn, safeSearch, handleFirestoreError, OperationType, formatDate, hasPermission, isAdmin, isSystemAdmin } from '../utils';
 import { 
   Search, 
   Download, 
@@ -27,7 +27,8 @@ import {
   Clock,
   CreditCard,
   Store as StoreIcon,
-  Loader2
+  Loader2,
+  ShoppingCart
 } from 'lucide-react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -611,29 +612,33 @@ export const Orders = () => {
                   <LayoutGrid className="w-5 h-5" />
                 </button>
               </div>
-              <Link 
-                to="/orders/bulk-import"
-                className={cn(
-                  "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
-                  isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
-                )}
-              >
-                <Upload className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
-                <span className={cn(
-                  "transition-all",
-                  isScrolled ? "hidden group-hover:inline" : "inline"
-                )}>Bulk Import</span>
-              </Link>
-              <Link 
-                to="/orders/create"
-                className={cn(
-                  "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200",
-                  isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
-                )}
-              >
-                <Plus className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
-                New Order
-              </Link>
+              {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+                <Link 
+                  to="/orders/bulk-import"
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
+                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
+                  )}
+                >
+                  <Upload className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+                  <span className={cn(
+                    "transition-all",
+                    isScrolled ? "hidden group-hover:inline" : "inline"
+                  )}>Bulk Import</span>
+                </Link>
+              )}
+              {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+                <Link 
+                  to="/orders/create"
+                  className={cn(
+                    "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200",
+                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
+                  )}
+                >
+                  <Plus className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+                  New Order
+                </Link>
+              )}
               <button 
                 onClick={exportToCSV}
                 className={cn(
@@ -842,6 +847,11 @@ export const Orders = () => {
                         <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900">{order.bookingNumber}</span>
+                            {order.warehouseStatus === 'Picked' && (
+                              <div className="flex items-center gap-1 text-emerald-600" title="Ready">
+                                <ShoppingCart className="w-3.5 h-3.5" />
+                              </div>
+                            )}
                             {order.notes && <FileText className="w-4 h-4 text-indigo-500" />}
                             {order.emailStatus === 'sent' && (
                               <div className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[10px] font-bold border border-emerald-100">

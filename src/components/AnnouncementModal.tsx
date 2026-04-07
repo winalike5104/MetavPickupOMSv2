@@ -43,7 +43,7 @@ export const AnnouncementModal: React.FC<Props> = ({ isOpen, onClose, currentAnn
         updatedBy: profile.name
       });
 
-      await logAction(profile, 'Update Announcement', `Updated system announcement: ${content.substring(0, 20)}...`);
+      await logAction(profile, 'Update Announcement', `Updated system announcement: ${content.substring(0, 20)}...`, null, 'System');
       onUpdate();
       onClose();
     } catch (error) {

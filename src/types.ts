@@ -1,4 +1,5 @@
 export type OrderStatus = 'Created' | 'Picked Up' | 'Reviewed' | 'Cancelled';
+export type WarehouseStatus = 'Pending' | 'Picking' | 'Picked';
 export type PaymentStatus = 'Paid' | 'Unpaid';
 export type PaymentMethod = 'Cash' | 'EFTPOS' | 'Bank Transfer' | 'Online Payment';
 export type UserStatus = 'Active' | 'Disabled';
@@ -29,6 +30,7 @@ export interface OrderItem {
   location?: string;
   qty: number;
   unit_price: number;
+  status?: 'Pending' | 'Picked';
 }
 
 export interface EmailLog {
@@ -68,10 +70,33 @@ export interface Notification {
   recipientUid: string;
   title: string;
   body: string;
-  type: 'New Order' | 'Order Picked Up' | 'System';
+  type: 'New Order' | 'Order Picked Up' | 'System' | 'Inventory Issue';
   orderId?: string;
   isRead: boolean;
   createdAt: string;
+}
+
+export interface PickingLog {
+  requestedAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  pickerId?: string | null;
+  pickerName?: string | null;
+  inventoryIssue?: string | null;
+  issueReportedAt?: string | null;
+}
+
+export interface AuditLog {
+  closed_by: string;
+  closed_at: string;
+  reason: 'Staff Missed Click' | 'Stock Missing' | 'Abandoned by Customer' | 'Other';
+  note?: string;
+}
+
+export interface FollowUpLog {
+  timestamp: string;
+  staffName: string;
+  content: string;
 }
 
 export interface Order {
@@ -97,6 +122,8 @@ export interface Order {
   pickedUpBy?: string | null;
   customerSignature?: string | null;
   status: OrderStatus;
+  warehouseStatus?: WarehouseStatus | null;
+  pickingLog?: PickingLog;
   printedTime?: string | null;
   printedBy?: string | null;
   notes?: string | null;
@@ -109,9 +136,11 @@ export interface Order {
   lastEmailError?: string | null;
   sendPickupEmail?: boolean;
   emailLog?: EmailLog;
+  auditLog?: AuditLog;
+  followUpLogs?: FollowUpLog[];
 }
 
-export type AccountType = 'Sales' | 'Reception' | 'Admin';
+export type AccountType = 'Sales' | 'Reception' | 'Warehouse' | 'Admin';
 
 export interface UserSettings {
   notificationsEnabled: boolean;
@@ -138,6 +167,7 @@ export interface OperationLog {
   userId: string;
   userName: string;
   action: string;
+  category?: 'Audit' | 'Picking' | 'System' | 'Order' | 'User' | 'SKU' | 'Store' | 'Payment';
   details: string;
   orderId?: string | null;
 }
@@ -149,7 +179,9 @@ export const PERMISSIONS = [
   'Print Pick List', 'Confirm Pickup', 'Capture Signature',
   'Review Orders', 'Cancel Orders',
   'View SKU', 'Upload SKU', 'Edit SKU',
-  'Manage Users', 'Manage User Groups', 'Manage Stores', 'View Logs'
+  'Manage Users', 'Manage User Groups', 'Manage Stores', 'View Logs',
+  'Request Picking', 'Manage Picking', 'View Picking Queue', 'Report Inventory Issue',
+  'Audit Overdue Orders'
 ] as const;
 
 export type Permission = typeof PERMISSIONS[number];
@@ -164,7 +196,11 @@ export const ROLE_TEMPLATES = {
   Reception: [
     'View Orders', 'Search Orders',
     'Add Payment', 'View Payment',
-    'Print Pick List', 'Confirm Pickup', 'Capture Signature'
+    'Print Pick List', 'Confirm Pickup', 'Capture Signature',
+    'Request Picking'
+  ],
+  Warehouse: [
+    'View Picking Queue', 'Manage Picking', 'Report Inventory Issue'
   ],
   Admin: [...PERMISSIONS]
 };

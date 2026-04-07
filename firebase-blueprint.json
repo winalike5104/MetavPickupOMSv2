@@ -75,6 +75,28 @@
         "status": { "type": "string", "enum": ["Pending", "Confirmed", "Picked Up", "Reviewed", "Overdue", "Cancelled"] },
         "printedTime": { "type": "string", "format": "date-time" },
         "printedBy": { "type": "string" },
+        "auditLog": {
+          "type": "object",
+          "properties": {
+            "closed_by": { "type": "string" },
+            "closed_at": { "type": "string", "format": "date-time" },
+            "reason": { "type": "string", "enum": ["Staff Missed Click", "Stock Missing", "Abandoned by Customer", "Other"] },
+            "note": { "type": "string" }
+          },
+          "required": ["closed_by", "closed_at", "reason"]
+        },
+        "followUpLogs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "timestamp": { "type": "string", "format": "date-time" },
+              "staffName": { "type": "string" },
+              "content": { "type": "string" }
+            },
+            "required": ["timestamp", "staffName", "content"]
+          }
+        },
         "emailLog": {
           "type": "object",
           "additionalProperties": { "type": "string", "format": "date-time" },

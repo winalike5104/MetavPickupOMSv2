@@ -40,7 +40,7 @@ import { AnnouncementModal } from '../components/AnnouncementModal';
 
 export const Dashboard = () => {
   const { profile, user, activeWarehouse } = useAuth();
-  console.log("Dashboard - User:", user?.uid, "Email:", profile?.email, "IsAdmin:", isSystemAdmin(profile?.email));
+  console.log("Dashboard - User:", user?.uid, "Email:", profile?.email, "IsAdmin:", isSystemAdmin(profile?.username || profile?.email));
   console.log("Dashboard - Profile Loaded:", !!profile, "Warehouse:", activeWarehouse);
   
   const navigate = useNavigate();
@@ -267,7 +267,7 @@ export const Dashboard = () => {
     </div>;
   }
 
-  console.log(`Dashboard - Rendering JSX. Loading: ${loading} IsAdmin: ${isSystemAdmin(profile?.email)}`);
+  console.log(`Dashboard - Rendering JSX. Loading: ${loading} IsAdmin: ${isSystemAdmin(profile?.username || profile?.email)}`);
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden font-sans">
@@ -319,7 +319,7 @@ export const Dashboard = () => {
                   isScrolled ? "w-4 h-4 group-hover:w-5 h-5" : "w-5 h-5"
                 )} />
               </button>
-              {isSystemAdmin(profile?.email) && !announcement?.isActive && (
+              {isSystemAdmin(profile?.username || profile?.email) && !announcement?.isActive && (
                 <button 
                   onClick={() => setShowAnnouncementModal(true)}
                   className={cn(
@@ -551,7 +551,7 @@ export const Dashboard = () => {
                     )}
                   </div>
                 </div>
-                {allTips[currentTipIndex].isAnnouncement && isSystemAdmin(profile?.email) && (
+                {allTips[currentTipIndex].isAnnouncement && isSystemAdmin(profile?.username || profile?.email) && (
                   <button 
                     onClick={() => setShowAnnouncementModal(true)}
                     className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"

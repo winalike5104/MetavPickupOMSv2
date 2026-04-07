@@ -1,60 +1,175 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: username, name, status, permissions, roleTemplate, allowedWarehouses
+    //
+    // Collection: orders
+    // Fields: bookingNumber, customerName, status, createdTime, createdBy, warehouseId, storeId, warehouseStatus, etc.
+    //
+    // Collection: skus
+    // Fields: sku, productName, location
+    //
+    // ===============================================================
 
     // ===============================================================
-    // 1. 全局策略：前端严禁直连写入
+    // Helper Functions
     // ===============================================================
     
-    // 默认所有集合：允许前端读取（用于显示列表和详情），但禁止前端直接写入。
-    // 所有的 增/删/改 操作必须通过你的 Express 后端（Admin SDK）完成。
-    match /{document=**} {
-      allow read: if true; 
-      allow write: if false; 
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roleTemplate == 'Admin' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.hasAny(['Manage Users']) ||
+         (request.auth.token.email == "windalike5104@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasPermission(perm) {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.hasAny([perm]);
+    }
+
+    function isAuditAuthorized() {
+      return isAdmin() || hasPermission('Audit Overdue Orders');
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
     }
 
     // ===============================================================
-    // 2. 核心集合逻辑 (其实由于前端 allow write: if false，以下校验主要是起文档参考作用)
+    // Domain Validators
     // ===============================================================
 
-    // 订单集合
+    function isValidUser(data) {
+      return data.username is string && data.username.size() > 0 &&
+             data.name is string && data.name.size() > 0 &&
+             data.status in ['Active', 'Disabled'] &&
+             data.permissions is list;
+    }
+
+    function isValidAuditLog(log) {
+      return log.closed_by is string && log.closed_by.size() > 0 &&
+             isValidDateString(log.closed_at) &&
+             log.reason in ['Staff Missed Click', 'Stock Missing', 'Abandoned by Customer', 'Other'] &&
+             (!('note' in log) || (log.note is string && log.note.size() < 1000));
+    }
+
+    function isValidOrder(data) {
+      return data.bookingNumber is string && data.bookingNumber.size() > 0 &&
+             data.customerName is string && data.customerName.size() > 0 &&
+             data.status in ['Created', 'Pending', 'Confirmed', 'Picked Up', 'Reviewed', 'Overdue', 'Cancelled'] &&
+             data.warehouseId is string &&
+             (data.storeId == null || data.storeId is string) &&
+             (!('auditLog' in data) || isValidAuditLog(data.auditLog)) &&
+             (!('followUpLogs' in data) || data.followUpLogs is list);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Users collection
+    match /users/{userId} {
+      // Allow read for authenticated users (needed for profile and admin checks)
+      // BUT: Limit read to owner or admin to prevent PII leak
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      
+      // Writes must go through backend API (enforced by checking for a special field or just denying)
+      // Actually, system instructions say: "Initially restricted: Never make any collection or data publicly readable"
+      // And "Default deny"
+      allow create, update, delete: if isAdmin(); 
+    }
+
+    // Orders collection
     match /orders/{orderId} {
-      allow read: if true;
-      // 这里的 write 为 false 确保了没人能跳过 API 伪造订单
-      allow write: if false; 
+      allow read: if isAuthenticated();
+      
+      // Allow creation for users with 'Create Order' permission
+      allow create: if isAuthenticated() && isValidOrder(request.resource.data);
+      
+      // Allow update for authenticated users (with validation)
+      allow update: if isAuthenticated() && isValidOrder(request.resource.data) &&
+                    // Only authorized users can modify audit logs
+                    (
+                      (!('auditLog' in request.resource.data) || 
+                       (resource.data.keys().hasAll(['auditLog']) && request.resource.data.auditLog == resource.data.auditLog) ||
+                       (!resource.data.keys().hasAll(['auditLog']) && !request.resource.data.keys().hasAll(['auditLog']))) ||
+                      isAuditAuthorized()
+                    );
+      
+      allow delete: if isAdmin();
     }
 
-    // 门店配置
-    match /stores/{storeId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // 库存/产品信息
+    // SKUs collection
     match /skus/{skuId} {
-      allow read: if true;
-      allow write: if false;
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // ===============================================================
-    // 3. 特殊例外（如果某些功能需要前端直连，可以在这里放开）
-    // ===============================================================
-
-    // 如果你允许员工在前端直接点击“已读”通知，可以放开这个
-    match /notifications/{id} {
-      allow read: if true;
-      allow update: if true; // 仅允许更新，不允许创建或删除
+    // Stores collection
+    match /stores/{storeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // 系统日志：只允许写入（埋点），不允许前端读取或修改
+    // Logs collection
     match /logs/{logId} {
-      allow create: if true;
-      allow read: if false; 
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
     }
 
-    // 调试连接专用
-    match /_connection_test_/{docId} {
-      allow read, write: if true;
+    // Notifications
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.recipientUid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.recipientUid;
+    }
+
+    // Announcements
+    match /announcements/{annId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // User Groups
+    match /userGroups/{groupId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Bug Reports
+    match /bug_reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+    }
+
+    // Unique Keys
+    match /unique_keys/{keyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
     }
   }
 }

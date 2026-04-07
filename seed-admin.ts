@@ -57,14 +57,14 @@ async function seedAdmin() {
 
     // 3. Upsert Logic
     const usersRef = db.collection('users');
-    const querySnapshot = await usersRef.where('username', '==', username).limit(1).get();
+    const userDocRef = usersRef.doc(username);
+    const userDoc = await userDocRef.get();
 
-    if (!querySnapshot.empty) {
-      const userDoc = querySnapshot.docs[0];
-      await userDoc.ref.update(adminData);
+    if (userDoc.exists) {
+      await userDocRef.update(adminData);
       console.log(`📝 Updated existing user: ${username}`);
     } else {
-      await usersRef.add({
+      await userDocRef.set({
         ...adminData,
         createdAt: new Date().toISOString()
       });

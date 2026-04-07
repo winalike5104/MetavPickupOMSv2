@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { collection, query, getDocs, orderBy, limit, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
@@ -8,6 +9,7 @@ import { FileText, Search, User, Clock, Activity, Filter, ArrowUpDown, Calendar,
 
 export default function OperationLogs() {
   const { profile, user } = useAuth();
+  const location = useLocation();
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
@@ -15,6 +17,15 @@ export default function OperationLogs() {
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
   const [actionFilter, setActionFilter] = useState('All');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const cat = params.get('category');
+    if (cat) setCategoryFilter(cat);
+    const action = params.get('action');
+    if (action) setActionFilter(action);
+  }, [location.search]);
   
   const canView = isAdmin(profile, profile?.email) || isSystemAdmin(profile?.email);
   const isSysAdmin = isSystemAdmin(profile?.email);
@@ -81,7 +92,7 @@ export default function OperationLogs() {
       });
       
       await batch.commit();
-      await logAction(profile!, 'Clear Logs', 'System Admin cleared operation logs');
+      await logAction(profile!, 'Clear Logs', 'System Admin cleared operation logs', null, 'System');
       fetchLogs();
       alert('Successfully cleared up to 500 logs.');
     } catch (err) {
@@ -101,20 +112,36 @@ export default function OperationLogs() {
           (log.details || "").toLowerCase().includes(searchTerm.toLowerCase());
         
         const matchesAction = actionFilter === 'All' || log.action === actionFilter;
+        const matchesCategory = categoryFilter === 'All' || 
+                               log.category === categoryFilter || 
+                               (!log.category && categoryFilter === 'System');
         
         const logDate = new Date(log.timestamp).toISOString().split('T')[0];
         const matchesStart = !dateFilter.start || logDate >= dateFilter.start;
         const matchesEnd = !dateFilter.end || logDate <= dateFilter.end;
 
-        return matchesSearch && matchesAction && matchesStart && matchesEnd;
+        return matchesSearch && matchesAction && matchesCategory && matchesStart && matchesEnd;
       });
     } catch (error) {
       console.error("Error filtering logs:", error);
       return [];
     }
-  }, [logs, searchTerm, actionFilter, dateFilter]);
+  }, [logs, searchTerm, actionFilter, categoryFilter, dateFilter]);
 
-  const actionTypes = ['All', ...new Set(logs.map(l => l.action))];
+  const actionTypes = useMemo(() => {
+    const filteredByCat = logs.filter(log => 
+      categoryFilter === 'All' || 
+      (log.category === categoryFilter) || 
+      (!log.category && categoryFilter === 'System')
+    );
+    return ['All', ...new Set(filteredByCat.map(l => l.action))];
+  }, [logs, categoryFilter]);
+
+  const categories = ['All', 'Audit', 'Picking', 'System', 'Order', 'User', 'SKU', 'Store', 'Payment'];
+
+  useEffect(() => {
+    setActionFilter('All');
+  }, [categoryFilter]);
 
   if (!canView && !loading) {
     return (
@@ -201,7 +228,22 @@ export default function OperationLogs() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                <Filter className="w-3 h-3" /> Category
+              </label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
                 <Activity className="w-3 h-3" /> Action Type
@@ -264,6 +306,7 @@ export default function OperationLogs() {
                 <tr>
                   <th className="px-6 py-4">Timestamp</th>
                   <th className="px-6 py-4">User</th>
+                  <th className="px-6 py-4">Category</th>
                   <th className="px-6 py-4">Action</th>
                   <th className="px-6 py-4">Details</th>
                 </tr>
@@ -292,6 +335,19 @@ export default function OperationLogs() {
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-indigo-600" />
                           <span className="font-semibold text-slate-900">{log.userName}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <Filter className="w-4 h-4 text-slate-400" />
+                          <span className={cn(
+                            "text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                            log.category === 'Audit' ? "bg-amber-100 text-amber-600" :
+                            log.category === 'Picking' ? "bg-blue-100 text-blue-600" :
+                            "bg-slate-100 text-slate-600"
+                          )}>
+                            {log.category || 'System'}
+                          </span>
                         </div>
                       </td>
                       <td className="px-6 py-4">

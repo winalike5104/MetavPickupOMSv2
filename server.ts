@@ -11,7 +11,7 @@ import firebaseConfig from './firebase-applet-config.json' with { type: 'json' }
 import { sendEmail, sendBulkEmails } from './src/lib/mailer';
 import { isValidDateString } from './src/lib/firebase';
 import { authenticate, loginUser } from './src/lib/auth';
-import { SUPER_ADMINS } from './src/lib/auth-shared';
+import { SUPER_ADMINS, isSuperAdmin } from './src/lib/auth-shared';
 
 // Helper to write to debug log
 const writeDebugLog = (message: string) => {
@@ -583,6 +583,77 @@ async function startServer() {
     }
   });
 
+  // Update Order Item Status Endpoint
+  app.post("/api/orders/item-status", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const { orderId, sku, status } = req.body;
+      if (!orderId || !sku || !status) {
+        return res.status(400).json({ success: false, error: "Missing orderId, sku, or status" });
+      }
+
+      const orderRef = currentDb.collection("orders").doc(orderId);
+      const orderDoc = await orderRef.get();
+      
+      if (!orderDoc.exists) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+
+      const order = orderDoc.data()!;
+      const items = order.items || [];
+      const updatedItems = items.map((item: any) => {
+        if (item.sku === sku) {
+          return { ...item, status };
+        }
+        return item;
+      });
+
+      // Check if all items are picked
+      const allPicked = updatedItems.every((item: any) => item.status === 'Picked');
+      const updateData: any = { items: updatedItems };
+      if (allPicked) {
+        updateData.warehouseStatus = 'Picked';
+        updateData['pickingLog.finishedAt'] = new Date().toISOString();
+      } else if (status === 'Picked') {
+        updateData.warehouseStatus = 'Picking';
+        if (!order.pickingLog?.startedAt) {
+          updateData['pickingLog.startedAt'] = new Date().toISOString();
+          updateData['pickingLog.pickerId'] = req.user.uid;
+          updateData['pickingLog.pickerName'] = req.user.name || req.user.username;
+        }
+      }
+
+      await orderRef.update({
+        ...updateData,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: req.user.username
+      });
+
+      // Log the action
+      try {
+        await currentDb.collection("logs").add({
+          timestamp: new Date().toISOString(),
+          userId: req.user.uid,
+          userName: req.user.name || req.user.username,
+          action: 'Item Status Updated',
+          details: `Set status of ${sku} to ${status} for order ${orderId}`,
+          orderId: orderId
+        });
+      } catch (logErr) {
+        console.error("Failed to log item status update:", logErr);
+      }
+
+      return res.json({ success: true, allPicked });
+    } catch (error: any) {
+      console.error("Item Status Update Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Delete Order Endpoint
   app.post("/api/orders/delete", authenticate, async (req: any, res) => {
     const currentDb = await initDb();
@@ -686,6 +757,112 @@ async function startServer() {
     } catch (error: any) {
       console.error("🔥 [V2 Update Error]:", error.message);
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create Log Endpoint
+  app.post("/api/logs/create", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const { action, details, orderId, category } = req.body;
+      await currentDb.collection('logs').add({
+        timestamp: new Date().toISOString(),
+        userId: req.user.uid,
+        userName: req.user.name || req.user.username,
+        action,
+        details,
+        orderId: orderId || null,
+        category: category || 'System'
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // V2 Audit Order Endpoint
+  app.post("/api/v2/orders/audit", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const { orderId, auditLog } = req.body;
+      if (!orderId || !auditLog) {
+        return res.status(400).json({ success: false, error: "Missing orderId or auditLog" });
+      }
+
+      const orderRef = currentDb.collection("orders").doc(orderId);
+      const orderDoc = await orderRef.get();
+      
+      if (!orderDoc.exists) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+
+      const order = orderDoc.data();
+      const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+      const allowedWarehouses = req.user.allowedWarehouses || [];
+
+      // Data Isolation Check
+      if (!isSuper) {
+        if (!allowedWarehouses.includes('*') && !allowedWarehouses.includes(order?.warehouseId)) {
+          return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
+        }
+        // Check for Audit permission
+        if (req.user.role !== 'Admin' && !(req.user.permissions || []).includes('Review Orders') && !(req.user.permissions || []).includes('Audit Overdue Orders')) {
+          return res.status(403).json({ success: false, error: "Forbidden: Insufficient permissions to audit order" });
+        }
+      }
+
+      const batch = currentDb.batch();
+      const timestamp = new Date().toISOString();
+
+      // Step 1: Mark as Picked Up (if not already)
+      const pickupData: any = {
+        status: 'Picked Up',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: req.user.username
+      };
+
+      if (!order?.actualPickupTime) {
+        pickupData.actualPickupTime = timestamp;
+        pickupData.pickedUpBy = req.user.name || req.user.username;
+      }
+
+      batch.update(orderRef, pickupData);
+
+      // Step 2: Mark as Reviewed with Audit Log
+      batch.update(orderRef, {
+        status: 'Reviewed',
+        auditLog: auditLog,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: req.user.username
+      });
+
+      // Log the action
+      const logRef = currentDb.collection("logs").doc();
+      batch.set(logRef, {
+        timestamp,
+        userId: req.user.uid,
+        userName: req.user.name || req.user.username,
+        action: 'Audit Close Order',
+        details: `Overdue audit closure for ${order?.bookingNumber || orderId}. Reason: ${auditLog.reason}. Status transitioned: Picked Up -> Reviewed`,
+        orderId: orderId,
+        category: 'Audit'
+      });
+
+      await batch.commit();
+
+      console.log(`✅ [Audit] Order ${orderId} audited by ${req.user.username}`);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Audit Order Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
     }
   });
 
@@ -1369,7 +1546,8 @@ async function startServer() {
 
     try {
       const callerUsername = req.user.username.toLowerCase();
-      const isSuper = SUPER_ADMINS.includes(callerUsername);
+      const callerEmail = (req.user.email || "").toLowerCase();
+      const isSuper = isSuperAdmin(callerEmail) || isSuperAdmin(callerUsername);
       const isAdmin = req.user.role === 'Admin' || isSuper;
 
       if (!isAdmin) {
@@ -1496,7 +1674,8 @@ async function startServer() {
 
     try {
       const callerUsername = req.user.username.toLowerCase();
-      const isSuper = SUPER_ADMINS.includes(callerUsername);
+      const callerEmail = (req.user.email || "").toLowerCase();
+      const isSuper = isSuperAdmin(callerEmail) || isSuperAdmin(callerUsername);
       const isAdmin = req.user.role === 'Admin' || isSuper;
 
       if (!isAdmin && !hasPermission(req.user, 'Manage Users')) {

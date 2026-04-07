@@ -120,6 +120,9 @@ export const StoreManagement = () => {
       }
 
       setSuccess(`Store "${store.storeId}" deleted successfully.`);
+      if (profile) {
+        await logAction(profile, 'Delete Store', `Deleted store configuration for ${store.storeId}`, null, 'Store');
+      }
       setShowDeleteConfirm(null);
       fetchStores();
       setTimeout(() => setSuccess(''), 3000);

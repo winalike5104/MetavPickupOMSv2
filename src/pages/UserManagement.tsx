@@ -124,7 +124,7 @@ export const UserManagement = () => {
           throw new Error(data.error || 'Failed to update user');
         }
         
-        await logAction(currentProfile, 'Update User', `Updated permissions for ${formUsername}`);
+        await logAction(currentProfile, 'Update User', `Updated permissions for ${formUsername}`, null, 'User');
       } else {
         // Create new user via backend API
         const response = await fetch('/api/admin/create-user', {
@@ -148,7 +148,7 @@ export const UserManagement = () => {
           throw new Error(data.error || 'Failed to create user');
         }
 
-        await logAction(currentProfile, 'Create User', `Created new user ${formUsername}`);
+        await logAction(currentProfile, 'Create User', `Created new user ${formUsername}`, null, 'User');
       }
       
       setShowEditModal(false);
@@ -233,7 +233,7 @@ export const UserManagement = () => {
         throw new Error(data.error || 'Failed to delete user');
       }
 
-      await logAction(currentProfile, 'Delete User', `Deleted user profile for ${user.username}`);
+      await logAction(currentProfile, 'Delete User', `Deleted user profile for ${user.username}`, null, 'User');
       setShowDeleteConfirm(null);
       fetchUsers();
     } catch (err: any) {
@@ -481,6 +481,7 @@ export const UserManagement = () => {
                     >
                       <option value="Sales">Sales</option>
                       <option value="Reception">Reception</option>
+                      <option value="Warehouse">Warehouse</option>
                       <option value="Admin">Admin</option>
                     </select>
                     <p className="mt-1 text-[10px] text-slate-400 italic">Changing type will reset permissions to template defaults.</p>
@@ -527,6 +528,7 @@ export const UserManagement = () => {
                   <div className="flex flex-wrap gap-2 mb-4">
                     <button type="button" onClick={() => applyTemplate('Sales')} className="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full font-semibold">Sales Template</button>
                     <button type="button" onClick={() => applyTemplate('Reception')} className="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full font-semibold">Reception Template</button>
+                    <button type="button" onClick={() => applyTemplate('Warehouse')} className="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full font-semibold">Warehouse Template</button>
                     <button type="button" onClick={() => applyTemplate('Admin')} className="text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-3 py-1.5 rounded-full font-semibold">Admin Template</button>
                   </div>
                   <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto p-1">

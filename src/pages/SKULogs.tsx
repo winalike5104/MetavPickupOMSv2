@@ -78,7 +78,7 @@ export default function SKULogs() {
       
       const q = query(
         collection(db, 'logs'), 
-        where('action', 'in', skuActions),
+        where('category', '==', 'SKU'),
         orderBy('timestamp', sortOrder), 
         limit(200)
       );
@@ -87,7 +87,7 @@ export default function SKULogs() {
       setLogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as OperationLog)));
     } catch (err) {
       console.error("Error fetching SKU logs:", err);
-      // Fallback: if 'in' query fails due to index or other reasons, fetch all and filter in memory
+      // Fallback: fetch all and filter in memory if category field is missing in old logs
       try {
         const qFallback = query(collection(db, 'logs'), orderBy('timestamp', sortOrder), limit(500));
         const snapFallback = await getDocs(qFallback);
@@ -102,7 +102,7 @@ export default function SKULogs() {
         ];
         setLogs(snapFallback.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as OperationLog))
-          .filter(log => skuActions.includes(log.action))
+          .filter(log => log.category === 'SKU' || skuActions.includes(log.action))
         );
       } catch (fallbackErr) {
         console.error("Fallback fetch failed:", fallbackErr);

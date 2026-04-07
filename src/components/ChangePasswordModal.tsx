@@ -56,7 +56,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
       }
 
       // 3. Log action
-      await logAction(profile, 'Change Password', 'User changed their own password');
+      await logAction(profile, 'Change Password', 'User changed their own password', null, 'User');
 
       setSuccess(true);
       setTimeout(() => {

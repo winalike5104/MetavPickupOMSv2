@@ -58,7 +58,7 @@ export const AdminChangePasswordModal: React.FC<AdminChangePasswordModalProps> =
       }
 
       // Log action
-      await logAction(profile, 'Admin Change Password', `Admin changed password for user ${targetUser.username}`);
+      await logAction(profile, 'Admin Change Password', `Admin changed password for user ${targetUser.username}`, null, 'User');
 
       setSuccess(true);
       setTimeout(() => {

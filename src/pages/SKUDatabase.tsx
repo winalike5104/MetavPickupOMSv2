@@ -432,7 +432,7 @@ export const SKUDatabase = () => {
         handleFirestoreError(err, 'write', `skus/${safeDocId}`);
       }
       
-      await logAction(profile, editingSku?.id ? 'Edit SKU' : 'Add SKU', `${editingSku?.id ? 'Updated' : 'Added'} SKU ${skuUpper}`);
+      await logAction(profile, editingSku?.id ? 'Edit SKU' : 'Add SKU', `${editingSku?.id ? 'Updated' : 'Added'} SKU ${skuUpper}`, null, 'SKU');
       
       setShowEditModal(false);
       fetchSKUs();
@@ -455,7 +455,7 @@ export const SKUDatabase = () => {
     }
     try {
       await deleteDoc(doc(db, 'skus', deletingSku.id));
-      await logAction(profile, 'Delete SKU', `Deleted SKU ${deletingSku.sku}`);
+      await logAction(profile, 'Delete SKU', `Deleted SKU ${deletingSku.sku}`, null, 'SKU');
       setShowDeleteModal(false);
       setDeletingSku(null);
       setSelectedSkuIds(prev => prev.filter(id => id !== deletingSku.id));
@@ -485,7 +485,7 @@ export const SKUDatabase = () => {
         await batch.commit();
       }
       
-      await logAction(profile, 'Bulk Delete SKU', `Deleted ${selectedSkuIds.length} SKUs`);
+      await logAction(profile, 'Bulk Delete SKU', `Deleted ${selectedSkuIds.length} SKUs`, null, 'SKU');
       setSelectedSkuIds([]);
       setShowBulkDeleteModal(false);
       fetchSKUs();
@@ -741,7 +741,7 @@ export const SKUDatabase = () => {
         logDetails += `Skipped ${unmodifiedSkipped} unchanged items.`;
       }
 
-      await logAction(profile, 'Upload SKU', logDetails);
+      await logAction(profile, 'Upload SKU', logDetails, null, 'SKU');
       setShowUploadModal(false);
       setCsvData('');
       setSelectedFileName('');

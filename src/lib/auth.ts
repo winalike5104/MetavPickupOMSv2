@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import admin from 'firebase-admin';
 import { Response, NextFunction } from 'express';
 import { SUPER_ADMINS, isSuperAdmin } from './auth-shared';
 
@@ -164,6 +165,7 @@ const processUserLogin = async (userDoc: any, userData: any, password: any) => {
   const payload = {
     uid: userDoc.id,
     username: userData.username || userDoc.id,
+    email: userData.email || userData.username || userDoc.id,
     name: userData.name || userData.username || userDoc.id,
     role: role,
     permissions: userData.permissions || [],
@@ -172,8 +174,20 @@ const processUserLogin = async (userDoc: any, userData: any, password: any) => {
 
   const token = generateToken(payload);
 
+  // Generate Firebase Custom Token for direct Firestore access
+  let firebaseCustomToken = null;
+  try {
+    firebaseCustomToken = await admin.auth().createCustomToken(userDoc.id, {
+      email: userData.email || userData.username || userDoc.id,
+      email_verified: true
+    });
+  } catch (e) {
+    console.error('Failed to create Firebase custom token:', e);
+  }
+
   return {
     token,
+    firebaseCustomToken,
     user: payload
   };
 };

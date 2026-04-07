@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
-import { db } from '../firebase';
+import { signInWithCustomToken } from 'firebase/auth';
+import { db, auth } from '../firebase';
 import { UserProfile, ROLE_TEMPLATES } from '../types';
 import { requestNotificationPermission } from '../messaging';
 import { WarehouseSelector } from './WarehouseSelector';
@@ -48,6 +49,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsedUser = JSON.parse(savedUser);
         setToken(savedToken);
         setUser(parsedUser);
+        
+        // Restore Firebase Auth session if custom token exists
+        const savedFirebaseToken = localStorage.getItem('firebase_custom_token');
+        if (savedFirebaseToken) {
+          signInWithCustomToken(auth, savedFirebaseToken).catch(err => {
+            console.error('Failed to restore Firebase Auth session:', err);
+          });
+        }
+
         setProfile({
           uid: parsedUser.uid,
           username: parsedUser.username,
@@ -98,6 +108,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     localStorage.setItem('x-v2-auth-token', data.token);
     localStorage.setItem('user_info', JSON.stringify(data.user));
+    
+    if (data.firebaseCustomToken) {
+      localStorage.setItem('firebase_custom_token', data.firebaseCustomToken);
+      try {
+        await signInWithCustomToken(auth, data.firebaseCustomToken);
+      } catch (err) {
+        console.error('Firebase Auth sign-in failed:', err);
+      }
+    }
+
     setToken(data.token);
     setUser(data.user);
     
@@ -119,7 +139,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem('x-v2-auth-token');
     localStorage.removeItem('user_info');
+    localStorage.removeItem('firebase_custom_token');
     sessionStorage.removeItem('activeWarehouse');
+    auth.signOut();
     setToken(null);
     setUser(null);
     setProfile(null);

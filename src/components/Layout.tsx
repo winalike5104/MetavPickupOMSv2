@@ -17,7 +17,8 @@ import {
   ChevronDown,
   ChevronRight,
   Monitor,
-  Clock
+  Clock,
+  ShoppingCart
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { hasPermission, isAdmin, isSystemAdmin } from '../utils';
@@ -30,7 +31,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [showPasswordModal, setShowPasswordModal] = React.useState(false);
-  const [expandedGroups, setExpandedGroups] = React.useState<string[]>(['Orders', 'Management', 'System', 'Overdue']);
+  const [expandedGroups, setExpandedGroups] = React.useState<string[]>(['Orders', 'Management', 'System', 'Overdue', 'Warehouse']);
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => 
@@ -49,27 +50,34 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     {
       name: 'General',
       items: [
-        { name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: hasPermission(profile, 'View Orders', user?.username) },
-        { name: 'Order List', path: '/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', user?.username) },
-        { name: 'Overdue Orders', path: '/orders', state: { statusFilter: 'Overdue', overdueThreshold: 7 }, icon: Clock, visible: hasPermission(profile, 'View Orders', user?.username) },
-        { name: 'SKU Database', path: '/skus', icon: Database, visible: hasPermission(profile, 'View SKU', user?.username) },
+        { name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: hasPermission(profile, 'View Orders', user?.username) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Order List', path: '/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', user?.username) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Overdue Audit', path: '/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', user?.username) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'SKU Database', path: '/skus', icon: Database, visible: hasPermission(profile, 'View SKU', user?.username) && profile?.roleTemplate !== 'Warehouse' },
+      ]
+    },
+    {
+      name: 'Warehouse',
+      icon: ShoppingCart,
+      items: [
+        { name: 'Picking Queue', path: '/picking-queue', icon: ShoppingCart, visible: hasPermission(profile, 'View Picking Queue', user?.username) },
       ]
     },
     {
       name: 'Management',
       icon: Users,
       items: [
-        { name: 'User Management', path: '/users', icon: Users, visible: isAdmin(profile, user?.username) },
-        { name: 'User Groups', path: '/groups', icon: Users, visible: isAdmin(profile, user?.username) || hasPermission(profile, 'Manage User Groups', user?.username) },
-        { name: 'Store Management', path: '/stores', icon: Store, visible: isAdmin(profile, user?.username) || hasPermission(profile, 'Manage Stores', user?.username) },
+        { name: 'User Management', path: '/users', icon: Users, visible: isAdmin(profile, user?.username) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'User Groups', path: '/groups', icon: Users, visible: (isAdmin(profile, user?.username) || hasPermission(profile, 'Manage User Groups', user?.username)) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Store Management', path: '/stores', icon: Store, visible: (isAdmin(profile, user?.username) || hasPermission(profile, 'Manage Stores', user?.username)) && profile?.roleTemplate !== 'Warehouse' },
       ]
     },
     {
       name: 'System',
       icon: FileText,
       items: [
-        { name: 'Operation Logs', path: '/logs', icon: FileText, visible: isAdmin(profile, user?.username) || isSystemAdmin(user?.username) },
-        { name: 'Guest Display', path: '/guest-display', icon: Monitor, visible: isAdmin(profile, user?.username) || hasPermission(profile, 'Capture Signature', user?.username) },
+        { name: 'Operation Logs', path: '/logs', icon: FileText, visible: (isAdmin(profile, user?.username) || isSystemAdmin(user?.username)) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Guest Display', path: '/guest-display', icon: Monitor, visible: (isAdmin(profile, user?.username) || hasPermission(profile, 'Capture Signature', user?.username)) && profile?.roleTemplate !== 'Warehouse' },
         { name: 'Settings', path: '/settings', icon: Settings, visible: true },
       ]
     }

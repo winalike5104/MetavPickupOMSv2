@@ -17,6 +17,8 @@ import OperationLogs from './pages/OperationLogs';
 import { BulkOrderUpload } from './pages/BulkOrderUpload';
 import { WarehouseSelection } from './pages/WarehouseSelection';
 import { GuestDisplay } from './pages/GuestDisplay';
+import { PickingQueue } from './pages/PickingQueue';
+import { OverdueOrders } from './pages/OverdueOrders';
 import { TaskProvider } from './components/TaskProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -94,6 +96,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     );
   }
 
+  // Warehouse role redirection
+  if (profile?.roleTemplate === 'Warehouse' && window.location.pathname === '/') {
+    return <Navigate to="/picking-queue" />;
+  }
+
   return <Layout>{children}</Layout>;
 };
 
@@ -112,6 +119,8 @@ export default function App() {
               <Route path="/orders/create" element={<ProtectedRoute><OrderCreate /></ProtectedRoute>} />
               <Route path="/orders/bulk-import" element={<ProtectedRoute><BulkOrderUpload /></ProtectedRoute>} />
               <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
+              <Route path="/overdue" element={<ProtectedRoute><OverdueOrders /></ProtectedRoute>} />
+              <Route path="/picking-queue" element={<ProtectedRoute><PickingQueue /></ProtectedRoute>} />
               <Route path="/skus" element={<ProtectedRoute><SKUDatabase /></ProtectedRoute>} />
               <Route path="/skus/logs" element={<ProtectedRoute><SKULogs /></ProtectedRoute>} />
               <Route path="/history" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
