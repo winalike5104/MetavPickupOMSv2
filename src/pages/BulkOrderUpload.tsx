@@ -102,6 +102,8 @@ interface ProcessedRow {
   rowNumber: number;
 }
 
+import { PageHeader } from '../components/PageHeader';
+
 export const BulkOrderUpload = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -591,36 +593,18 @@ export const BulkOrderUpload = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Fixed Header */}
-      <div className={cn(
-        "flex-shrink-0 bg-white border-b border-slate-200 z-20 transition-all duration-300 ease-in-out group",
-        isScrolled ? "py-2 shadow-md" : "py-6 shadow-sm"
-      )}>
-        <div className="max-w-[1600px] mx-auto px-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-              <ArrowLeft className={cn("transition-all duration-300", isScrolled ? "w-5 h-5" : "w-6 h-6")} />
-            </Link>
-            <div>
-              <h1 className={cn(
-                "font-bold text-slate-900 transition-all duration-300",
-                isScrolled ? "text-lg" : "text-2xl"
-              )}>
-                Bulk Order Upload
-              </h1>
-              <p className={cn(
-                "text-slate-500 transition-all duration-300",
-                isScrolled ? "text-[10px] opacity-0 h-0 overflow-hidden group-hover:opacity-100 group-hover:h-auto group-hover:text-xs" : "text-sm"
-              )}>
-                Import orders using CSV with atomic transaction safety
-              </p>
-            </div>
-          </div>
-          
-          <div className={cn(
-            "flex items-center gap-3 transition-all duration-300",
-            isScrolled ? "scale-90 origin-right" : "scale-100"
-          )}>
+      <PageHeader
+        title="Bulk Order Upload"
+        subtitle="Import orders using CSV with atomic transaction safety"
+        icon={Upload}
+        isScrolled={isScrolled}
+        backButton={
+          <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors block">
+            <ArrowLeft className="w-6 h-6 text-slate-500" />
+          </Link>
+        }
+        actions={
+          <>
             <button
               onClick={downloadTemplate}
               className="px-3 py-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all flex items-center gap-2 text-sm font-bold"
@@ -643,9 +627,9 @@ export const BulkOrderUpload = () => {
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
               Start Import ({stats.readyOrders} Orders)
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Content Area (Scrolling) */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">

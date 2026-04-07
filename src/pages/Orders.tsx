@@ -34,8 +34,9 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useOrderService } from '../hooks/useOrderService';
 import { API_BASE_URL } from '../constants';
-
 import { useTask } from '../components/TaskProvider';
+
+import { PageHeader } from '../components/PageHeader';
 
 export const Orders = () => {
   const { profile, user, activeWarehouse, token } = useAuth();
@@ -554,108 +555,88 @@ export const Orders = () => {
         </div>
       )}
 
-      {/* 🚀 Collapsible Header Section with Scroll Effects */}
-      <header className={cn(
-        "flex-shrink-0 border-b border-slate-200 z-30 transition-all duration-300 ease-in-out group sticky top-0",
-        isScrolled 
-          ? "shadow-lg backdrop-blur-md bg-white/80" 
-          : "shadow-sm bg-white"
-      )}>
-        <div className={cn(
-          "max-w-[1600px] mx-auto px-4 md:px-8 transition-all duration-300 ease-in-out",
-          isScrolled ? "py-3 group-hover:py-6" : "py-6"
-        )}>
-          <div className={cn(
-            "flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300",
-            isScrolled ? "mb-2 group-hover:mb-6" : "mb-6"
-          )}>
-            <div>
-              <h1 className={cn(
-                "font-bold text-slate-900 tracking-tight transition-all duration-300",
-                isScrolled ? "text-xl group-hover:text-3xl" : "text-3xl"
-              )}>
-                Order Management
-              </h1>
-              <div className={cn(
-                "flex items-center gap-2 text-slate-500 transition-all duration-300 overflow-hidden ease-in-out",
-                isScrolled 
-                  ? "h-0 opacity-0 group-hover:h-5 group-hover:opacity-100" 
-                  : "h-5 opacity-100"
-              )}>
-                <MapPin className="w-4 h-4" />
-                <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
-              </div>
+      <PageHeader
+        title="Order Management"
+        subtitle={
+          <>
+            <MapPin className="w-4 h-4" />
+            <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
+          </>
+        }
+        icon={ShoppingBag}
+        isScrolled={isScrolled}
+        actions={
+          <>
+            <div className={cn(
+              "bg-white border border-slate-200 p-1 rounded-xl flex gap-1 shadow-sm transition-all",
+              isScrolled ? "scale-90 group-hover:scale-100" : ""
+            )}>
+              <button
+                onClick={() => setViewMode('table')}
+                className={cn(
+                  "p-2 rounded-lg transition-all",
+                  viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+                )}
+                title="Table View"
+              >
+                <TableIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('card')}
+                className={cn(
+                  "p-2 rounded-lg transition-all",
+                  viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
+                )}
+                title="Card View"
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </button>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className={cn(
-                "bg-white border border-slate-200 p-1 rounded-xl flex gap-1 shadow-sm transition-all",
-                isScrolled ? "scale-90 group-hover:scale-100" : ""
-              )}>
-                <button
-                  onClick={() => setViewMode('table')}
-                  className={cn(
-                    "p-2 rounded-lg transition-all",
-                    viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
-                  )}
-                  title="Table View"
-                >
-                  <TableIcon className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setViewMode('card')}
-                  className={cn(
-                    "p-2 rounded-lg transition-all",
-                    viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
-                  )}
-                  title="Card View"
-                >
-                  <LayoutGrid className="w-5 h-5" />
-                </button>
-              </div>
-              {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
-                <Link 
-                  to="/orders/bulk-import"
-                  className={cn(
-                    "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
-                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
-                  )}
-                >
-                  <Upload className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
-                  <span className={cn(
-                    "transition-all",
-                    isScrolled ? "hidden group-hover:inline" : "inline"
-                  )}>Bulk Import</span>
-                </Link>
-              )}
-              {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
-                <Link 
-                  to="/orders/create"
-                  className={cn(
-                    "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200",
-                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
-                  )}
-                >
-                  <Plus className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
-                  New Order
-                </Link>
-              )}
-              <button 
-                onClick={exportToCSV}
+            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+              <Link 
+                to="/orders/bulk-import"
                 className={cn(
                   "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
                   isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
                 )}
               >
-                <Download className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+                <Upload className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
                 <span className={cn(
                   "transition-all",
                   isScrolled ? "hidden group-hover:inline" : "inline"
-                )}>Export</span>
-              </button>
-            </div>
-          </div>
+                )}>Bulk Import</span>
+              </Link>
+            )}
+            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+              <Link 
+                to="/orders/create"
+                className={cn(
+                  "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200",
+                  isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
+                )}
+              >
+                <Plus className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+                New Order
+              </Link>
+            )}
+            <button 
+              onClick={exportToCSV}
+              className={cn(
+                "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
+                isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
+              )}
+            >
+              <Download className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
+              <span className={cn(
+                "transition-all",
+                isScrolled ? "hidden group-hover:inline" : "inline"
+              )}>Export</span>
+            </button>
+          </>
+        }
+      />
 
-          <div className="flex flex-col md:flex-row gap-4">
+      <div className="flex flex-col md:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
@@ -776,11 +757,8 @@ export const Orders = () => {
               </select>
             </div>
           </div>
-        </div>
-      </header>
 
-      {/* Content Area (Scrolling) */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
         {/* Sentinel for Scroll Detection */}
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         {loading ? (

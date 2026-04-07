@@ -93,17 +93,18 @@ const hasPermission = (user: any, permission: string) => {
   return (user.permissions || []).includes(permission);
 };
 
-const logAction = async (user: any, action: string, details: string, orderId?: string) => {
+const logAction = async (user: any, action: string, details: string, orderId?: string, category?: string) => {
   try {
     const currentDb = await initDb();
     if (!currentDb) return;
     await currentDb.collection('logs').add({
       timestamp: new Date().toISOString(),
       userId: user.uid,
-      userName: user.name,
+      userName: user.name || user.username,
       action,
       details,
-      orderId: orderId || null
+      orderId: orderId || null,
+      category: category || 'System'
     });
   } catch (error) {
     console.error('Failed to log action:', error);
@@ -1013,7 +1014,7 @@ async function startServer() {
             });
           });
           results.success += chunk.length;
-          await logAction(req.user, 'Bulk Import', `Bulk imported ${chunk.length} orders.`);
+          await logAction(req.user, 'Bulk Import', `Bulk imported ${chunk.length} orders.`, null, 'Order');
         } catch (err: any) {
           results.failed += chunk.length;
           results.errors.push(err.message);
@@ -1047,7 +1048,7 @@ async function startServer() {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      await logAction(req.user, 'Store Saved', `Saved store: ${storeData.storeId}`);
+      await logAction(req.user, 'Store Saved', `Saved store: ${storeData.storeId}`, null, 'Store');
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1068,7 +1069,7 @@ async function startServer() {
 
       const { id, storeId } = req.body;
       await currentDb.collection('stores').doc(id).delete();
-      await logAction(req.user, 'Store Deleted', `Deleted store: ${storeId}`);
+      await logAction(req.user, 'Store Deleted', `Deleted store: ${storeId}`, null, 'Store');
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1146,7 +1147,7 @@ async function startServer() {
         settings,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      await logAction(req.user, 'Update Settings', 'Updated personal settings');
+      await logAction(req.user, 'Update Settings', 'Updated personal settings', null, 'User');
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1594,7 +1595,7 @@ async function startServer() {
       });
       
       console.log(`Admin ${req.user.uid} updated password for user ${targetUid}`);
-      await logAction(req.user, 'Admin Change Password', `Admin changed password for user ${targetUsername}`);
+      await logAction(req.user, 'Admin Change Password', `Admin changed password for user ${targetUsername}`, null, 'User');
       
       return res.json({ success: true, message: "Password updated successfully" });
     } catch (error: any) {
@@ -1723,7 +1724,7 @@ async function startServer() {
       });
       
       console.log(`Admin ${req.user.uid} updated user ${uid} (${targetUsername})`);
-      await logAction(req.user, 'Update User', `Updated user profile: ${targetUsername}`);
+      await logAction(req.user, 'Update User', `Updated user profile: ${targetUsername}`, null, 'User');
       
       return res.json({ success: true, message: "User updated successfully" });
     } catch (error: any) {
@@ -1787,7 +1788,7 @@ async function startServer() {
       await currentDb.collection("users").doc(uid).delete();
       
       console.log(`Admin ${req.user.uid} deleted user ${uid} (${targetUsername})`);
-      await logAction(req.user, 'Delete User', `Deleted user account: ${targetUsername}`);
+      await logAction(req.user, 'Delete User', `Deleted user account: ${targetUsername}`, null, 'User');
       
       return res.json({ success: true, message: "User deleted successfully" });
     } catch (error: any) {

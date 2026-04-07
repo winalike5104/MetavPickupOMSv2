@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '../components/PageHeader';
+
 export default function SKULogs() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -143,49 +145,30 @@ export default function SKULogs() {
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Header */}
-      <div className={cn(
-        "flex-shrink-0 bg-white border-b border-slate-200 z-30 transition-all duration-300 ease-in-out sticky top-0",
-        isScrolled ? "py-3 shadow-md" : "py-6 shadow-sm"
-      )}>
-        <div className="max-w-[1600px] mx-auto px-4 md:px-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => navigate('/skus')}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <div>
-                <h1 className={cn(
-                  "font-bold text-slate-900 flex items-center gap-2 transition-all duration-300",
-                  isScrolled ? "text-xl" : "text-2xl"
-                )}>
-                  <Database className="text-indigo-600 w-6 h-6" />
-                  SKU Database Change Logs
-                </h1>
-                <p className={cn(
-                  "text-slate-500 text-sm transition-all duration-300 overflow-hidden",
-                  isScrolled ? "max-h-0 opacity-0" : "max-h-10 opacity-100"
-                )}>
-                  Audit trail of SKU additions, edits, and deletions
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={fetchLogs}
-                disabled={loading}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
-                title="Refresh logs"
-              >
-                <RefreshCw className={cn("w-5 h-5 text-slate-600", loading ? 'animate-spin' : '')} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="SKU Database Change Logs"
+        subtitle="Audit trail of SKU additions, edits, and deletions"
+        icon={Database}
+        isScrolled={isScrolled}
+        backButton={
+          <button 
+            onClick={() => navigate('/skus')}
+            className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        }
+        actions={
+          <button
+            onClick={fetchLogs}
+            disabled={loading}
+            className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
+            title="Refresh logs"
+          >
+            <RefreshCw className={cn("w-5 h-5 text-slate-600", loading ? 'animate-spin' : '')} />
+          </button>
+        }
+      />
 
       {/* 🚀 Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">

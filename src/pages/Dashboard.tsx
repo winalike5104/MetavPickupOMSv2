@@ -36,6 +36,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
+import { PageHeader } from '../components/PageHeader';
 import { AnnouncementModal } from '../components/AnnouncementModal';
 
 export const Dashboard = () => {
@@ -271,83 +272,57 @@ export const Dashboard = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden font-sans">
-      {/* 🚀 Collapsible Header Section with Scroll Effects */}
-      <header className={cn(
-        "flex-shrink-0 border-b border-slate-200 z-30 transition-all duration-300 ease-in-out group sticky top-0",
-        isScrolled 
-          ? "shadow-lg backdrop-blur-md bg-white/80" 
-          : "shadow-sm bg-white"
-      )}>
-        <div className={cn(
-          "max-w-[1600px] mx-auto px-4 md:px-8 transition-all duration-300 ease-in-out",
-          isScrolled ? "py-3 group-hover:py-6" : "py-6"
-        )}>
-          <div className={cn(
-            "flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300",
-            isScrolled ? "mb-0 group-hover:mb-0" : ""
-          )}>
-            <div>
-              <h1 className={cn(
-                "font-bold text-slate-900 tracking-tight transition-all duration-300",
-                isScrolled ? "text-xl group-hover:text-3xl" : "text-3xl"
-              )}>
-                Dashboard Overview
-              </h1>
-              <p className={cn(
-                "text-slate-500 mt-1 transition-all duration-300 overflow-hidden ease-in-out",
-                isScrolled 
-                  ? "h-0 opacity-0 group-hover:h-5 group-hover:opacity-100" 
-                  : "h-5 opacity-100"
-              )}>
-                Welcome back to the Pickup Management System.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <button 
-                onClick={() => {
-                  setLoading(true);
-                  fetchData();
-                }}
-                className={cn(
-                  "p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all",
-                  isScrolled ? "p-2 group-hover:p-3" : "p-3"
-                )}
-                title="Refresh Data"
-              >
-                <RefreshCw className={cn(
-                  loading ? 'animate-spin' : '',
-                  isScrolled ? "w-4 h-4 group-hover:w-5 h-5" : "w-5 h-5"
-                )} />
-              </button>
-              {isSystemAdmin(profile?.username || profile?.email) && !announcement?.isActive && (
-                <button 
-                  onClick={() => setShowAnnouncementModal(true)}
-                  className={cn(
-                    "inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-semibold hover:bg-slate-50 transition-all",
-                    isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
-                  )}
-                >
-                  <Megaphone className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
-                  <span className={cn(
-                    "transition-all",
-                    isScrolled ? "hidden group-hover:inline" : "inline"
-                  )}>Post Announcement</span>
-                </button>
+      <PageHeader
+        title="Dashboard Overview"
+        subtitle="Welcome back to the Pickup Management System."
+        icon={Sparkles}
+        isScrolled={isScrolled}
+        actions={
+          <>
+            <button 
+              onClick={() => {
+                setLoading(true);
+                fetchData();
+              }}
+              className={cn(
+                "p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all",
+                isScrolled ? "p-2 group-hover:p-3" : "p-3"
               )}
-              <Link 
-                to="/orders/create"
+              title="Refresh Data"
+            >
+              <RefreshCw className={cn(
+                loading ? 'animate-spin' : '',
+                isScrolled ? "w-4 h-4 group-hover:w-5 h-5" : "w-5 h-5"
+              )} />
+            </button>
+            {isSystemAdmin(profile?.username || profile?.email) && !announcement?.isActive && (
+              <button 
+                onClick={() => setShowAnnouncementModal(true)}
                 className={cn(
-                  "inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200",
-                  isScrolled ? "px-4 py-2 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                  "inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-semibold hover:bg-slate-50 transition-all",
+                  isScrolled ? "px-3 py-1.5 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
                 )}
               >
-                <Plus className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
-                Create New Order
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+                <Megaphone className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
+                <span className={cn(
+                  "transition-all",
+                  isScrolled ? "hidden group-hover:inline" : "inline"
+                )}>Post Announcement</span>
+              </button>
+            )}
+            <Link 
+              to="/orders/create"
+              className={cn(
+                "inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200",
+                isScrolled ? "px-4 py-2 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+              )}
+            >
+              <Plus className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
+              Create New Order
+            </Link>
+          </>
+        }
+      />
 
       {/* 🚀 Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">

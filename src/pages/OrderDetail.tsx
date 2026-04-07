@@ -56,6 +56,8 @@ import html2canvas from 'html2canvas-pro';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../constants';
 
+import { PageHeader } from '../components/PageHeader';
+
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -723,46 +725,31 @@ export const OrderDetail: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Fixed Header */}
-      <div className={cn(
-        "flex-shrink-0 bg-white border-b border-slate-200 z-20 transition-all duration-300 ease-in-out group print:hidden",
-        isScrolled ? "py-2 shadow-md" : "py-6 shadow-sm"
-      )}>
-        <div className="max-w-5xl mx-auto px-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/orders')}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <ArrowLeft className={cn("transition-all duration-300", isScrolled ? "w-5 h-5" : "w-6 h-6")} />
-            </button>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className={cn(
-                  "font-bold text-gray-900 transition-all duration-300",
-                  isScrolled ? "text-lg" : "text-2xl"
-                )}>
-                  {order.bookingNumber}
-                </h1>
-                {renderStatusBadge(order.status)}
-              </div>
-              <p className={cn(
-                "text-gray-500 transition-all duration-300",
-                isScrolled ? "text-[10px] opacity-0 h-0 overflow-hidden group-hover:opacity-100 group-hover:h-auto group-hover:text-xs" : "text-sm"
-              )}>
-                Ref: {order.refNumber}
-              </p>
-            </div>
+      <PageHeader
+        title={order.bookingNumber}
+        subtitle={
+          <div className="flex items-center gap-3">
+            {renderStatusBadge(order.status)}
+            <span className="text-slate-500 text-sm">Ref: {order.refNumber}</span>
           </div>
-
-          <div className={cn(
-            "flex flex-wrap items-center gap-2 transition-all duration-300",
-            isScrolled ? "scale-90 origin-right" : "scale-100"
-          )}>
+        }
+        isScrolled={isScrolled}
+        maxWidth="max-w-5xl"
+        className="print:hidden"
+        backButton={
+          <button
+            onClick={() => navigate('/orders')}
+            className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+          >
+            <ArrowLeft className="w-6 h-6 text-slate-500" />
+          </button>
+        }
+        actions={
+          <>
             {hasPermission(profile, 'Edit Order', profile?.username || profile?.email) && order.status !== 'Cancelled' && (
               <button
                 onClick={() => setIsEditing(true)}
-                className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
               >
                 <Edit className="w-3.5 h-3.5 mr-1.5" />
                 Edit
@@ -772,7 +759,7 @@ export const OrderDetail: React.FC = () => {
             {hasPermission(profile, 'Print Pick List', profile?.username || profile?.email) && (
               <button
                 onClick={handlePrint}
-                className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
               >
                 <Printer className="w-3.5 h-3.5 mr-1.5" />
                 Print
@@ -782,7 +769,7 @@ export const OrderDetail: React.FC = () => {
             {hasPermission(profile, 'Request Picking', profile?.username || profile?.email) && !order.warehouseStatus && order.status === 'Created' && (
               <button
                 onClick={handleRequestPicking}
-                className="inline-flex items-center px-3 py-1.5 bg-indigo-600 rounded-lg text-xs font-medium text-white hover:bg-indigo-700 transition-colors shadow-sm"
+                className="inline-flex items-center px-3 py-1.5 bg-indigo-600 rounded-xl text-xs font-bold text-white hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
               >
                 <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
                 Request Picking
@@ -792,7 +779,7 @@ export const OrderDetail: React.FC = () => {
             {hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email) && order.status === 'Created' && (
               <button
                 onClick={() => handleStatusChange('Picked Up')}
-                className="inline-flex items-center px-3 py-1.5 bg-green-600 rounded-lg text-xs font-medium text-white hover:bg-green-700 transition-colors"
+                className="inline-flex items-center px-3 py-1.5 bg-emerald-600 rounded-xl text-xs font-bold text-white hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
               >
                 <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
                 Confirm Pickup
@@ -802,7 +789,7 @@ export const OrderDetail: React.FC = () => {
             {hasPermission(profile, 'Review Orders', profile?.username || profile?.email) && order.status === 'Picked Up' && (
               <button
                 onClick={() => handleStatusChange('Reviewed')}
-                className="inline-flex items-center px-3 py-1.5 bg-purple-600 rounded-lg text-xs font-medium text-white hover:bg-purple-700 transition-colors"
+                className="inline-flex items-center px-3 py-1.5 bg-purple-600 rounded-xl text-xs font-bold text-white hover:bg-purple-700 transition-all shadow-lg shadow-purple-200"
               >
                 <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
                 Mark Reviewed
@@ -812,7 +799,7 @@ export const OrderDetail: React.FC = () => {
             {hasPermission(profile, 'Cancel Orders', profile?.email) && order.status !== 'Cancelled' && (
               <button
                 onClick={() => handleStatusChange('Cancelled')}
-                className="inline-flex items-center px-3 py-1.5 bg-red-50 rounded-lg text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                className="inline-flex items-center px-3 py-1.5 bg-red-50 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100 transition-all"
               >
                 <XCircle className="w-3.5 h-3.5 mr-1.5" />
                 Cancel
@@ -822,14 +809,14 @@ export const OrderDetail: React.FC = () => {
             {hasPermission(profile, 'Manage Users', profile?.email) && (
               <button
                 onClick={handleDeleteOrder}
-                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Content Area (Scrolling) */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 print:hidden">

@@ -22,6 +22,8 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { SUPER_ADMINS } from '../lib/auth-shared';
 
+import { PageHeader } from '../components/PageHeader';
+
 export const OrderCreate = () => {
   const { profile, activeWarehouse } = useAuth();
   const navigate = useNavigate();
@@ -287,27 +289,21 @@ export const OrderCreate = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Fixed Header */}
-      <div className={cn(
-        "flex-shrink-0 bg-white border-b border-slate-200 z-20 transition-all duration-300 ease-in-out group",
-        isScrolled ? "py-3 shadow-md" : "py-6 shadow-sm"
-      )}>
-        <div className="max-w-4xl mx-auto px-4 md:px-8 flex items-center gap-4">
-          <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-            <ArrowLeft className={cn("transition-all duration-300", isScrolled ? "w-5 h-5" : "w-6 h-6")} />
+      <PageHeader
+        title="Create New Order"
+        subtitle="Fill in the details to create a new pickup order."
+        icon={Plus}
+        isScrolled={isScrolled}
+        maxWidth="max-w-4xl"
+        backButton={
+          <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors block">
+            <ArrowLeft className="w-6 h-6 text-slate-500" />
           </Link>
-          <h1 className={cn(
-            "font-bold text-slate-900 transition-all duration-300",
-            isScrolled ? "text-lg" : "text-2xl"
-          )}>
-            Create New Order
-          </h1>
-        </div>
-      </div>
+        }
+      />
 
       {/* Content Area (Scrolling) */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
-        {/* Sentinel for Scroll Detection */}
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-4xl mx-auto space-y-8">
           {error && (

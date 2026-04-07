@@ -24,6 +24,9 @@ import {
   MessageSquare
 } from 'lucide-react';
 
+import { PageHeader } from '../components/PageHeader';
+import { useRef } from 'react';
+
 export const OverdueOrders = () => {
   const { profile, user, activeWarehouse } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -46,6 +49,28 @@ export const OverdueOrders = () => {
   const [reason, setReason] = useState<AuditLog['reason'] | ''>('');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     fetchOverdueOrders();
@@ -143,6 +168,8 @@ export const OverdueOrders = () => {
         followUpLogs: arrayUnion(newLog)
       });
 
+      await logAction(profile, 'Audit Follow-up', `Added follow-up for order ${activeOrder.bookingNumber || activeOrder.id}: ${newLog.content}`, activeOrder.id, 'Audit');
+
       // Update local state
       setOrders(prev => prev.map(o => o.id === activeOrder.id 
         ? { ...o, followUpLogs: [...(o.followUpLogs || []), newLog] } 
@@ -223,18 +250,13 @@ export const OverdueOrders = () => {
   return (
     <div className="flex-1 flex flex-row min-w-0 bg-slate-50 overflow-hidden relative">
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0 z-10 shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                <Clock className="w-7 h-7 text-red-600" />
-                Overdue Audit
-              </h1>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Aging Order Management</p>
-            </div>
-
-            <div className="flex items-center gap-3">
+        <PageHeader
+          title="Overdue Audit"
+          subtitle="Aging Order Management"
+          icon={Clock}
+          isScrolled={isScrolled}
+          actions={
+            <>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -269,11 +291,15 @@ export const OverdueOrders = () => {
                 <HistoryIcon className="w-4 h-4" />
                 Audit History
               </button>
-            </div>
-          </div>
+            </>
+          }
+        />
 
-          {/* Advanced Filters */}
-          <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
+          <div className="max-w-[1600px] mx-auto space-y-8">
+            {/* Advanced Filters */}
+            <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Created Range:</span>
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
@@ -331,7 +357,6 @@ export const OverdueOrders = () => {
               </div>
             </div>
           </div>
-        </header>
 
         {/* Summary Bar */}
         <div className="bg-slate-900 text-white px-6 py-3 flex items-center gap-8 flex-shrink-0">
@@ -471,6 +496,7 @@ export const OverdueOrders = () => {
           )}
         </div>
       </div>
+    </div>
 
       {/* Side Panel: Follow-up Logs */}
       <AnimatePresence>
@@ -655,5 +681,6 @@ export const OverdueOrders = () => {
         </div>
       )}
     </div>
-  );
+  </div>
+);
 };

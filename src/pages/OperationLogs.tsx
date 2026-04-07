@@ -7,6 +7,8 @@ import { OperationLog } from '../types';
 import { logAction, hasPermission, isAdmin, isSystemAdmin, formatDate, cn } from '../utils';
 import { FileText, Search, User, Clock, Activity, Filter, ArrowUpDown, Calendar, ShieldAlert, Terminal, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
+import { PageHeader } from '../components/PageHeader';
+
 export default function OperationLogs() {
   const { profile, user } = useAuth();
   const location = useLocation();
@@ -62,7 +64,7 @@ export default function OperationLogs() {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, 'logs'), orderBy('timestamp', sortOrder), limit(200));
+      const q = query(collection(db, 'logs'), orderBy('timestamp', sortOrder), limit(500));
       const snap = await getDocs(q);
       setLogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as OperationLog)));
     } catch (err) {
@@ -103,18 +105,29 @@ export default function OperationLogs() {
     }
   };
 
+  const getInferredCategory = (log: OperationLog): string => {
+    if (log.category) return log.category;
+    const action = (log.action || "").toLowerCase();
+    if (action.includes('audit')) return 'Audit';
+    if (action.includes('picking') || action.includes('picked') || action.includes('item status')) return 'Picking';
+    if (action.includes('sku')) return 'SKU';
+    if (action.includes('user')) return 'User';
+    if (action.includes('store')) return 'Store';
+    if (action.includes('order') || action.includes('import')) return 'Order';
+    return 'System';
+  };
+
   const filteredLogs = useMemo(() => {
     try {
       return logs.filter(log => {
+        const category = getInferredCategory(log);
         const matchesSearch = 
           (log.userName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
           (log.action || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
           (log.details || "").toLowerCase().includes(searchTerm.toLowerCase());
         
         const matchesAction = actionFilter === 'All' || log.action === actionFilter;
-        const matchesCategory = categoryFilter === 'All' || 
-                               log.category === categoryFilter || 
-                               (!log.category && categoryFilter === 'System');
+        const matchesCategory = categoryFilter === 'All' || category === categoryFilter;
         
         const logDate = new Date(log.timestamp).toISOString().split('T')[0];
         const matchesStart = !dateFilter.start || logDate >= dateFilter.start;
@@ -129,11 +142,10 @@ export default function OperationLogs() {
   }, [logs, searchTerm, actionFilter, categoryFilter, dateFilter]);
 
   const actionTypes = useMemo(() => {
-    const filteredByCat = logs.filter(log => 
-      categoryFilter === 'All' || 
-      (log.category === categoryFilter) || 
-      (!log.category && categoryFilter === 'System')
-    );
+    const filteredByCat = logs.filter(log => {
+      const category = getInferredCategory(log);
+      return categoryFilter === 'All' || category === categoryFilter;
+    });
     return ['All', ...new Set(filteredByCat.map(l => l.action))];
   }, [logs, categoryFilter]);
 
@@ -155,62 +167,34 @@ export default function OperationLogs() {
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
-      {/* 🚀 Collapsible Header */}
-      <div className={cn(
-        "flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-200 z-30 transition-all duration-300 ease-in-out group",
-        isScrolled ? "py-3 shadow-md" : "py-6 shadow-sm",
-        "hover:py-6 hover:shadow-lg"
-      )}>
-        <div className="px-4 md:px-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="transition-all duration-300">
-              <h1 className={cn(
-                "font-bold text-slate-900 flex items-center gap-2 transition-all duration-300",
-                isScrolled ? "text-lg md:text-xl" : "text-2xl",
-                "group-hover:text-2xl"
-              )}>
-                <Terminal className={cn("text-indigo-600 transition-all", isScrolled ? "w-5 h-5" : "w-6 h-6", "group-hover:w-6 group-hover:h-6")} />
-                Operation Logs
-              </h1>
-              <p className={cn(
-                "text-slate-500 text-sm transition-all duration-300 overflow-hidden",
-                isScrolled ? "max-h-0 opacity-0" : "max-h-10 opacity-100",
-                "group-hover:max-h-10 group-hover:opacity-100"
-              )}>
-                Audit trail of all system activities
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
+      <PageHeader
+        title="Operation Logs"
+        subtitle="Audit trail of all system activities"
+        icon={Terminal}
+        isScrolled={isScrolled}
+        actions={
+          <>
+            <button
+              onClick={fetchLogs}
+              disabled={loading}
+              className="bg-white border border-slate-200 p-2 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
+              title="Refresh now"
+            >
+              <RefreshCw className={cn("w-4 h-4 text-slate-600", loading ? 'animate-spin' : '')} />
+            </button>
+            {isSysAdmin && (
               <button
-                onClick={fetchLogs}
-                disabled={loading}
-                className={cn(
-                  "bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50",
-                  isScrolled ? "p-1.5" : "p-2.5",
-                  "group-hover:p-2.5"
-                )}
-                title="Refresh now"
+                onClick={clearLogs}
+                disabled={clearing}
+                className="bg-red-50 border border-red-100 p-2 rounded-xl hover:bg-red-100 transition-all text-red-600 disabled:opacity-50"
+                title="Clear logs"
               >
-                <RefreshCw className={cn("text-slate-600 transition-all", isScrolled ? "w-4 h-4" : "w-5 h-5", loading ? 'animate-spin' : '', "group-hover:w-5 group-hover:h-5")} />
+                <Trash2 className={cn("w-4 h-4", clearing ? 'animate-pulse' : '')} />
               </button>
-              {isSysAdmin && (
-                <button
-                  onClick={clearLogs}
-                  disabled={clearing}
-                  className={cn(
-                    "bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-all text-red-600 disabled:opacity-50",
-                    isScrolled ? "p-1.5" : "p-2.5",
-                    "group-hover:p-2.5"
-                  )}
-                  title="Clear logs"
-                >
-                  <Trash2 className={cn("transition-all", isScrolled ? "w-4 h-4" : "w-5 h-5", clearing ? 'animate-pulse' : '', "group-hover:w-5 group-hover:h-5")} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+            )}
+          </>
+        }
+      />
 
       {/* 🚀 Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
@@ -342,11 +326,15 @@ export default function OperationLogs() {
                           <Filter className="w-4 h-4 text-slate-400" />
                           <span className={cn(
                             "text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                            log.category === 'Audit' ? "bg-amber-100 text-amber-600" :
-                            log.category === 'Picking' ? "bg-blue-100 text-blue-600" :
+                            getInferredCategory(log) === 'Audit' ? "bg-amber-100 text-amber-600" :
+                            getInferredCategory(log) === 'Picking' ? "bg-blue-100 text-blue-600" :
+                            getInferredCategory(log) === 'Order' ? "bg-emerald-100 text-emerald-600" :
+                            getInferredCategory(log) === 'User' ? "bg-purple-100 text-purple-600" :
+                            getInferredCategory(log) === 'SKU' ? "bg-indigo-100 text-indigo-600" :
+                            getInferredCategory(log) === 'Store' ? "bg-pink-100 text-pink-600" :
                             "bg-slate-100 text-slate-600"
                           )}>
-                            {log.category || 'System'}
+                            {getInferredCategory(log)}
                           </span>
                         </div>
                       </td>

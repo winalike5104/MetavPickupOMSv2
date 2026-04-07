@@ -46,6 +46,8 @@ interface PickingTask {
   }[];
 }
 
+import { PageHeader } from '../components/PageHeader';
+
 export const PickingQueue: React.FC = () => {
   const { profile, activeWarehouse, token } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -57,6 +59,28 @@ export const PickingQueue: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'location' | 'order'>(() => {
     return (localStorage.getItem('pickingQueueTab') as 'location' | 'order') || 'location';
   });
+
+  const [isScrolled, setIsScrolled] = useState(false);
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => {
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('pickingQueueTab', activeTab);
@@ -309,77 +333,74 @@ export const PickingQueue: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 flex-shrink-0">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-indigo-600" />
-              Picking
-            </h1>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-                <button
-                  onClick={() => setActiveTab('location')}
-                  className={cn(
-                    "text-[10px] font-black px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider",
-                    activeTab === 'location' 
-                      ? "bg-white text-indigo-600 shadow-sm" 
-                      : "text-slate-500 hover:bg-slate-200/50"
-                  )}
-                >
-                  By Loc
-                </button>
-                <button
-                  onClick={() => setActiveTab('order')}
-                  className={cn(
-                    "text-[10px] font-black px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider",
-                    activeTab === 'order' 
-                      ? "bg-white text-purple-600 shadow-sm" 
-                      : "text-slate-500 hover:bg-slate-200/50"
-                  )}
-                >
-                  By Order
-                </button>
-              </div>
-              <button 
-                onClick={() => window.location.href = '/logs?category=Picking'}
-                className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"
-                title="Picking History"
+      <PageHeader
+        title="Picking Queue"
+        subtitle={`Active tasks for ${activeWarehouse || 'Selected Warehouse'}`}
+        icon={ShoppingCart}
+        isScrolled={isScrolled}
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <button
+                onClick={() => setActiveTab('location')}
+                className={cn(
+                  "text-[10px] font-black px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider",
+                  activeTab === 'location' 
+                    ? "bg-white text-indigo-600 shadow-sm" 
+                    : "text-slate-500 hover:bg-slate-200/50"
+                )}
               >
-                <HistoryIcon className="w-4 h-4" />
+                By Loc
+              </button>
+              <button
+                onClick={() => setActiveTab('order')}
+                className={cn(
+                  "text-[10px] font-black px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider",
+                  activeTab === 'order' 
+                    ? "bg-white text-purple-600 shadow-sm" 
+                    : "text-slate-500 hover:bg-slate-200/50"
+                )}
+              >
+                By Order
               </button>
             </div>
+            <button 
+              onClick={() => window.location.href = '/logs?category=Picking'}
+              className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"
+              title="Picking History"
+            >
+              <HistoryIcon className="w-4 h-4" />
+            </button>
           </div>
+        }
+      />
 
-          <div className="flex items-center gap-2">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
+        <div className="max-w-5xl mx-auto space-y-6">
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder={activeTab === 'location' ? "SKU, Loc..." : "Order #, SKU..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl text-xs transition-all outline-none"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl text-[10px] font-bold px-3 py-2 outline-none transition-all uppercase tracking-wider"
+              className="w-full md:w-48 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
             >
-              <option value="All">All</option>
+              <option value="All">All Status</option>
               <option value="Pending">Pending</option>
               <option value="Picking">Picking</option>
               <option value="Picked">Ready</option>
             </select>
           </div>
-        </div>
-      </div>
 
-      {/* Task List */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto space-y-4">
           {activeTab === 'location' ? (
             filteredLocationTasks.length === 0 ? (
               <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
