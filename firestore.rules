@@ -17,16 +17,23 @@ service cloud.firestore {
     // 检查是否为系统超级管理员 (硬编码邮箱作为最后防线)
     function isSystemAdmin() {
       let email = getClaims().email;
+      let uid = request.auth.uid;
+      let role = getClaims().role;
+      let admins = ["windalike5104@gmail.com", "alan@pickup.system", "admin"];
+      
       return isAuthenticated() && 
-             (email == "windalike5104@gmail.com" || email == "alan@pickup.system") && 
-             getClaims().email_verified == true;
+             (
+               email in admins || 
+               uid in admins ||
+               role == 'Admin'
+             );
     }
 
     // 检查是否拥有特定权限 (直接查验 Token 里的权限矩阵)
     function hasPermission(perm) {
       let perms = getClaims().permissions;
       return isAuthenticated() && 
-             (perms is list && perms.hasAny([perm]) || isSystemAdmin());
+             (isSystemAdmin() || (perms is list && perms.hasAny([perm])));
     }
 
     // 仓库访问授权 (信任令牌中的授权数组)
@@ -34,8 +41,8 @@ service cloud.firestore {
       let allowed = getClaims().allowedWarehouses;
       return isAuthenticated() && 
              (
-               (allowed is list && allowed.hasAny(['*', warehouseId])) || 
-               isSystemAdmin()
+               isSystemAdmin() ||
+               (allowed is list && allowed.hasAny(['*', warehouseId]))
              );
     }
 

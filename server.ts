@@ -49,12 +49,21 @@ const initDb = async () => {
       // 2. Fallback to projectId or default credentials if not already initialized
       if (!admin.apps.length) {
         if (firebaseConfig.projectId) {
-          const adminConfig: any = { projectId: firebaseConfig.projectId };
-          if (firebaseConfig.databaseURL) {
-            adminConfig.databaseURL = firebaseConfig.databaseURL;
+          try {
+            admin.initializeApp({
+              credential: admin.credential.applicationDefault(),
+              projectId: firebaseConfig.projectId,
+              databaseURL: firebaseConfig.databaseURL
+            });
+            console.log("🚀 [Server] Admin SDK initialized with Application Default Credentials and project ID:", firebaseConfig.projectId);
+          } catch (e: any) {
+            console.warn("⚠️ Failed to initialize with Application Default Credentials, falling back to simple config:", e.message);
+            admin.initializeApp({
+              projectId: firebaseConfig.projectId,
+              databaseURL: firebaseConfig.databaseURL
+            });
+            console.log("Admin SDK initialized with simple config project ID:", firebaseConfig.projectId);
           }
-          admin.initializeApp(adminConfig);
-          console.log("Admin SDK initialized with config project ID:", firebaseConfig.projectId);
         } else {
           try {
             admin.initializeApp();
@@ -177,6 +186,53 @@ async function startServer() {
     }
   });
   const PORT = Number(process.env.PORT) || 3000;
+
+  // Get new Firebase Custom Token using existing JWT
+  app.get("/api/auth/firebase-token", authenticate, async (req: any, res) => {
+    try {
+      const currentDb = await initDb();
+      if (!currentDb) throw new Error("Database not initialized");
+
+      const userDoc = await currentDb.collection('users').doc(req.user.uid).get();
+      if (!userDoc.exists) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+      const userData = userDoc.data()!;
+
+      const isSuper = isSuperAdmin(userData.username || userDoc.id);
+      const role = isSuper ? 'Admin' : (userData.roleTemplate || 'User');
+
+      let firebaseCustomToken = null;
+      try {
+        console.log(`[TokenRefresh] Attempting to generate Firebase Custom Token for UID: ${userDoc.id}`);
+        firebaseCustomToken = await admin.auth().createCustomToken(userDoc.id, {
+          email: userData.email || userData.username || userDoc.id,
+          email_verified: true,
+          role: role,
+          permissions: userData.permissions || [],
+          allowedWarehouses: isSuper ? ['*'] : (userData.allowedWarehouses || [])
+        });
+        console.log(`[TokenRefresh] Firebase Custom Token generated successfully`);
+      } catch (e: any) {
+        console.error('[TokenRefresh] ❌ Failed to create Firebase custom token with claims:', e.message || e);
+        
+        // Fallback: Try without claims
+        try {
+          console.log(`[TokenRefresh] Retrying Firebase Custom Token without claims for UID: ${userDoc.id}`);
+          firebaseCustomToken = await admin.auth().createCustomToken(userDoc.id);
+          console.log(`[TokenRefresh] Firebase Custom Token generated successfully (without claims)`);
+        } catch (e2: any) {
+          console.error('[TokenRefresh] ❌ Failed to create Firebase custom token even without claims:', e2.message || e2);
+          return res.status(500).json({ success: false, error: "Failed to generate Firebase token: " + (e2.message || e2) });
+        }
+      }
+
+      res.json({ success: true, firebaseCustomToken });
+    } catch (error: any) {
+      console.error("Firebase Token Refresh Error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
   // Login Endpoint
   app.post("/api/login", async (req, res) => {

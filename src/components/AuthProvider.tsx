@@ -50,14 +50,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(savedToken);
         setUser(parsedUser);
         
-        // Restore Firebase Auth session if custom token exists
-        const savedFirebaseToken = localStorage.getItem('firebase_custom_token');
-        if (savedFirebaseToken) {
-          signInWithCustomToken(auth, savedFirebaseToken).catch(err => {
-            console.error('Failed to restore Firebase Auth session:', err);
-          });
-        }
-
         setProfile({
           uid: parsedUser.uid,
           username: parsedUser.username,
@@ -68,6 +60,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           roleTemplate: parsedUser.role,
           permissions: parsedUser.permissions || (ROLE_TEMPLATES as any)[parsedUser.role] || []
         });
+
+        // Restore Firebase Auth session if custom token exists
+        const savedFirebaseToken = localStorage.getItem('firebase_custom_token');
+        
+        const refreshFirebaseToken = async () => {
+          try {
+            const res = await fetch('/api/auth/firebase-token', {
+              headers: { 'x-v2-auth-token': savedToken }
+            });
+            const data = await res.json();
+            if (data.success && data.firebaseCustomToken) {
+              localStorage.setItem('firebase_custom_token', data.firebaseCustomToken);
+              await signInWithCustomToken(auth, data.firebaseCustomToken);
+              console.log('✅ Firebase Auth session refreshed');
+            } else {
+              throw new Error(data.error || 'Failed to refresh token');
+            }
+          } catch (err) {
+            console.error('❌ Failed to refresh Firebase Auth session:', err);
+          } finally {
+            setLoading(false);
+            setIsAuthReady(true);
+          }
+        };
+
+        if (savedFirebaseToken) {
+          signInWithCustomToken(auth, savedFirebaseToken)
+            .then(() => {
+              console.log('✅ Firebase Auth session restored');
+              setLoading(false);
+              setIsAuthReady(true);
+            })
+            .catch(err => {
+              console.warn('⚠️ Firebase token might be expired, attempting refresh...', err.message);
+              refreshFirebaseToken();
+            });
+        } else {
+          // No firebase token but we have JWT, try to get one
+          refreshFirebaseToken();
+        }
+        return; // Wait for promise
       } catch (e) {
         console.error('Failed to parse saved user info', e);
         localStorage.removeItem('x-v2-auth-token');

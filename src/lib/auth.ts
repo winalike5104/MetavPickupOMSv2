@@ -96,6 +96,10 @@ export const authenticate = (req: any, res: Response, next: NextFunction) => {
  * @param db - The firebase-admin firestore instance
  */
 export const loginUser = async (db: any, { username, password }: any) => {
+  if (!admin.apps.length) {
+    console.warn("⚠️ [Auth] Firebase Admin SDK not initialized yet in auth.ts module context!");
+  }
+  
   const normalizedUsername = username.toLowerCase();
   
   console.log(`Attempting login for: ${username} (normalized: ${normalizedUsername})`);
@@ -177,6 +181,7 @@ const processUserLogin = async (userDoc: any, userData: any, password: any) => {
   // Generate Firebase Custom Token for direct Firestore access
   let firebaseCustomToken = null;
   try {
+    console.log(`[Auth] Attempting to generate Firebase Custom Token for UID: ${userDoc.id}`);
     firebaseCustomToken = await admin.auth().createCustomToken(userDoc.id, {
       email: userData.email || userData.username || userDoc.id,
       email_verified: true,
@@ -184,8 +189,19 @@ const processUserLogin = async (userDoc: any, userData: any, password: any) => {
       permissions: userData.permissions || [],
       allowedWarehouses: isSuper ? ['*'] : (userData.allowedWarehouses || [])
     });
-  } catch (e) {
-    console.error('Failed to create Firebase custom token:', e);
+    console.log(`[Auth] Firebase Custom Token generated successfully for ${userDoc.id}`);
+  } catch (e: any) {
+    console.error('❌ Failed to create Firebase custom token with claims:', e.message || e);
+    
+    // Fallback: Try without claims
+    try {
+      console.log(`[Auth] Retrying Firebase Custom Token without claims for UID: ${userDoc.id}`);
+      firebaseCustomToken = await admin.auth().createCustomToken(userDoc.id);
+      console.log(`[Auth] Firebase Custom Token generated successfully (without claims) for ${userDoc.id}`);
+    } catch (e2: any) {
+      console.error('❌ Failed to create Firebase custom token even without claims:', e2.message || e2);
+      console.log('💡 Tip: This usually means the Firebase Admin SDK is not initialized with a Service Account or the environment lacks "Service Account Token Creator" permissions.');
+    }
   }
 
   return {
