@@ -2,49 +2,53 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Helper Functions (Optimized with Custom Claims)
+    // 1. 核心身份与授权判定 (Identity & Authorization)
     // ===============================================================
     
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    // 提取自定义令牌声明 (Custom Claims)
+    function getClaims() {
+      return request.auth.token;
+    }
+
+    // 检查是否为系统超级管理员 (硬编码邮箱作为最后防线)
     function isSystemAdmin() {
+      let email = getClaims().email;
       return isAuthenticated() && 
-             (request.auth.token.email == "windalike5104@gmail.com" || request.auth.token.email == "alan@pickup.system") && 
-             request.auth.token.email_verified == true;
+             (email == "windalike5104@gmail.com" || email == "alan@pickup.system") && 
+             getClaims().email_verified == true;
     }
 
-    function isUserAdmin() {
-      return isAuthenticated() && (request.auth.token.role == 'Admin' || isSystemAdmin());
+    // 检查是否拥有特定权限 (直接查验 Token 里的权限矩阵)
+    function hasPermission(perm) {
+      let perms = getClaims().permissions;
+      return isAuthenticated() && 
+             (perms is list && perms.hasAny([perm]) || isSystemAdmin());
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Horizontal Data Isolation: Check if user has access to a specific warehouse
+    // 仓库访问授权 (信任令牌中的授权数组)
     function hasWarehouseAccess(warehouseId) {
+      let allowed = getClaims().allowedWarehouses;
       return isAuthenticated() && 
-             (request.auth.token.allowedWarehouses.hasAny(['*', warehouseId]) || isSystemAdmin());
+             (
+               (allowed is list && allowed.hasAny(['*', warehouseId])) || 
+               isSystemAdmin()
+             );
     }
 
-    // Check if only specific fields are being modified (Granular Write Control)
+    // ===============================================================
+    // 2. 防御性逻辑与辅助函数 (Defensive Logic)
+    // ===============================================================
+
+    // 检查是否仅修改了允许的字段
     function isOnlyUpdatingFields(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
 
-    // ===============================================================
-    // Layered Validation (Structural Checks Only)
-    // ===============================================================
-
-    function isValidUser(data) {
-      return data.username is string && 
-             data.name is string && 
-             data.status in ['Active', 'Disabled'] &&
-             data.permissions is list;
-    }
-
+    // 基础订单结构校验
     function isValidOrder(data) {
       return data.bookingNumber is string && 
              data.customerName is string && 
@@ -53,91 +57,88 @@ service cloud.firestore {
     }
 
     // ===============================================================
-    // Rules
+    // 3. 资源规则 (Resource Rules)
     // ===============================================================
 
-    // Users collection
+    // 用户集合 (PII 保护)
     match /users/{userId} {
-      // Limit read to owner or admin to protect PII
-      allow read: if isAuthenticated() && (isOwner(userId) || isUserAdmin());
-      
-      // Writes managed by backend or System Admin
+      allow read: if isAuthenticated() && (request.auth.uid == userId || hasPermission('Manage Users'));
       allow write: if isSystemAdmin(); 
     }
 
-    // Orders collection
+    // 订单集合 (数据隔离与行为授权)
     match /orders/{orderId} {
-      // Data Isolation: Only see orders from allowed warehouses
+      // 读：只要仓库授权匹配就放行
       allow read: if isAuthenticated() && hasWarehouseAccess(resource.data.warehouseId);
       
-      // Creation: Must have access to the target warehouse
+      // 写：创建需要仓库授权
       allow create: if isAuthenticated() && 
                     isValidOrder(request.resource.data) && 
                     hasWarehouseAccess(request.resource.data.warehouseId);
       
-      // Update: Granular permissions
+      // 写：更新需要仓库授权 + 行为授权
       allow update: if isAuthenticated() && 
                     (
                       isSystemAdmin() || 
                       (
                         hasWarehouseAccess(resource.data.warehouseId) &&
                         isValidOrder(request.resource.data) &&
-                        // Prevent changing critical financial/identity fields for non-admins
-                        (isUserAdmin() || isOnlyUpdatingFields(['warehouseStatus', 'pickingLog', 'notes', 'status']))
+                        // 只有具备管理权限的人能改财务/身份字段，普通人只能改状态/备注
+                        (hasPermission('Manage Orders') || isOnlyUpdatingFields(['warehouseStatus', 'pickingLog', 'notes', 'status']))
                       )
                     );
       
-      allow delete: if isUserAdmin();
+      allow delete: if hasPermission('Manage Orders');
     }
 
-    // SKUs collection
+    // SKU 集合 (默认放行读，限制写)
     match /skus/{skuId} {
       allow read: if isAuthenticated();
-      allow write: if isUserAdmin();
+      allow write: if hasPermission('Manage SKUs');
     }
 
-    // Stores collection
+    // 门店集合
     match /stores/{storeId} {
       allow read: if isAuthenticated();
-      allow write: if isUserAdmin();
+      allow write: if hasPermission('Manage Stores');
     }
 
-    // Logs collection
+    // 日志集合
     match /logs/{logId} {
-      allow read: if isUserAdmin();
+      allow read: if hasPermission('View Logs');
       allow create: if isAuthenticated();
     }
 
-    // Notifications
+    // 通知集合
     match /notifications/{notifId} {
       allow read: if isAuthenticated() && request.auth.uid == resource.data.recipientUid;
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && request.auth.uid == resource.data.recipientUid;
     }
 
-    // Announcements
+    // 公告集合
     match /announcements/{annId} {
       allow read: if isAuthenticated();
-      allow write: if isUserAdmin();
+      allow write: if hasPermission('Manage Announcements');
     }
 
-    // User Groups
+    // 用户组集合
     match /userGroups/{groupId} {
       allow read: if isAuthenticated();
-      allow write: if isUserAdmin();
+      allow write: if hasPermission('Manage User Groups');
     }
 
-    // Bug Reports
+    // 错误报告
     match /bug_reports/{reportId} {
-      allow read: if isUserAdmin();
+      allow read: if hasPermission('Manage Users');
       allow create: if isAuthenticated();
     }
 
-    // Unique Keys (Shadow collection for uniqueness)
+    // 唯一键约束
     match /unique_keys/{keyId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow delete: if isUserAdmin();
+      allow delete: if hasPermission('Manage Orders');
     }
   }
 }

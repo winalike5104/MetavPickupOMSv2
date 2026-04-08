@@ -45,6 +45,7 @@ import {
   Smartphone,
   ShoppingCart,
   AlertTriangle,
+  Info,
   Mail,
   Send,
   MessageSquare
@@ -69,6 +70,14 @@ export const OrderDetail: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
   const [logs, setLogs] = useState<OperationLog[]>([]);
+  
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: 'danger' | 'info';
+  } | null>(null);
   
   // Signature State
   const [showSignatureModal, setShowSignatureModal] = useState(false);
@@ -404,10 +413,22 @@ export const OrderDetail: React.FC = () => {
         return;
       }
       
-      const confirmed = window.confirm('Are you sure you want to cancel this order? This action cannot be undone.');
-      if (!confirmed) return;
+      setConfirmAction({
+        title: 'Cancel Order',
+        message: 'Are you sure you want to cancel this order? This action cannot be undone.',
+        type: 'danger',
+        onConfirm: () => executeStatusUpdate(newStatus)
+      });
+      setShowConfirmModal(true);
+      return;
     }
 
+    executeStatusUpdate(newStatus);
+  };
+
+  const executeStatusUpdate = async (newStatus: OrderStatus) => {
+    if (!id || !profile || !order) return;
+    
     // Rule: Confirm pickup requires signature
     if (newStatus === 'Picked Up') {
       setShowSignatureModal(true);
@@ -1575,6 +1596,59 @@ export const OrderDetail: React.FC = () => {
 
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {showConfirmModal && confirmAction && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className={cn(
+                    "p-3 rounded-full",
+                    confirmAction.type === 'danger' ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-600"
+                  )}>
+                    {confirmAction.type === 'danger' ? <AlertTriangle className="w-6 h-6" /> : <Info className="w-6 h-6" />}
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">{confirmAction.title}</h3>
+                </div>
+                <p className="text-gray-600 leading-relaxed">
+                  {confirmAction.message}
+                </p>
+              </div>
+              <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setConfirmAction(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    confirmAction.onConfirm();
+                    setShowConfirmModal(false);
+                    setConfirmAction(null);
+                  }}
+                  className={cn(
+                    "px-6 py-2 rounded-lg text-sm font-medium text-white transition-colors shadow-sm",
+                    confirmAction.type === 'danger' ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                  )}
+                >
+                  Confirm
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Print View (Hidden) */}
       <div className="hidden print:block p-8 bg-white text-black">

@@ -148,11 +148,21 @@ export const Orders = () => {
     try {
       const ordersRef = collection(db, 'orders');
       
-      // If warehouse is AKL, we fetch more broadly to catch orders without warehouseId
+      // 核心优化：确保查询条件与安全规则匹配 (Query Matching)
+      // 即使是 AKL 仓库，也必须显式指定 warehouseId 过滤，除非是超级管理员
       let q;
-      if (activeWarehouse === 'AKL') {
-        q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
+      const isSuper = isSystemAdmin(profile?.username || profile?.email);
+      
+      if (isSuper) {
+        // 超级管理员可以扫描全库
+        if (activeWarehouse === 'AKL') {
+          q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
+        } else {
+          q = query(ordersRef, where('warehouseId', '==', activeWarehouse), orderBy('createdTime', 'desc'), limit(3000));
+        }
       } else {
+        // 普通用户必须严格遵守仓库隔离
+        // 如果 activeWarehouse 是 AKL，且用户有权限，也必须显式过滤以通过规则校验
         q = query(ordersRef, where('warehouseId', '==', activeWarehouse), orderBy('createdTime', 'desc'), limit(3000));
       }
       
@@ -161,11 +171,12 @@ export const Orders = () => {
         snap = await getDocs(q);
       } catch (err: any) {
         console.error('Error fetching orders:', err);
-        const fallbackQ = query(ordersRef, limit(3000));
+        // 如果主查询失败，尝试一个最基础的受限查询作为兜底
+        const fallbackQ = query(ordersRef, where('warehouseId', '==', activeWarehouse), limit(100));
         snap = await getDocs(fallbackQ);
       }
 
-      const allFetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      const allFetched = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Order));
       console.log(`DEBUG: Fetched ${allFetched.length} orders total from Firestore`);
       
       // Sort in memory by createdTime descending

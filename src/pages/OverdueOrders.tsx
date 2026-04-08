@@ -3,7 +3,7 @@ import { collection, query, getDocs, where, doc, updateDoc, serverTimestamp, lim
 import { db } from '../firebase';
 import { Order, AuditLog, FollowUpLog } from '../types';
 import { useAuth } from '../components/AuthProvider';
-import { cn, formatDate, handleFirestoreError, OperationType, logAction } from '../utils';
+import { cn, formatDate, handleFirestoreError, OperationType, logAction, isSystemAdmin } from '../utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, 
@@ -82,15 +82,41 @@ export const OverdueOrders = () => {
       const ordersRef = collection(db, 'orders');
       // Base filter: Paid but not Picked Up
       // Note: We also exclude Reviewed and Cancelled as they are terminal
-      const q = query(
-        ordersRef, 
-        where('paymentStatus', '==', 'Paid'),
-        where('status', '==', 'Created'),
-        limit(1000)
-      );
+      
+      let q;
+      const isSuper = isSystemAdmin(profile?.username || profile?.email);
+      
+      if (isSuper || (profile?.allowedWarehouses || []).includes('*')) {
+        // 超级管理员或拥有全库权限的用户可以扫描
+        q = query(
+          ordersRef, 
+          where('paymentStatus', '==', 'Paid'),
+          where('status', '==', 'Created'),
+          limit(1000)
+        );
+      } else {
+        // 普通用户必须按仓库过滤以通过安全规则校验
+        // 如果有 activeWarehouse 则用它，否则用第一个授权仓库
+        const targetWarehouse = activeWarehouse || (profile?.allowedWarehouses && profile.allowedWarehouses[0]);
+        
+        if (targetWarehouse) {
+          q = query(
+            ordersRef, 
+            where('warehouseId', '==', targetWarehouse),
+            where('paymentStatus', '==', 'Paid'),
+            where('status', '==', 'Created'),
+            limit(1000)
+          );
+        } else {
+          // 无权限仓库，返回空查询
+          setOrders([]);
+          setLoading(false);
+          return;
+        }
+      }
       
       const snap = await getDocs(q);
-      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Order));
       
       setOrders(fetchedOrders);
     } catch (err) {

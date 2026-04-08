@@ -132,14 +132,24 @@ export const Dashboard = () => {
     try {
       const ordersRef = collection(db, 'orders');
       
-      // Fetch orders. If warehouse is AKL, we fetch all to include legacy orders (missing warehouseId)
-      // Otherwise, we can filter strictly by warehouseId
+      // 核心优化：确保查询条件与安全规则匹配 (Query Matching)
       let q;
-      if (warehouse === 'AKL') {
-        // For AKL, we fetch all orders and filter in memory to include legacy
-        q = query(ordersRef, orderBy('createdTime', 'desc'), limit(1000));
+      const isSuper = isSystemAdmin(profile?.username || profile?.email);
+      
+      if (isSuper || (profile?.allowedWarehouses || []).includes('*')) {
+        // 超级管理员或拥有全库权限的用户可以扫描
+        if (warehouse === 'AKL') {
+          q = query(ordersRef, orderBy('createdTime', 'desc'), limit(1000));
+        } else {
+          q = query(
+            ordersRef, 
+            where('warehouseId', '==', warehouse),
+            orderBy('createdTime', 'desc'),
+            limit(1000)
+          );
+        }
       } else {
-        // For other warehouses, we filter strictly
+        // 普通用户必须严格遵守仓库隔离，显式过滤以通过规则校验
         q = query(
           ordersRef, 
           where('warehouseId', '==', warehouse),
@@ -161,7 +171,7 @@ export const Dashboard = () => {
         }
       }
 
-      const allFetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      const allFetched = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Order));
       
       // Filter by warehouse: match warehouse OR missing warehouseId (assumed AKL)
       const filteredByWarehouse = allFetched.filter(order => {

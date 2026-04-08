@@ -181,6 +181,7 @@ const processUserLogin = async (userDoc: any, userData: any, password: any) => {
       email: userData.email || userData.username || userDoc.id,
       email_verified: true,
       role: role,
+      permissions: userData.permissions || [],
       allowedWarehouses: isSuper ? ['*'] : (userData.allowedWarehouses || [])
     });
   } catch (e) {
