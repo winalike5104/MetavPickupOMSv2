@@ -792,6 +792,21 @@ export const SKUDatabase = () => {
     await processBatchUpload(csvData);
   };
 
+  const downloadTemplate = () => {
+    const headers = 'SKU,Product Name,Location';
+    const example = 'ABC-123,Wireless Mouse,A-01-02\nXYZ-789,Keyboard,B-02-03';
+    const csvContent = `${headers}\n${example}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'sku_upload_template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filteredSkus = useMemo(() => {
     return skus
       .filter(s => {
@@ -1189,9 +1204,18 @@ export const SKUDatabase = () => {
               }}><X className="w-6 h-6 text-slate-400" /></button>
             </div>
             <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-blue-700 text-sm flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                <p>Upload a CSV file or paste data below. Format: <strong>SKU,Product Name,Location</strong>. Only SKU is required.</p>
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-blue-700 text-sm flex flex-col gap-3">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <p>Upload a CSV file or paste data below. Format: <strong>SKU,Product Name,Location</strong>. Only SKU is required.</p>
+                </div>
+                <button 
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-bold text-xs transition-colors w-fit ml-8"
+                >
+                  <Download className="w-4 h-4" />
+                  Download CSV Template
+                </button>
               </div>
 
                 <div className="relative group">
