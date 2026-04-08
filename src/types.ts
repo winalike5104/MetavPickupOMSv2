@@ -9,6 +9,8 @@ export interface SKU {
   sku: string;
   productName: string;
   location: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Store {

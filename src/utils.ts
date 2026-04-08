@@ -64,8 +64,8 @@ export const hasPermission = (profile: UserProfile | null, permission: Permissio
 
 export const isSystemAdmin = (username: string | null | undefined): boolean => {
   if (!username) return false;
-  const adminIdentifier = 'windalike5104@gmail.com';
-  return username.trim().toLowerCase() === adminIdentifier || username.trim().toLowerCase() === 'admin';
+  const admins = ['windalike5104@gmail.com', 'alan@pickup.system', 'admin'];
+  return admins.includes(username.trim().toLowerCase());
 };
 
 export const createNotification = async (

@@ -1479,6 +1479,10 @@ async function startServer() {
             location: finalLocation,
             updatedAt: new Date().toISOString()
           };
+
+          if (!currentSnap.exists) {
+            updateData.createdAt = updateData.updatedAt;
+          }
           
           batch.set(docRefs[j], updateData, { merge: true });
           updatesInThisBatch++;

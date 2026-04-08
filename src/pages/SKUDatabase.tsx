@@ -198,7 +198,10 @@ export const SKUDatabase = () => {
           if (issue.id) deleteIds.add(issue.id);
         } else if (issue.type === 'missing_name') {
           if (issue.id && !deleteIds.has(issue.id)) {
-            updateMap.set(issue.id, { productName: issue.sku });
+            updateMap.set(issue.id, { 
+              productName: issue.sku,
+              updatedAt: new Date().toISOString()
+            });
           }
         }
       });
@@ -237,7 +240,10 @@ export const SKUDatabase = () => {
           });
           
           if (keep.id && (!keep.productName || keep.productName.trim() === '')) {
-            updateMap.set(keep.id, { productName: keep.sku });
+            updateMap.set(keep.id, { 
+              productName: keep.sku,
+              updatedAt: new Date().toISOString()
+            });
           }
         }
       }
@@ -411,12 +417,17 @@ export const SKUDatabase = () => {
         return;
       }
 
-      const data = {
+      const now = new Date().toISOString();
+      const data: any = {
         sku: skuUpper, // 存入原始 SKU (带斜杠)
         productName: finalName,
         location: finalLocation,
-        updatedAt: new Date().toISOString()
+        updatedAt: now
       };
+
+      if (!currentSnap.exists()) {
+        data.createdAt = now;
+      }
 
       // If we are editing an existing record and the SKU ID has changed, 
       // we need to delete the old document.
@@ -711,10 +722,17 @@ export const SKUDatabase = () => {
             location: finalLocation
           };
 
-          batch.set(docRefs[j], {
+          const now = new Date().toISOString();
+          const updateData: any = {
             ...skuData,
-            updatedAt: new Date().toISOString()
-          }, { merge: true });
+            updatedAt: now
+          };
+
+          if (isNew) {
+            updateData.createdAt = now;
+          }
+
+          batch.set(docRefs[j], updateData, { merge: true });
           
           updatesInThisBatch++;
           totalUploaded++;

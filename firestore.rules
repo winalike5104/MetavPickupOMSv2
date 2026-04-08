@@ -2,89 +2,54 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Fields: username, name, status, permissions, roleTemplate, allowedWarehouses
-    //
-    // Collection: orders
-    // Fields: bookingNumber, customerName, status, createdTime, createdBy, warehouseId, storeId, warehouseStatus, etc.
-    //
-    // Collection: skus
-    // Fields: sku, productName, location
-    //
-    // ===============================================================
-
-    // ===============================================================
-    // Helper Functions
+    // Helper Functions (Optimized with Custom Claims)
     // ===============================================================
     
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isSystemAdmin() {
+      return isAuthenticated() && 
+             (request.auth.token.email == "windalike5104@gmail.com" || request.auth.token.email == "alan@pickup.system") && 
+             request.auth.token.email_verified == true;
+    }
+
+    function isUserAdmin() {
+      return isAuthenticated() && (request.auth.token.role == 'Admin' || isSystemAdmin());
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roleTemplate == 'Admin' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.hasAny(['Manage Users']) ||
-         (request.auth.token.email == "windalike5104@gmail.com" && request.auth.token.email_verified == true));
+    // Horizontal Data Isolation: Check if user has access to a specific warehouse
+    function hasWarehouseAccess(warehouseId) {
+      return isAuthenticated() && 
+             (request.auth.token.allowedWarehouses.hasAny(['*', warehouseId]) || isSystemAdmin());
     }
 
-    function hasPermission(perm) {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.hasAny([perm]);
-    }
-
-    function isAuditAuthorized() {
-      return isAdmin() || hasPermission('Audit Overdue Orders');
-    }
-
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidDateString(dateStr) {
-      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    // Check if only specific fields are being modified (Granular Write Control)
+    function isOnlyUpdatingFields(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
 
     // ===============================================================
-    // Domain Validators
+    // Layered Validation (Structural Checks Only)
     // ===============================================================
 
     function isValidUser(data) {
-      return data.username is string && data.username.size() > 0 &&
-             data.name is string && data.name.size() > 0 &&
+      return data.username is string && 
+             data.name is string && 
              data.status in ['Active', 'Disabled'] &&
              data.permissions is list;
     }
 
-    function isValidAuditLog(log) {
-      return log.closed_by is string && log.closed_by.size() > 0 &&
-             isValidDateString(log.closed_at) &&
-             log.reason in ['Staff Missed Click', 'Stock Missing', 'Abandoned by Customer', 'Other'] &&
-             (!('note' in log) || (log.note is string && log.note.size() < 1000));
-    }
-
     function isValidOrder(data) {
-      return data.bookingNumber is string && data.bookingNumber.size() > 0 &&
-             data.customerName is string && data.customerName.size() > 0 &&
-             data.status in ['Created', 'Pending', 'Confirmed', 'Picked Up', 'Reviewed', 'Overdue', 'Cancelled'] &&
-             data.warehouseId is string &&
-             (data.storeId == null || data.storeId is string) &&
-             (!('auditLog' in data) || isValidAuditLog(data.auditLog)) &&
-             (!('followUpLogs' in data) || data.followUpLogs is list);
+      return data.bookingNumber is string && 
+             data.customerName is string && 
+             data.status is string &&
+             data.warehouseId is string;
     }
 
     // ===============================================================
@@ -93,51 +58,53 @@ service cloud.firestore {
 
     // Users collection
     match /users/{userId} {
-      // Allow read for authenticated users (needed for profile and admin checks)
-      // BUT: Limit read to owner or admin to prevent PII leak
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      // Limit read to owner or admin to protect PII
+      allow read: if isAuthenticated() && (isOwner(userId) || isUserAdmin());
       
-      // Writes must go through backend API (enforced by checking for a special field or just denying)
-      // Actually, system instructions say: "Initially restricted: Never make any collection or data publicly readable"
-      // And "Default deny"
-      allow create, update, delete: if isAdmin(); 
+      // Writes managed by backend or System Admin
+      allow write: if isSystemAdmin(); 
     }
 
     // Orders collection
     match /orders/{orderId} {
-      allow read: if isAuthenticated();
+      // Data Isolation: Only see orders from allowed warehouses
+      allow read: if isAuthenticated() && hasWarehouseAccess(resource.data.warehouseId);
       
-      // Allow creation for users with 'Create Order' permission
-      allow create: if isAuthenticated() && isValidOrder(request.resource.data);
+      // Creation: Must have access to the target warehouse
+      allow create: if isAuthenticated() && 
+                    isValidOrder(request.resource.data) && 
+                    hasWarehouseAccess(request.resource.data.warehouseId);
       
-      // Allow update for authenticated users (with validation)
-      allow update: if isAuthenticated() && isValidOrder(request.resource.data) &&
-                    // Only authorized users can modify audit logs
+      // Update: Granular permissions
+      allow update: if isAuthenticated() && 
                     (
-                      (!('auditLog' in request.resource.data) || 
-                       (resource.data.keys().hasAll(['auditLog']) && request.resource.data.auditLog == resource.data.auditLog) ||
-                       (!resource.data.keys().hasAll(['auditLog']) && !request.resource.data.keys().hasAll(['auditLog']))) ||
-                      isAuditAuthorized()
+                      isSystemAdmin() || 
+                      (
+                        hasWarehouseAccess(resource.data.warehouseId) &&
+                        isValidOrder(request.resource.data) &&
+                        // Prevent changing critical financial/identity fields for non-admins
+                        (isUserAdmin() || isOnlyUpdatingFields(['warehouseStatus', 'pickingLog', 'notes', 'status']))
+                      )
                     );
       
-      allow delete: if isAdmin();
+      allow delete: if isUserAdmin();
     }
 
     // SKUs collection
     match /skus/{skuId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isUserAdmin();
     }
 
     // Stores collection
     match /stores/{storeId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isUserAdmin();
     }
 
     // Logs collection
     match /logs/{logId} {
-      allow read: if isAdmin();
+      allow read: if isUserAdmin();
       allow create: if isAuthenticated();
     }
 
@@ -151,25 +118,26 @@ service cloud.firestore {
     // Announcements
     match /announcements/{annId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isUserAdmin();
     }
 
     // User Groups
     match /userGroups/{groupId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isUserAdmin();
     }
 
     // Bug Reports
     match /bug_reports/{reportId} {
-      allow read: if isAdmin();
+      allow read: if isUserAdmin();
       allow create: if isAuthenticated();
     }
 
-    // Unique Keys
+    // Unique Keys (Shadow collection for uniqueness)
     match /unique_keys/{keyId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
+      allow delete: if isUserAdmin();
     }
   }
 }

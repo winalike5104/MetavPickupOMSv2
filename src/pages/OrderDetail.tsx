@@ -380,7 +380,10 @@ export const OrderDetail: React.FC = () => {
   };
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
-    if (!id || !profile || !order) return;
+    if (!id || !profile || !order) {
+      console.warn('Cannot update status: missing context', { id, hasProfile: !!profile, hasOrder: !!order });
+      return;
+    }
     
     // Rule: Order must be paid before pickup
     if (newStatus === 'Picked Up' && order.paymentStatus !== 'Paid') {
@@ -395,9 +398,14 @@ export const OrderDetail: React.FC = () => {
     }
 
     // Rule: Only unpaid orders can be cancelled
-    if (newStatus === 'Cancelled' && order.paymentStatus === 'Paid') {
-      alert('Only orders with removed payment (Unpaid) can be cancelled.');
-      return;
+    if (newStatus === 'Cancelled') {
+      if (order.paymentStatus === 'Paid') {
+        alert('Only orders with removed payment (Unpaid) can be cancelled. Please edit the order to change payment status first.');
+        return;
+      }
+      
+      const confirmed = window.confirm('Are you sure you want to cancel this order? This action cannot be undone.');
+      if (!confirmed) return;
     }
 
     // Rule: Confirm pickup requires signature
@@ -646,6 +654,23 @@ export const OrderDetail: React.FC = () => {
     setShowSkuResults(false);
   };
 
+  const addManualItem = () => {
+    const newItem: OrderItem = {
+      sku: skuSearch.toUpperCase() || 'CUSTOM-SKU',
+      productName: 'Custom Product',
+      location: 'N/A',
+      qty: 1,
+      unit_price: 0
+    };
+    
+    setEditForm(prev => ({
+      ...prev,
+      items: [...(prev.items || []), newItem]
+    }));
+    setSkuSearch('');
+    setShowSkuResults(false);
+  };
+
   const removeItem = (index: number) => {
     setEditForm(prev => ({
       ...prev,
@@ -657,6 +682,27 @@ export const OrderDetail: React.FC = () => {
     setEditForm(prev => ({
       ...prev,
       items: prev.items?.map((item, i) => i === index ? { ...item, qty: Math.max(1, qty) } : item)
+    }));
+  };
+
+  const updateItemSku = (index: number, sku: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      items: prev.items?.map((item, i) => i === index ? { ...item, sku: sku.toUpperCase() } : item)
+    }));
+  };
+
+  const updateItemProductName = (index: number, productName: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      items: prev.items?.map((item, i) => i === index ? { ...item, productName } : item)
+    }));
+  };
+
+  const updateItemLocation = (index: number, location: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      items: prev.items?.map((item, i) => i === index ? { ...item, location } : item)
     }));
   };
 
@@ -796,7 +842,7 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {hasPermission(profile, 'Cancel Orders', profile?.email) && order.status !== 'Cancelled' && (
+            {hasPermission(profile, 'Cancel Orders', profile?.username || profile?.email) && order.status !== 'Cancelled' && (
               <button
                 onClick={() => handleStatusChange('Cancelled')}
                 className="inline-flex items-center px-3 py-1.5 bg-red-50 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100 transition-all"
@@ -806,7 +852,7 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {hasPermission(profile, 'Manage Users', profile?.email) && (
+            {hasPermission(profile, 'Manage Users', profile?.username || profile?.email) && (
               <button
                 onClick={handleDeleteOrder}
                 className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"
@@ -1397,7 +1443,7 @@ export const OrderDetail: React.FC = () => {
                         className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                       
-                      {showSkuResults && skuResults.length > 0 && (
+                      {showSkuResults && (
                         <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
                           {skuResults.map(sku => (
                             <button
@@ -1410,6 +1456,18 @@ export const OrderDetail: React.FC = () => {
                               <span className="text-[10px] text-gray-400">Loc: {sku.location}</span>
                             </button>
                           ))}
+                          {skuSearch.length > 0 && (
+                            <button
+                              onClick={addManualItem}
+                              className="w-full text-left px-4 py-3 hover:bg-indigo-50 flex items-center gap-2 text-indigo-600 border-t border-gray-100"
+                            >
+                              <Plus className="w-4 h-4" />
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold">Add Custom: {skuSearch.toUpperCase()}</span>
+                                <span className="text-[10px] opacity-70 italic">Not in database</span>
+                              </div>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1421,6 +1479,7 @@ export const OrderDetail: React.FC = () => {
                         <tr>
                           <th className="px-4 py-3">SKU</th>
                           <th className="px-4 py-3">Product</th>
+                          <th className="px-4 py-3">Location</th>
                           <th className="px-4 py-3 w-20 text-center">Qty</th>
                           <th className="px-4 py-3 w-28 text-right">Price</th>
                           <th className="px-4 py-3 w-16"></th>
@@ -1429,8 +1488,30 @@ export const OrderDetail: React.FC = () => {
                       <tbody className="divide-y divide-gray-100">
                         {editForm.items?.map((item, idx) => (
                           <tr key={idx}>
-                            <td className="px-4 py-3 font-mono text-sm">{item.sku}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{item.productName}</td>
+                            <td className="px-4 py-3 font-mono text-sm">
+                              <input
+                                type="text"
+                                value={item.sku}
+                                onChange={e => updateItemSku(idx, e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm font-mono uppercase focus:ring-1 focus:ring-blue-500 outline-none"
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              <input
+                                type="text"
+                                value={item.productName || ''}
+                                onChange={e => updateItemProductName(idx, e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              <input
+                                type="text"
+                                value={item.location || ''}
+                                onChange={e => updateItemLocation(idx, e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                              />
+                            </td>
                             <td className="px-4 py-3">
                               <input
                                 type="number"

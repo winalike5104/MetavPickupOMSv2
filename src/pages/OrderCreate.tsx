@@ -170,13 +170,21 @@ export const OrderCreate = () => {
         newItems[existingIndex].qty = (newItems[existingIndex].qty || 0) + 1;
         setItems(newItems);
       } else {
-        setItems([...items, { ...sku, qty: 1, unit_price: 0 }]);
+        setItems([...items, { 
+          sku: sku.sku, 
+          productName: sku.productName, 
+          location: sku.location, 
+          qty: 1, 
+          unit_price: 0 
+        }]);
       }
       setSkuSearch('');
       setShowSkuResults(false);
     } else {
       // Manual add
-      setItems([...items, { sku: '', productName: '', location: '', qty: 1, unit_price: 0 }]);
+      setItems([...items, { sku: skuSearch.toUpperCase() || '', productName: '', location: '', qty: 1, unit_price: 0 }]);
+      setSkuSearch('');
+      setShowSkuResults(false);
     }
   };
 
@@ -431,7 +439,7 @@ export const OrderCreate = () => {
                 />
               </div>
               
-              {showSkuResults && skuResults.length > 0 && (
+              {showSkuResults && (
                 <div className="absolute z-10 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-auto">
                   {skuResults.map(sku => (
                     <button
@@ -451,6 +459,19 @@ export const OrderCreate = () => {
                       </div>
                     </button>
                   ))}
+                  {skuSearch.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => addItem()}
+                      className="w-full text-left px-4 py-4 hover:bg-indigo-50 flex items-center gap-3 text-indigo-600 border-t border-slate-100"
+                    >
+                      <Plus className="w-5 h-5" />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold">Add Custom: {skuSearch.toUpperCase()}</span>
+                        <span className="text-[10px] opacity-70 italic uppercase tracking-wider">Not in SKU database</span>
+                      </div>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

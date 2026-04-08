@@ -179,7 +179,9 @@ const processUserLogin = async (userDoc: any, userData: any, password: any) => {
   try {
     firebaseCustomToken = await admin.auth().createCustomToken(userDoc.id, {
       email: userData.email || userData.username || userDoc.id,
-      email_verified: true
+      email_verified: true,
+      role: role,
+      allowedWarehouses: isSuper ? ['*'] : (userData.allowedWarehouses || [])
     });
   } catch (e) {
     console.error('Failed to create Firebase custom token:', e);
