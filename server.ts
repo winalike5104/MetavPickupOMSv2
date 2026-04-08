@@ -442,66 +442,71 @@ async function startServer() {
       }
 
       // Check for global uniqueness of bookingNumber
-      let bookingDoc;
-      console.log("👉 Checking BookingNumber:", `|${bookingNumber}|`);
-      try {
-        bookingDoc = await currentDb.collection("orders").doc(bookingNumber).get();
-      } catch (fsError: any) {
-        console.error("🔥 Firestore Read Error:", fsError);
-        throw fsError;
-      }
+      const bKeyRef = currentDb.collection("unique_keys").doc(`bn_${bookingNumber}`);
+      const rKeyRef = refNumber ? currentDb.collection("unique_keys").doc(`ref_${refNumber}`) : null;
 
-      if (bookingDoc.exists) {
-        const existingOrder = bookingDoc.data();
-        const existingWarehouse = existingOrder?.warehouseId || 'another warehouse';
+      try {
+        await currentDb.runTransaction(async (transaction) => {
+          const bSnap = await transaction.get(bKeyRef);
+          if (bSnap.exists) {
+            throw new Error(`Booking Number [${bookingNumber}] already exists.`);
+          }
+
+          if (rKeyRef) {
+            const rSnap = await transaction.get(rKeyRef);
+            if (rSnap.exists) {
+              throw new Error(`Customer Reference [${refNumber}] already exists.`);
+            }
+          }
+
+          // Also check if order document exists (just in case)
+          const orderDoc = await transaction.get(currentDb.collection("orders").doc(bookingNumber));
+          if (orderDoc.exists) {
+            throw new Error(`Order document [${bookingNumber}] already exists.`);
+          }
+
+          // Calculate totalAmount if not provided or to ensure accuracy
+          const calculatedTotal = (items || []).reduce((sum: number, item: any) => sum + ((item.qty || 0) * (item.unit_price || 0)), 0);
+
+          const orderData = {
+            bookingNumber,
+            refNumber: refNumber || null,
+            customerName,
+            customerEmail: customerEmail || null,
+            customerId: customerId || null,
+            storeId: storeId || null,
+            warehouseId,
+            pickupDateScheduled: pickupDateScheduled || null,
+            notes: notes || null,
+            createdBy: req.user.name || req.user.username,
+            creatorEmail: req.user.username,
+            creatorUid: req.user.uid,
+            createdTime: new Date().toISOString(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            items: items || [],
+            totalAmount: totalAmount !== undefined ? totalAmount : calculatedTotal,
+            paymentStatus,
+            paymentMethod: paymentMethod || "Not Specified",
+            paymentTime: paymentStatus === 'Paid' ? new Date().toISOString() : null,
+            paymentBy: paymentStatus === 'Paid' ? (req.user.name || req.user.username) : null,
+            status: 'Created',
+            notificationRecipients: notificationRecipients || []
+          };
+
+          // Set unique keys and order
+          transaction.set(bKeyRef, { createdAt: admin.firestore.FieldValue.serverTimestamp(), bookingNumber });
+          if (rKeyRef) {
+            transaction.set(rKeyRef, { createdAt: admin.firestore.FieldValue.serverTimestamp(), refNumber });
+          }
+          transaction.set(currentDb.collection("orders").doc(bookingNumber), orderData);
+        });
+      } catch (txError: any) {
+        console.error("🔥 Transaction Error:", txError);
         return res.status(409).json({ 
           success: false, 
-          error: `Booking Number [${bookingNumber}] already exists in ${existingWarehouse}.` 
+          error: txError.message || "Failed to create order due to uniqueness constraint."
         });
       }
-
-      // Check for global uniqueness of refNumber if provided
-      if (refNumber) {
-        const refQuery = await currentDb.collection("orders").where("refNumber", "==", refNumber).limit(1).get();
-        if (!refQuery.empty) {
-          const existingOrder = refQuery.docs[0].data();
-          const existingWarehouse = existingOrder?.warehouseId || 'another warehouse';
-          return res.status(409).json({ 
-            success: false, 
-            error: `Customer Reference [${refNumber}] already exists in ${existingWarehouse}.` 
-          });
-        }
-      }
-
-      // Calculate totalAmount if not provided or to ensure accuracy
-      const calculatedTotal = (items || []).reduce((sum: number, item: any) => sum + ((item.qty || 0) * (item.unit_price || 0)), 0);
-
-      const orderData = {
-        bookingNumber,
-        refNumber: refNumber || null,
-        customerName,
-        customerEmail: customerEmail || null,
-        customerId: customerId || null,
-        storeId: storeId || null,
-        warehouseId,
-        pickupDateScheduled: pickupDateScheduled || null,
-        notes: notes || null,
-        createdBy: req.user.name || req.user.username,
-        creatorEmail: req.user.username,
-        creatorUid: req.user.uid,
-        createdTime: new Date().toISOString(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        items: items || [],
-        totalAmount: totalAmount !== undefined ? totalAmount : calculatedTotal,
-        paymentStatus,
-        paymentMethod: paymentMethod || "Not Specified",
-        paymentTime: paymentStatus === 'Paid' ? new Date().toISOString() : null,
-        paymentBy: paymentStatus === 'Paid' ? (req.user.name || req.user.username) : null,
-        status: 'Created',
-        notificationRecipients: notificationRecipients || []
-      };
-
-      await currentDb.collection("orders").doc(bookingNumber).set(orderData);
 
       // Log the action
       try {
@@ -713,60 +718,14 @@ async function startServer() {
 
   // Delete Order Endpoint
   app.post("/api/orders/delete", authenticate, async (req: any, res) => {
+    return res.status(403).json({ 
+      success: false, 
+      error: "Forbidden: Order deletion is strictly prohibited. Use 'Cancel' status instead." 
+    });
+    /* Original deletion logic disabled per security requirements
     const currentDb = await initDb();
-    if (!currentDb) {
-      return res.status(503).json({ success: false, error: "Database not initialized" });
-    }
-
-    try {
-      const { orderId } = req.body;
-      if (!orderId) {
-        return res.status(400).json({ success: false, error: "Missing orderId" });
-      }
-
-      const orderRef = currentDb.collection("orders").doc(orderId);
-      const orderDoc = await orderRef.get();
-      
-      if (!orderDoc.exists) {
-        return res.status(404).json({ success: false, error: "Order not found" });
-      }
-
-      const order = orderDoc.data();
-      const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
-      const allowedWarehouses = req.user.allowedWarehouses || [];
-
-      // Data Isolation Check
-      if (!isSuper) {
-        if (!allowedWarehouses.includes('*') && !allowedWarehouses.includes(order?.warehouseId)) {
-          return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
-        }
-        // Only Admins can delete orders (or check permissions)
-        if (req.user.role !== 'Admin' && !(req.user.permissions || []).includes('Cancel Orders')) {
-           return res.status(403).json({ success: false, error: "Forbidden: Insufficient permissions to delete order" });
-        }
-      }
-
-      await orderRef.delete();
-
-      // Log the action
-      try {
-        await currentDb.collection("logs").add({
-          timestamp: new Date().toISOString(),
-          userId: req.user.uid,
-          userName: req.user.name || req.user.username,
-          action: 'Order Deleted',
-          details: `Deleted order ${orderId}`,
-          orderId: orderId
-        });
-      } catch (logErr) {
-        console.error("Failed to log order deletion:", logErr);
-      }
-
-      return res.json({ success: true });
-    } catch (error: any) {
-      console.error("Order Deletion Error:", error);
-      return res.status(500).json({ success: false, error: error.message });
-    }
+    ...
+    */
   });
 
   /**

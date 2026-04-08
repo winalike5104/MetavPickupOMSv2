@@ -95,7 +95,7 @@ service cloud.firestore {
                       )
                     );
       
-      allow delete: if hasPermission('Manage Orders');
+      allow delete: if false; // Strictly prohibited. Use 'Cancelled' status.
     }
 
     // SKU 集合 (默认放行读，限制写)

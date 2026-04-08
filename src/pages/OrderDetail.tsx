@@ -359,35 +359,6 @@ export const OrderDetail: React.FC = () => {
     }
   };
 
-  const handleDeleteOrder = async () => {
-    if (!id || !profile || !order || !token) return;
-    if (!window.confirm('Are you sure you want to delete this order? This action cannot be undone.')) return;
-
-    try {
-      const response = await fetch('/api/orders/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-v2-auth-token': `Bearer ${token}`,
-          'x-warehouse-id': activeWarehouse || ''
-        },
-        body: JSON.stringify({
-          orderId: id
-        })
-      });
-
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to delete order');
-      }
-
-      navigate('/orders');
-    } catch (err: any) {
-      console.error('Error deleting order:', err);
-      alert(err.message || 'Failed to delete order');
-    }
-  };
-
   const handleStatusChange = async (newStatus: OrderStatus) => {
     if (!id || !profile || !order) {
       console.warn('Cannot update status: missing context', { id, hasProfile: !!profile, hasOrder: !!order });
@@ -870,15 +841,6 @@ export const OrderDetail: React.FC = () => {
               >
                 <XCircle className="w-3.5 h-3.5 mr-1.5" />
                 Cancel
-              </button>
-            )}
-
-            {hasPermission(profile, 'Manage Users', profile?.username || profile?.email) && (
-              <button
-                onClick={handleDeleteOrder}
-                className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
               </button>
             )}
           </>
