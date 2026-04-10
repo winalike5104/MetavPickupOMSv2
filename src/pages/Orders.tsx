@@ -33,6 +33,7 @@ import {
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useOrderService } from '../hooks/useOrderService';
+import { useDebounce } from '../hooks/useDebounce';
 import { API_BASE_URL } from '../constants';
 import { useTask } from '../components/TaskProvider';
 
@@ -46,13 +47,13 @@ export const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [statusFilter, setStatusFilter] = useState(location.state?.statusFilter || 'All'); // Default to All or state
-  const [overdueThreshold, setOverdueThreshold] = useState(location.state?.overdueThreshold || 7); // Default 7 days or state
+  const [statusFilter, setStatusFilter] = useState(location.state?.statusFilter || 'All');
+  const [overdueThreshold, setOverdueThreshold] = useState(location.state?.overdueThreshold || 7);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [storeFilter, setStoreFilter] = useState('All');
   const [stores, setStores] = useState<{id: string, name: string}[]>([]);
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -113,13 +114,6 @@ export const Orders = () => {
       return () => clearTimeout(timer);
     }
   }, [notification]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
 
   useEffect(() => {
     if (activeWarehouse) {
@@ -645,9 +639,9 @@ export const Orders = () => {
             </button>
           </>
         }
-      />
-
-      <div className="flex flex-col md:flex-row gap-4">
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
@@ -672,8 +666,7 @@ export const Orders = () => {
                   onClick={handleBulkReviewClick}
                   disabled={bulkUpdating || isTaskRunning}
                   className={cn(
-                    "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50",
-                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-3 group-hover:text-sm" : "px-4 py-3 text-sm"
+                    "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 px-4 py-2.5 text-sm"
                   )}
                 >
                   {bulkUpdating ? (
@@ -687,8 +680,7 @@ export const Orders = () => {
                   onClick={handleBulkEmailClick}
                   disabled={bulkUpdating || isTaskRunning}
                   className={cn(
-                    "inline-flex items-center gap-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50",
-                    isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-3 group-hover:text-sm" : "px-4 py-3 text-sm"
+                    "inline-flex items-center gap-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 px-4 py-2.5 text-sm"
                   )}
                 >
                   {isTaskRunning ? (
@@ -768,8 +760,10 @@ export const Orders = () => {
               </select>
             </div>
           </div>
+        </div>
+      </PageHeader>
 
-          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         {/* Sentinel for Scroll Detection */}
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         {loading ? (
@@ -1034,8 +1028,9 @@ export const Orders = () => {
               ))}
             </div>
           )
-        )}
-      </div>
+        )
+      }
     </div>
-  );
+  </div>
+);
 };
