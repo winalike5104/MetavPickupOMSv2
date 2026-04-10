@@ -320,7 +320,7 @@ export const Dashboard = () => {
                 )}>Post Announcement</span>
               </button>
             )}
-            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+            {profile && hasPermission(profile, 'Create Order', profile.username || profile.email) && (
               <Link 
                 to="/orders/create"
                 className={cn(

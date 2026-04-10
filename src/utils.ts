@@ -64,7 +64,7 @@ export const hasPermission = (profile: UserProfile | null, permission: Permissio
 
 export const isSystemAdmin = (username: string | null | undefined): boolean => {
   if (!username) return false;
-  const admins = ['windalike5104@gmail.com', 'alan@pickup.system', 'admin'];
+  const admins = ['windalike5104@gmail.com', 'alan@pickup.system'];
   return admins.includes(username.trim().toLowerCase());
 };
 

@@ -597,7 +597,7 @@ export const Orders = () => {
                 <LayoutGrid className="w-5 h-5" />
               </button>
             </div>
-            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+            {profile && hasPermission(profile, 'Create Order', profile.username || profile.email) && (
               <Link 
                 to="/orders/bulk-import"
                 className={cn(
@@ -612,7 +612,7 @@ export const Orders = () => {
                 )}>Bulk Import</span>
               </Link>
             )}
-            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+            {profile && hasPermission(profile, 'Create Order', profile.username || profile.email) && (
               <Link 
                 to="/orders/create"
                 className={cn(
