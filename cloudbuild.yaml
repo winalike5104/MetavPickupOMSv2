@@ -1,0 +1,26 @@
+steps:
+  # Build the container image using Cloud Native Buildpacks
+  - name: 'gcr.io/k8s-skaffold/pack'
+    args:
+      - build
+      - 'gcr.io/$PROJECT_ID/app'
+      - '--builder'
+      - 'gcr.io/buildpacks/builder:v1'
+
+  # Deploy the image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'app'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/app'
+      - '--region'
+      - 'asia-east1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
