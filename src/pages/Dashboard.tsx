@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, limit, orderBy, doc, getDoc } from '
 import { db } from '../firebase';
 import { Order } from '../types';
 import { useAuth } from '../components/AuthProvider';
-import { logAction, isAdmin, isSystemAdmin, cn, formatDate } from '../utils';
+import { logAction, isAdmin, isSystemAdmin, cn, formatDate, hasPermission } from '../utils';
 import { 
   ShoppingBag, 
   CheckCircle2, 
@@ -320,16 +320,18 @@ export const Dashboard = () => {
                 )}>Post Announcement</span>
               </button>
             )}
-            <Link 
-              to="/orders/create"
-              className={cn(
-                "inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200",
-                isScrolled ? "px-4 py-2 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
-              )}
-            >
-              <Plus className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
-              Create New Order
-            </Link>
+            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
+              <Link 
+                to="/orders/create"
+                className={cn(
+                  "inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200",
+                  isScrolled ? "px-4 py-2 text-sm group-hover:px-6 group-hover:py-3 group-hover:text-base" : "px-6 py-3"
+                )}
+              >
+                <Plus className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
+                Create New Order
+              </Link>
+            )}
           </>
         }
       />

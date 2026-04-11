@@ -660,7 +660,7 @@ export const Orders = () => {
                 <Loader2 className={cn("w-5 h-5", loading && "animate-spin")} />
               </button>
             </div>
-            {selectedOrderIds.length > 0 && (
+            {selectedOrderIds.length > 0 && hasPermission(profile, 'Review Orders', profile?.username || profile?.email) && (
               <div className="flex gap-2">
                 <button
                   onClick={handleBulkReviewClick}
