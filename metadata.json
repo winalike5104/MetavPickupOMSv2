@@ -1,5 +1,5 @@
 {
   "name": "仓库管理系统 (WMS)v2",
-  "description": "A comprehensive internal system for managing pickup orders, SKU databases, payments, and customer signatures with a flexible RBAC permission system. Last deployed: 2026-04-11 07:10 UTC",
+  "description": "A comprehensive internal system for managing pickup orders, SKU databases, payments, and customer signatures with a flexible RBAC permission system.",
   "requestFramePermissions": []
 }

@@ -597,7 +597,7 @@ export const Orders = () => {
                 <LayoutGrid className="w-5 h-5" />
               </button>
             </div>
-            {profile && hasPermission(profile, 'Create Order', profile.username || profile.email) && (
+            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
               <Link 
                 to="/orders/bulk-import"
                 className={cn(
@@ -612,7 +612,7 @@ export const Orders = () => {
                 )}>Bulk Import</span>
               </Link>
             )}
-            {profile && hasPermission(profile, 'Create Order', profile.username || profile.email) && (
+            {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
               <Link 
                 to="/orders/create"
                 className={cn(
@@ -660,7 +660,7 @@ export const Orders = () => {
                 <Loader2 className={cn("w-5 h-5", loading && "animate-spin")} />
               </button>
             </div>
-            {selectedOrderIds.length > 0 && hasPermission(profile, 'Review Orders', profile?.username || profile?.email) && (
+            {selectedOrderIds.length > 0 && (
               <div className="flex gap-2">
                 <button
                   onClick={handleBulkReviewClick}
