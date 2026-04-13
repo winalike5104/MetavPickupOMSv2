@@ -219,7 +219,7 @@ export const GuestDisplay = () => {
             <div className="w-32 h-32 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse">
               <Megaphone className="w-12 h-12 text-indigo-400" />
             </div>
-            <h2 className="text-4xl font-bold text-white mb-4">Welcome to Metav</h2>
+            <h2 className="text-4xl font-bold text-white mb-4">Welcome</h2>
             <p className="text-slate-400 text-xl">Waiting for your order confirmation...</p>
             <div className="mt-12 flex items-center justify-center gap-2">
               <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
