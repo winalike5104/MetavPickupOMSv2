@@ -28,6 +28,8 @@ export const ReportSettings = () => {
   });
   const [reportLoading, setReportLoading] = useState(false);
   const [testingReport, setTestingReport] = useState(false);
+  const [testSuccess, setTestSuccess] = useState(false);
+  const [testError, setTestError] = useState('');
 
   const [isScrolled, setIsScrolled] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -108,9 +110,11 @@ export const ReportSettings = () => {
   };
 
   const handleTestReport = async () => {
-    if (!window.confirm("Send a test report now?")) return;
     try {
       setTestingReport(true);
+      setTestError('');
+      setTestSuccess(false);
+      
       const token = localStorage.getItem('x-v2-auth-token');
       const response = await fetch('/api/admin/test-report', {
         headers: {
@@ -119,12 +123,13 @@ export const ReportSettings = () => {
       });
       const data = await response.json();
       if (data.success) {
-        alert("Test report sent successfully!");
+        setTestSuccess(true);
+        setTimeout(() => setTestSuccess(false), 5000);
       } else {
-        alert("Failed to send test report: " + data.error);
+        setTestError(data.error || "Failed to send test report");
       }
     } catch (err: any) {
-      alert("Error: " + err.message);
+      setTestError(err.message);
     } finally {
       setTestingReport(false);
     }
@@ -157,9 +162,9 @@ export const ReportSettings = () => {
         isScrolled={isScrolled}
         actions={
           <div className="flex items-center gap-3">
-            {success && (
+            {(success || testSuccess) && (
               <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm animate-bounce">
-                <CheckCircle2 className="w-5 h-5" /> Saved!
+                <CheckCircle2 className="w-5 h-5" /> {testSuccess ? 'Test Sent!' : 'Saved!'}
               </div>
             )}
             <button
@@ -185,9 +190,9 @@ export const ReportSettings = () => {
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-4xl mx-auto space-y-8">
-          {error && (
+          {(error || testError) && (
             <div className="flex items-center gap-2 text-red-600 font-bold text-sm bg-red-50 p-4 rounded-xl border border-red-100">
-              <AlertCircle className="w-5 h-5" /> {error}
+              <AlertCircle className="w-5 h-5" /> {testError || error}
             </div>
           )}
 
