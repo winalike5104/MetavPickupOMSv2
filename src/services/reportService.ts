@@ -70,7 +70,9 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
     
     newOrdersSnap.forEach(doc => {
       const data = doc.data();
-      const itemsSummary = (data.items || []).map((item: any) => `[${item.sku}] ${item.productName} x ${item.qty}`).join('; ');
+      const items = data.items || [];
+      const totalQty = items.reduce((sum: number, item: any) => sum + (item.qty || 0), 0);
+      const itemsSummary = `(${totalQty}) ` + items.map((item: any) => `[${item.sku}] ${item.productName} x ${item.qty}`).join('; ');
       reportData.push({
         Report_Type: "NEW_ORDER",
         Order_ID: data.bookingNumber || doc.id,
@@ -86,7 +88,9 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
 
     confirmedPickups.forEach(doc => {
       const data = doc.data();
-      const itemsSummary = (data.items || []).map((item: any) => `[${item.sku}] ${item.productName} x ${item.qty}`).join('; ');
+      const items = data.items || [];
+      const totalQty = items.reduce((sum: number, item: any) => sum + (item.qty || 0), 0);
+      const itemsSummary = `(${totalQty}) ` + items.map((item: any) => `[${item.sku}] ${item.productName} x ${item.qty}`).join('; ');
       reportData.push({
         Report_Type: "PICKED_UP",
         Order_ID: data.bookingNumber || doc.id,
@@ -102,7 +106,9 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
 
     overdueOrders.forEach(doc => {
       const data = doc.data();
-      const itemsSummary = (data.items || []).map((item: any) => `[${item.sku}] ${item.productName} x ${item.qty}`).join('; ');
+      const items = data.items || [];
+      const totalQty = items.reduce((sum: number, item: any) => sum + (item.qty || 0), 0);
+      const itemsSummary = `(${totalQty}) ` + items.map((item: any) => `[${item.sku}] ${item.productName} x ${item.qty}`).join('; ');
       reportData.push({
         Report_Type: "OVERDUE",
         Order_ID: data.bookingNumber || doc.id,

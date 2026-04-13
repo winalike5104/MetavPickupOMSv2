@@ -167,14 +167,6 @@ export const ReportSettings = () => {
                 <CheckCircle2 className="w-5 h-5" /> {testSuccess ? 'Test Sent!' : 'Saved!'}
               </div>
             )}
-            <button
-              onClick={handleTestReport}
-              disabled={testingReport}
-              className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2.5 rounded-xl font-bold transition-all hover:bg-indigo-100 disabled:opacity-50"
-            >
-              <Play className="w-5 h-5" />
-              {testingReport ? 'Sending...' : 'Test Now'}
-            </button>
             <button 
               onClick={handleSaveReportConfig}
               disabled={submitting}
