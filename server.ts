@@ -12,6 +12,8 @@ import { sendEmail, sendBulkEmails } from './src/lib/mailer';
 import { isValidDateString } from './src/lib/firebase';
 import { authenticate, loginUser } from './src/lib/auth';
 import { SUPER_ADMINS, isSuperAdmin } from './src/lib/auth-shared';
+import cron from "node-cron";
+import { generateAndSendDailyReport } from "./src/services/reportService";
 
 // Helper to write to debug log
 const writeDebugLog = (message: string) => {
@@ -176,7 +178,93 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // ... (existing code)
+  // Setup Daily Report Cron Job
+  // 23:30 Pacific/Auckland
+  cron.schedule('30 23 * * *', async () => {
+    console.log("[Cron] Triggering daily report...");
+    try {
+      const currentDb = await initDb();
+      if (currentDb) {
+        await generateAndSendDailyReport(currentDb);
+        console.log("[Cron] Daily report completed successfully.");
+      }
+    } catch (err) {
+      console.error("[Cron] Daily report failed:", err);
+    }
+  }, {
+    timezone: "Pacific/Auckland"
+  });
+
+  // Report Configuration Endpoints
+  app.get("/api/admin/report-config", authenticate, async (req: any, res) => {
+    const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+    const isAdmin = req.user.role === 'Admin' || isSuper;
+    if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
+
+    try {
+      const currentDb = await initDb();
+      if (!currentDb) throw new Error("Database not initialized");
+      
+      const configDoc = await currentDb.collection("settings").doc("report_config").get();
+      if (!configDoc.exists) {
+        return res.json({
+          success: true,
+          config: {
+            enabled: false,
+            toEmails: "",
+            ccEmails: "",
+            senderName: "Acapickup WMS"
+          }
+        });
+      }
+      res.json({ success: true, config: configDoc.data() });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/report-config", authenticate, async (req: any, res) => {
+    const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+    const isAdmin = req.user.role === 'Admin' || isSuper;
+    if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
+
+    try {
+      const currentDb = await initDb();
+      if (!currentDb) throw new Error("Database not initialized");
+      
+      const { enabled, toEmails, ccEmails, senderName } = req.body;
+      
+      await currentDb.collection("settings").doc("report_config").set({
+        enabled: !!enabled,
+        toEmails: toEmails || "",
+        ccEmails: ccEmails || "",
+        senderName: senderName || "Acapickup WMS",
+        updatedAt: new Date().toISOString(),
+        updatedBy: req.user.username
+      }, { merge: true });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Test Report Endpoint
+  app.get("/api/admin/test-report", authenticate, async (req: any, res) => {
+    const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+    const isAdmin = req.user.role === 'Admin' || isSuper;
+    if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
+
+    try {
+      const currentDb = await initDb();
+      if (!currentDb) throw new Error("Database not initialized");
+      
+      const result = await generateAndSendDailyReport(currentDb);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
   const server = http.createServer(app);
   const io = new Server(server, {
@@ -490,6 +578,7 @@ async function startServer() {
             paymentTime: paymentStatus === 'Paid' ? new Date().toISOString() : null,
             paymentBy: paymentStatus === 'Paid' ? (req.user.name || req.user.username) : null,
             status: 'Created',
+            statusUpdatedAt: new Date().toISOString(),
             notificationRecipients: notificationRecipients || []
           };
 
@@ -750,6 +839,7 @@ async function startServer() {
         const orderRef = currentDb.collection("orders").doc(id);
         batch.update(orderRef, {
           status: status,
+          statusUpdatedAt: timestamp,
           updatedAt: timestamp,
           updatedBy: req.user.username // 这里的 req.user 来自我们的 jwt.verify
         });
@@ -841,6 +931,7 @@ async function startServer() {
       // Step 1: Mark as Picked Up (if not already)
       const pickupData: any = {
         status: 'Picked Up',
+        statusUpdatedAt: timestamp,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedBy: req.user.username
       };
@@ -855,6 +946,7 @@ async function startServer() {
       // Step 2: Mark as Reviewed with Audit Log
       batch.update(orderRef, {
         status: 'Reviewed',
+        statusUpdatedAt: timestamp,
         auditLog: auditLog,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedBy: req.user.username
@@ -915,6 +1007,7 @@ async function startServer() {
 
       await orderRef.update({
         status: 'Picked Up',
+        statusUpdatedAt: new Date().toISOString(),
         actualPickupTime: new Date().toISOString(),
         pickedUpBy: req.user.name || req.user.username,
         customerSignature: signatureData,

@@ -72,7 +72,8 @@
         "actualPickupTime": { "type": "string", "format": "date-time" },
         "pickedUpBy": { "type": "string" },
         "customerSignature": { "type": "string", "description": "Base64 or URL of signature image" },
-        "status": { "type": "string", "enum": ["Pending", "Confirmed", "Picked Up", "Reviewed", "Overdue", "Cancelled"] },
+        "status": { "type": "string", "enum": ["Created", "Pending", "Confirmed", "Picked Up", "Reviewed", "Overdue", "Cancelled"] },
+        "statusUpdatedAt": { "type": "string", "format": "date-time" },
         "printedTime": { "type": "string", "format": "date-time" },
         "printedBy": { "type": "string" },
         "auditLog": {
@@ -229,6 +230,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["createdAt"]
+    },
+    "ReportConfig": {
+      "title": "ReportConfig",
+      "description": "Configuration for daily business reports.",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Whether the daily report is enabled" },
+        "toEmails": { "type": "string", "description": "Comma-separated recipient emails" },
+        "ccEmails": { "type": "string", "description": "Comma-separated CC emails" },
+        "senderName": { "type": "string", "description": "Display name of the sender" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["enabled", "toEmails"]
     }
   },
   "firestore": {
@@ -241,6 +256,7 @@
     "notifications": { "schema": "Notification", "description": "User notifications" },
     "userGroups": { "schema": "UserGroup", "description": "Groups of users" },
     "bug_reports": { "schema": "BugReport", "description": "User submitted bug reports" },
-    "unique_keys": { "schema": "UniqueKey", "description": "Shadow collection for uniqueness constraints" }
+    "unique_keys": { "schema": "UniqueKey", "description": "Shadow collection for uniqueness constraints" },
+    "settings": { "schema": "ReportConfig", "description": "System settings including report configuration" }
   }
 }

@@ -14,6 +14,7 @@ import { UserManagement } from './pages/UserManagement';
 import UserGroups from './pages/UserGroups';
 import { StoreManagement } from './pages/StoreManagement';
 import OperationLogs from './pages/OperationLogs';
+import { ReportSettings } from './pages/ReportSettings';
 import { BulkOrderUpload } from './pages/BulkOrderUpload';
 import { WarehouseSelection } from './pages/WarehouseSelection';
 import { GuestDisplay } from './pages/GuestDisplay';
@@ -127,6 +128,7 @@ export default function App() {
               <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
               <Route path="/groups" element={<ProtectedRoute><UserGroups /></ProtectedRoute>} />
               <Route path="/stores" element={<ProtectedRoute><StoreManagement /></ProtectedRoute>} />
+              <Route path="/report-settings" element={<ProtectedRoute><ReportSettings /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/logs" element={<ProtectedRoute><OperationLogs /></ProtectedRoute>} />
               <Route path="*" element={<Navigate to="/" />} />

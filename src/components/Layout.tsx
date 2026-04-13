@@ -18,7 +18,8 @@ import {
   ChevronRight,
   Monitor,
   Clock,
-  ShoppingCart
+  ShoppingCart,
+  Mail
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { hasPermission, isAdmin, isSystemAdmin } from '../utils';
@@ -50,34 +51,35 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     {
       name: 'General',
       items: [
-        { name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: hasPermission(profile, 'View Orders', user?.username) && profile?.roleTemplate !== 'Warehouse' },
-        { name: 'Order List', path: '/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', user?.username) && profile?.roleTemplate !== 'Warehouse' },
-        { name: 'Overdue Audit', path: '/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', user?.username) && profile?.roleTemplate !== 'Warehouse' },
-        { name: 'SKU Database', path: '/skus', icon: Database, visible: hasPermission(profile, 'View SKU', user?.username) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: hasPermission(profile, 'View Orders', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Order List', path: '/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Overdue Audit', path: '/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'SKU Database', path: '/skus', icon: Database, visible: hasPermission(profile, 'View SKU', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
       ]
     },
     {
       name: 'Warehouse',
       icon: ShoppingCart,
       items: [
-        { name: 'Picking Queue', path: '/picking-queue', icon: ShoppingCart, visible: hasPermission(profile, 'View Picking Queue', user?.username) },
+        { name: 'Picking Queue', path: '/picking-queue', icon: ShoppingCart, visible: hasPermission(profile, 'View Picking Queue', profile?.email) },
       ]
     },
     {
       name: 'Management',
       icon: Users,
       items: [
-        { name: 'User Management', path: '/users', icon: Users, visible: isAdmin(profile, user?.username) && profile?.roleTemplate !== 'Warehouse' },
-        { name: 'User Groups', path: '/groups', icon: Users, visible: (isAdmin(profile, user?.username) || hasPermission(profile, 'Manage User Groups', user?.username)) && profile?.roleTemplate !== 'Warehouse' },
-        { name: 'Store Management', path: '/stores', icon: Store, visible: (isAdmin(profile, user?.username) || hasPermission(profile, 'Manage Stores', user?.username)) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'User Management', path: '/users', icon: Users, visible: isAdmin(profile, profile?.email) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'User Groups', path: '/groups', icon: Users, visible: (isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage User Groups', profile?.email)) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Store Management', path: '/stores', icon: Store, visible: (isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage Stores', profile?.email)) && profile?.roleTemplate !== 'Warehouse' },
       ]
     },
     {
       name: 'System',
       icon: FileText,
       items: [
-        { name: 'Operation Logs', path: '/logs', icon: FileText, visible: (isAdmin(profile, user?.username) || isSystemAdmin(user?.username)) && profile?.roleTemplate !== 'Warehouse' },
-        { name: 'Guest Display', path: '/guest-display', icon: Monitor, visible: (isAdmin(profile, user?.username) || hasPermission(profile, 'Capture Signature', user?.username)) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Operation Logs', path: '/logs', icon: FileText, visible: (isAdmin(profile, profile?.email) || isSystemAdmin(profile?.email)) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Report Settings', path: '/report-settings', icon: Mail, visible: isAdmin(profile, profile?.email) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Guest Display', path: '/guest-display', icon: Monitor, visible: (isAdmin(profile, profile?.email) || hasPermission(profile, 'Capture Signature', profile?.email)) && profile?.roleTemplate !== 'Warehouse' },
         { name: 'Settings', path: '/settings', icon: Settings, visible: true },
       ]
     }
