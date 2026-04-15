@@ -274,9 +274,9 @@ export const Orders = () => {
     });
 
     return result.sort((a, b) => {
-      const aNotRequested = getWarehouseStatusLabel(a) === 'Not Requested' ? 1 : 0;
-      const bNotRequested = getWarehouseStatusLabel(b) === 'Not Requested' ? 1 : 0;
-      if (aNotRequested !== bNotRequested) return aNotRequested - bNotRequested;
+      const aPriority = getWarehouseStatusLabel(a) !== 'Not Requested' && a.status !== 'Picked Up' && a.status !== 'Reviewed' ? 0 : 1;
+      const bPriority = getWarehouseStatusLabel(b) !== 'Not Requested' && b.status !== 'Picked Up' && b.status !== 'Reviewed' ? 0 : 1;
+      if (aPriority !== bPriority) return aPriority - bPriority;
 
       const timeA = a.createdTime ? new Date(a.createdTime).getTime() : 0;
       const timeB = b.createdTime ? new Date(b.createdTime).getTime() : 0;
