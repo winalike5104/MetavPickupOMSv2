@@ -27,34 +27,31 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
     const todayStart = now.startOf("day").toISO();
     const fourteenDaysAgo = now.minus({ days: 14 });
     const fourteenDaysAgoStart = fourteenDaysAgo.startOf("day").toISO();
-    const fourteenDaysAgoEnd = fourteenDaysAgo.endOf("day").toISO();
 
-    console.log(`[ReportService] Time range: Today Start: ${todayStart}, 14 Days Ago: ${fourteenDaysAgoStart} to ${fourteenDaysAgoEnd}`);
+    console.log(`[ReportService] Time range: Today Start: ${todayStart}, 14 Days Ago Start: ${fourteenDaysAgoStart}`);
 
     // 1. New PU: Created today
     const newOrdersSnap = await db.collection("orders")
       .where("createdTime", ">=", todayStart)
       .get();
     
-    // 2. Confirmed Pickups: Status changed to 'Picked Up' today
-    // We query by statusUpdatedAt and filter by status to avoid composite index requirement
+    // 2. Confirmed Pickups: Picked up today (matches Dashboard trend logic)
     const confirmedPickupsSnap = await db.collection("orders")
-      .where("statusUpdatedAt", ">=", todayStart)
+      .where("actualPickupTime", ">=", todayStart)
       .get();
     
-    const confirmedPickups = confirmedPickupsSnap.docs.filter(doc => doc.data().status === "Picked Up");
+    // Include both 'Picked Up' and 'Reviewed' as they both represent a completed pickup
+    const confirmedPickups = confirmedPickupsSnap.docs.filter(doc => 
+      ["Picked Up", "Reviewed"].includes(doc.data().status)
+    );
 
-    // 3. 14-Day Overdue: Created exactly 14 days ago, not Reviewed or Cancelled
+    // 3. 14-Day Overdue: Scheduled for pickup 14+ days ago, still in 'Created' status
     const overdueSnap = await db.collection("orders")
-      .where("createdTime", ">=", fourteenDaysAgoStart)
-      .where("createdTime", "<=", fourteenDaysAgoEnd)
+      .where("status", "==", "Created")
+      .where("pickupDateScheduled", "<=", fourteenDaysAgoStart)
       .get();
 
-    const overdueOrders = overdueSnap.docs.filter(doc => {
-      const data = doc.data();
-      // Exclude terminal states: Reviewed (Completed) and Cancelled
-      return !["Reviewed", "Cancelled"].includes(data.status);
-    });
+    const overdueOrders = overdueSnap.docs;
 
     // Fetch Report Configuration from Firestore
     const configDoc = await db.collection("settings").doc("report_config").get();
@@ -100,7 +97,7 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
         Payment_Status: data.paymentStatus || "N/A",
         Items_Summary: itemsSummary,
         Created_At: data.createdTime,
-        Last_Updated: data.statusUpdatedAt || data.createdTime
+        Last_Updated: data.actualPickupTime || data.statusUpdatedAt || data.createdTime
       });
     });
 

@@ -22,6 +22,7 @@ import { PickingQueue } from './pages/PickingQueue';
 import { OverdueOrders } from './pages/OverdueOrders';
 import { TaskProvider } from './components/TaskProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { NotificationManager } from './components/NotificationManager';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthReady, profile, activeWarehouse } = useAuth();
@@ -111,6 +112,7 @@ export default function App() {
       <AuthProvider>
         <TaskProvider>
           <Router>
+            <NotificationManager />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/select-warehouse" element={<WarehouseSelection />} />

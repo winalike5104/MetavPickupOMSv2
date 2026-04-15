@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
 import { signInWithCustomToken } from 'firebase/auth';
+import { onSnapshot, doc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { UserProfile, ROLE_TEMPLATES } from '../types';
 import { requestNotificationPermission } from '../messaging';
@@ -38,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [activeWarehouse, setActiveWarehouseState] = useState<string | null>(() => sessionStorage.getItem('activeWarehouse'));
+  const profileUnsubRef = useRef<(() => void) | null>(null);
 
   // Initialize auth state from localStorage
   useEffect(() => {
@@ -74,6 +76,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               localStorage.setItem('firebase_custom_token', data.firebaseCustomToken);
               await signInWithCustomToken(auth, data.firebaseCustomToken);
               console.log('✅ Firebase Auth session refreshed');
+              
+              // Add real-time profile listener
+              if (profileUnsubRef.current) profileUnsubRef.current();
+              profileUnsubRef.current = onSnapshot(doc(db, 'users', parsedUser.uid), (docSnap) => {
+                if (docSnap.exists()) {
+                  setProfile(docSnap.data() as UserProfile);
+                }
+              });
             } else {
               throw new Error(data.error || 'Failed to refresh token');
             }
@@ -89,6 +99,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           signInWithCustomToken(auth, savedFirebaseToken)
             .then(() => {
               console.log('✅ Firebase Auth session restored');
+              // Add real-time profile listener
+              if (profileUnsubRef.current) profileUnsubRef.current();
+              profileUnsubRef.current = onSnapshot(doc(db, 'users', parsedUser.uid), (docSnap) => {
+                if (docSnap.exists()) {
+                  setProfile(docSnap.data() as UserProfile);
+                }
+              });
               setLoading(false);
               setIsAuthReady(true);
             })
@@ -146,6 +163,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('firebase_custom_token', data.firebaseCustomToken);
       try {
         await signInWithCustomToken(auth, data.firebaseCustomToken);
+        
+        // Add real-time profile listener
+        if (profileUnsubRef.current) profileUnsubRef.current();
+        profileUnsubRef.current = onSnapshot(doc(db, 'users', data.user.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+          }
+        });
       } catch (err) {
         console.error('Firebase Auth sign-in failed:', err);
       }
@@ -154,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(data.token);
     setUser(data.user);
     
-    // Construct profile from user data
+    // Construct initial profile from user data
     const userProfile: UserProfile = {
       uid: data.user.uid,
       username: data.user.username,
@@ -174,6 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('user_info');
     localStorage.removeItem('firebase_custom_token');
     sessionStorage.removeItem('activeWarehouse');
+    if (profileUnsubRef.current) profileUnsubRef.current();
     auth.signOut();
     setToken(null);
     setUser(null);

@@ -209,6 +209,7 @@ export const Orders = () => {
       const searchLower = debouncedSearchTerm.toLowerCase();
       const matchesSearch = 
         safeSearch(order.bookingNumber, searchLower) ||
+        safeSearch(order.refNumber, searchLower) ||
         safeSearch(order.customerName, searchLower) ||
         safeSearch(order.customerId, searchLower) ||
         order.items.some(item => safeSearch(item.sku, searchLower));
@@ -649,7 +650,7 @@ export const Orders = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                placeholder="Search by Booking #, Customer, ID, or SKU..."
+                placeholder="Search by Booking #, Ref #, Customer, ID, or SKU..."
               />
               <button 
                 onClick={fetchOrders}

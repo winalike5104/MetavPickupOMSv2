@@ -1,23 +1,22 @@
 {
-  "name": "Metav Pickup Order Management System",
-  "short_name": "Metav Pickup",
-  "description": "Internal order management and pickup tracking system.",
+  "name": "NexAutoParts WMS",
+  "short_name": "NexWMS",
+  "description": "Warehouse Management System for NexAutoParts",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "icons/icon-192x192.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/2271/2271062.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icons/icon-512x512.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/2271/2271062.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ]
 }
