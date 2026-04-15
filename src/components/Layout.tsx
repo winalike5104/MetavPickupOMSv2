@@ -13,7 +13,7 @@ import {
   Store,
   Key,
   AlertCircle,
-  Package,
+  Warehouse,
   ChevronDown,
   ChevronRight,
   Monitor,
@@ -127,7 +127,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
           <Link to="/" className="flex items-center gap-2">
-            <Package className="w-8 h-8 text-indigo-600" />
+            <Warehouse className="w-8 h-8 text-indigo-600" />
             <span className="text-xl font-bold text-slate-900 hidden sm:block tracking-tight">WMS System</span>
           </Link>
         </div>

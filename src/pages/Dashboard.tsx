@@ -21,7 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Info
+  Info,
+  Warehouse
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { subDays, startOfDay, isAfter } from 'date-fns';
@@ -284,8 +285,8 @@ export const Dashboard = () => {
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden font-sans">
       <PageHeader
         title="Dashboard Overview"
-        subtitle="Welcome back to the Pickup Management System."
-        icon={Sparkles}
+        subtitle="Welcome back to the Warehouse Management System."
+        icon={Warehouse}
         isScrolled={isScrolled}
         actions={
           <>
