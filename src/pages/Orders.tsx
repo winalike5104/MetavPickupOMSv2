@@ -219,6 +219,11 @@ export const Orders = () => {
     return 'bg-slate-100 text-slate-600';
   };
 
+  const isPriorityPickupOrder = (order: Order) =>
+    getWarehouseStatusLabel(order) !== 'Not Requested' &&
+    order.status !== 'Picked Up' &&
+    order.status !== 'Reviewed';
+
   const filteredOrders = useMemo(() => {
     const result = orders.filter(order => {
       const searchLower = debouncedSearchTerm.toLowerCase();
@@ -274,8 +279,8 @@ export const Orders = () => {
     });
 
     return result.sort((a, b) => {
-      const aPriority = getWarehouseStatusLabel(a) !== 'Not Requested' && a.status !== 'Picked Up' && a.status !== 'Reviewed' ? 0 : 1;
-      const bPriority = getWarehouseStatusLabel(b) !== 'Not Requested' && b.status !== 'Picked Up' && b.status !== 'Reviewed' ? 0 : 1;
+      const aPriority = isPriorityPickupOrder(a) ? 0 : 1;
+      const bPriority = isPriorityPickupOrder(b) ? 0 : 1;
       if (aPriority !== bPriority) return aPriority - bPriority;
 
       const timeA = a.createdTime ? new Date(a.createdTime).getTime() : 0;
@@ -961,6 +966,7 @@ export const Orders = () => {
                         key={order.id} 
                         className={cn(
                           "hover:bg-slate-50 transition-colors cursor-pointer",
+                          isPriorityPickupOrder(order) && "bg-amber-50",
                           selectedOrderIds.includes(order.id!) && "bg-indigo-50/50"
                         )}
                       >
@@ -1093,6 +1099,12 @@ export const Orders = () => {
                               className="w-5 h-5 text-slate-300 cursor-pointer hover:text-indigo-500" 
                               onClick={() => navigate(`/orders/${order.id}`)}
                             />
+                            {isPriorityPickupOrder(order) && (
+                              <span
+                                className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"
+                                title="In-store pickup"
+                              />
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1107,7 +1119,10 @@ export const Orders = () => {
                 <div
                   key={order.id}
                   onClick={() => navigate(`/orders/${order.id}`)}
-                  className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4"
+                  className={cn(
+                    "bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4",
+                    isPriorityPickupOrder(order) && "bg-amber-50 border-amber-200"
+                  )}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1197,7 +1212,15 @@ export const Orders = () => {
                         </div>
                       )}
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300" />
+                    <div className="flex items-center gap-2">
+                      {isPriorityPickupOrder(order) && (
+                        <span
+                          className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"
+                          title="In-store pickup"
+                        />
+                      )}
+                      <ChevronRight className="w-5 h-5 text-slate-300" />
+                    </div>
                   </div>
                 </div>
               ))}
