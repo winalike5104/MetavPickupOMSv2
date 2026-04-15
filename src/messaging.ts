@@ -11,12 +11,12 @@ export const requestNotificationPermission = async (profile: UserProfile | null)
 
   try {
     const supported = await isSupported();
-    if (!supported || typeof Notification === 'undefined') {
+    if (!supported || typeof window === 'undefined' || !('Notification' in window)) {
       console.log('Notifications not supported in this browser.');
       return;
     }
 
-    const permission = await Notification.requestPermission();
+    const permission = await window.Notification.requestPermission();
     if (permission === 'granted' && messaging) {
       const token = await getToken(messaging, { vapidKey: VAPID_KEY });
       if (token) {

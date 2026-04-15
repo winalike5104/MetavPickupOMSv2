@@ -149,7 +149,7 @@ export const usePickingNotifications = () => {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         return window.Notification.requestPermission();
       }
-      return Promise.resolve('default' as NotificationPermission);
+      return Promise.resolve('default' as any);
     }
   };
 };

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 export const NotificationManager: React.FC = () => {
   const { audioEnabled, enableAudio, hasPickingPermission } = usePickingNotifications();
   const [showBanner, setShowBanner] = useState(false);
-  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(
+  const [permissionStatus, setPermissionStatus] = useState<any>(
     typeof window !== 'undefined' && 'Notification' in window 
       ? window.Notification.permission 
       : 'default'
