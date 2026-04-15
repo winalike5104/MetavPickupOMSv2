@@ -36,6 +36,7 @@ import { useOrderService } from '../hooks/useOrderService';
 import { useDebounce } from '../hooks/useDebounce';
 import { API_BASE_URL } from '../constants';
 import { useTask } from '../components/TaskProvider';
+import SignatureCanvas from 'react-signature-canvas';
 
 import { PageHeader } from '../components/PageHeader';
 
@@ -65,6 +66,10 @@ export const Orders = () => {
   const menuRef = React.useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const [showPickupModal, setShowPickupModal] = useState(false);
+  const [pickupOrder, setPickupOrder] = useState<Order | null>(null);
+  const [confirmingPickup, setConfirmingPickup] = useState(false);
+  const pickupSignatureRef = useRef<SignatureCanvas>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -204,8 +209,18 @@ export const Orders = () => {
     }
   };
 
+  const getWarehouseStatusLabel = (order: Order) => order.warehouseStatus || 'Not Requested';
+
+  const getWarehouseStatusBadgeClass = (order: Order) => {
+    const status = getWarehouseStatusLabel(order);
+    if (status === 'Picked') return 'bg-emerald-100 text-emerald-700';
+    if (status === 'Picking') return 'bg-sky-100 text-sky-700';
+    if (status === 'Pending') return 'bg-amber-100 text-amber-700';
+    return 'bg-slate-100 text-slate-600';
+  };
+
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
+    const result = orders.filter(order => {
       const searchLower = debouncedSearchTerm.toLowerCase();
       const matchesSearch = 
         safeSearch(order.bookingNumber, searchLower) ||
@@ -256,6 +271,16 @@ export const Orders = () => {
       }
       
       return matchesSearch && matchesStatus && matchesDate && matchesPaymentMethod && matchesStore;
+    });
+
+    return result.sort((a, b) => {
+      const aNotRequested = getWarehouseStatusLabel(a) === 'Not Requested' ? 1 : 0;
+      const bNotRequested = getWarehouseStatusLabel(b) === 'Not Requested' ? 1 : 0;
+      if (aNotRequested !== bNotRequested) return aNotRequested - bNotRequested;
+
+      const timeA = a.createdTime ? new Date(a.createdTime).getTime() : 0;
+      const timeB = b.createdTime ? new Date(b.createdTime).getTime() : 0;
+      return timeB - timeA;
     });
   }, [orders, debouncedSearchTerm, statusFilter, dateRange, paymentMethodFilter, storeFilter, overdueThreshold]);
 
@@ -494,6 +519,76 @@ export const Orders = () => {
     handleBulkEmail([order.id]);
   };
 
+  const openConfirmPickup = (order: Order) => {
+    setActiveMenuId(null);
+    if (!hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email)) {
+      setNotification({ message: 'You do not have permission to confirm pickup.', type: 'error' });
+      return;
+    }
+
+    if (order.status !== 'Created') {
+      setNotification({ message: 'Only orders with Created status can be confirmed for pickup.', type: 'error' });
+      return;
+    }
+
+    if (order.paymentStatus !== 'Paid') {
+      setNotification({ message: 'Order must be paid before it can be confirmed for pickup.', type: 'error' });
+      return;
+    }
+
+    setPickupOrder(order);
+    setShowPickupModal(true);
+  };
+
+  const handleQuickConfirmPickup = async () => {
+    if (!pickupOrder?.id || !token) return;
+    if (!hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email)) {
+      setNotification({ message: 'You do not have permission to confirm pickup.', type: 'error' });
+      return;
+    }
+
+    if (!pickupSignatureRef.current || pickupSignatureRef.current.isEmpty()) {
+      setNotification({ message: 'Please provide a signature to confirm pickup.', type: 'error' });
+      return;
+    }
+
+    if (pickupOrder.warehouseStatus !== 'Picked') {
+      if (!window.confirm('Warehouse has not marked this order as "Ready". Are you sure you want to confirm pickup?')) {
+        return;
+      }
+    }
+
+    try {
+      setConfirmingPickup(true);
+      const response = await fetch('/api/orders/confirm-pickup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        },
+        body: JSON.stringify({
+          orderId: pickupOrder.id,
+          signatureData: pickupSignatureRef.current.toDataURL()
+        })
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to confirm pickup');
+      }
+
+      setShowPickupModal(false);
+      setPickupOrder(null);
+      setNotification({ message: `Order ${pickupOrder.bookingNumber} confirmed as picked up.`, type: 'success' });
+      fetchOrders();
+    } catch (err: any) {
+      setNotification({ message: err.message || 'Failed to confirm pickup.', type: 'error' });
+    } finally {
+      setConfirmingPickup(false);
+    }
+  };
+
   const exportToCSV = () => {
     const headers = ['Booking Number', 'Customer Name', 'Store ID', 'Status', 'Payment Status', 'Created Time', 'Scheduled Pickup', 'Picked Up By', 'Items'];
     const rows = filteredOrders.map(o => [
@@ -555,6 +650,58 @@ export const Orders = () => {
                 className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPickupModal && pickupOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl border border-slate-100">
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Confirm Pickup</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Booking <span className="font-semibold text-slate-700">{pickupOrder.bookingNumber}</span> requires customer signature.
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <SignatureCanvas
+                ref={pickupSignatureRef}
+                penColor="black"
+                canvasProps={{ className: 'w-full h-44 bg-white rounded-lg border border-slate-200' }}
+              />
+            </div>
+
+            <div className="flex justify-between items-center mt-3 mb-6">
+              <button
+                type="button"
+                onClick={() => pickupSignatureRef.current?.clear()}
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+              >
+                Clear Signature
+              </button>
+              <span className={cn('text-xs font-semibold', getWarehouseStatusBadgeClass(pickupOrder))}>
+                Warehouse: {getWarehouseStatusLabel(pickupOrder)}
+              </span>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowPickupModal(false);
+                  setPickupOrder(null);
+                }}
+                className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-all"
+                disabled={confirmingPickup}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleQuickConfirmPickup}
+                disabled={confirmingPickup}
+                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all disabled:opacity-50"
+              >
+                {confirmingPickup ? 'Confirming...' : 'Confirm Pickup'}
               </button>
             </div>
           </div>
@@ -804,6 +951,7 @@ export const Orders = () => {
                       <th className="px-6 py-4">Payment</th>
                       <th className="px-6 py-4 text-right">Total</th>
                       <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Warehouse Status</th>
                       <th className="px-6 py-4 text-right">Action</th>
                     </tr>
                   </thead>
@@ -895,6 +1043,14 @@ export const Orders = () => {
                             {order.status}
                           </span>
                         </td>
+                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-full text-xs font-bold",
+                            getWarehouseStatusBadgeClass(order)
+                          )}>
+                            {getWarehouseStatusLabel(order)}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <div className="relative" ref={activeMenuId === order.id ? menuRef : null}>
@@ -907,6 +1063,15 @@ export const Orders = () => {
                               
                               {activeMenuId === order.id && (
                                 <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-30 py-1 overflow-hidden">
+                                  {hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email) && order.status === 'Created' && (
+                                    <button
+                                      onClick={() => openConfirmPickup(order)}
+                                      className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                    >
+                                      <CheckCircle className="w-4 h-4 text-emerald-500" />
+                                      Confirm Pickup
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => handleSingleEmail(order)}
                                     className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
@@ -1006,6 +1171,15 @@ export const Orders = () => {
                         order.paymentStatus === 'Paid' ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
                       )}>
                         {order.paymentStatus}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Warehouse Status</span>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-bold",
+                        getWarehouseStatusBadgeClass(order)
+                      )}>
+                        {getWarehouseStatusLabel(order)}
                       </span>
                     </div>
                   </div>
