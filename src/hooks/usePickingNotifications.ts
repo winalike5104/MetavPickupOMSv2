@@ -87,7 +87,7 @@ export const usePickingNotifications = () => {
     const q = query(
       collection(db, 'orders'),
       where('warehouseId', '==', activeWarehouse),
-      where('status', 'in', ['Pending Picking', 'Ready'])
+      where('warehouseStatus', '==', 'Pending')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
