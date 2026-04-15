@@ -6,11 +6,23 @@ import { motion, AnimatePresence } from 'motion/react';
 export const NotificationManager: React.FC = () => {
   const { audioEnabled, enableAudio, hasPickingPermission } = usePickingNotifications();
   const [showBanner, setShowBanner] = useState(false);
-  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(Notification.permission);
+  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(
+    typeof window !== 'undefined' && 'Notification' in window 
+      ? window.Notification.permission 
+      : 'default'
+  );
 
   useEffect(() => {
+    // If Notification API is not supported, we only care about audio
+    const isNotificationSupported = typeof window !== 'undefined' && 'Notification' in window;
+    
     // Show banner ONLY if user has picking permission AND (notification permission is not granted OR audio is not enabled)
-    if (hasPickingPermission && (permissionStatus !== 'granted' || !audioEnabled)) {
+    // If notifications aren't supported, we just check audio
+    const needsPermission = isNotificationSupported 
+      ? (permissionStatus !== 'granted' || !audioEnabled)
+      : !audioEnabled;
+
+    if (hasPickingPermission && needsPermission) {
       const timer = setTimeout(() => setShowBanner(true), 2000);
       return () => clearTimeout(timer);
     } else {
@@ -19,17 +31,26 @@ export const NotificationManager: React.FC = () => {
   }, [permissionStatus, audioEnabled, hasPickingPermission]);
 
   const handleEnableAll = async () => {
-    // 1. Request Notification Permission
-    const status = await Notification.requestPermission();
-    setPermissionStatus(status);
+    // 1. Request Notification Permission if supported
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const status = await window.Notification.requestPermission();
+      setPermissionStatus(status);
+      if (status === 'granted') {
+        // Audio will be enabled below
+      }
+    }
 
     // 2. Enable Audio (requires user gesture)
     enableAudio();
-
-    if (status === 'granted') {
+    
+    // If notifications aren't supported, just hide after audio enable
+    if (!('Notification' in window)) {
       setShowBanner(false);
     }
   };
+
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isStandalone = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone);
 
   return (
     <AnimatePresence>
@@ -49,7 +70,9 @@ export const NotificationManager: React.FC = () => {
                 <div>
                   <h4 className="font-bold text-slate-900">Enable Picking Alerts</h4>
                   <p className="text-sm text-slate-500 leading-tight mt-1">
-                    Get real-time notifications and sound alerts when new orders enter the picking queue.
+                    {isIOS && !isStandalone 
+                      ? "For best results on iOS, tap 'Share' and 'Add to Home Screen'. Then enable alerts here."
+                      : "Get real-time notifications and sound alerts when new orders enter the picking queue."}
                   </p>
                 </div>
               </div>

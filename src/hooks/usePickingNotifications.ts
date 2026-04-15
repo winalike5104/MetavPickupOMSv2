@@ -4,8 +4,8 @@ import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 
-// Sound URL - using a clean, professional notification sound
-const NOTIFICATION_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
+// Sound URL - using a more distinctive and professional digital chime
+const NOTIFICATION_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
 export const usePickingNotifications = () => {
   const { user, profile, activeWarehouse } = useAuth();
@@ -28,12 +28,16 @@ export const usePickingNotifications = () => {
 
   const enableAudio = () => {
     if (audioRef.current) {
-      // Play and immediately pause to "unlock" audio on mobile/modern browsers
+      // Play a short silent buffer or the actual sound to unlock
+      audioRef.current.muted = true;
       audioRef.current.play().then(() => {
         audioRef.current?.pause();
-        if (audioRef.current) audioRef.current.currentTime = 0;
+        if (audioRef.current) {
+          audioRef.current.muted = false;
+          audioRef.current.currentTime = 0;
+        }
         setAudioEnabled(true);
-        console.log('🔊 Audio notifications enabled');
+        console.log('🔊 Audio notifications enabled (iOS Optimized)');
       }).catch(err => {
         console.error('❌ Failed to enable audio:', err);
       });
@@ -52,18 +56,25 @@ export const usePickingNotifications = () => {
     }
     localStorage.setItem(storageKey, now.toString());
 
-    // 2. Audio Feedback
+    // 2. Audio & Vibration Feedback
     if (audioEnabled && audioRef.current) {
+      // For iOS, we ensure the audio is reset and played
+      audioRef.current.currentTime = 0;
       audioRef.current.play().catch(e => console.warn('Audio play blocked:', e));
+    }
+    
+    // Vibrate on supported devices (Note: iOS Safari does not support navigator.vibrate)
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
     }
 
     // 3. System Notification
-    if (Notification.permission === 'granted') {
-      const notification = new Notification('New Picking Task', {
+    if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
+      const notification = new window.Notification('New Picking Task', {
         body: `Order ${orderData.bookingNumber} is ready for picking.`,
-        icon: '/pwa-192x192.png', // Fallback to a standard icon if not exists
-        tag: orderId, // Deduplicate system notifications
-        requireInteraction: true, // Persistent until clicked
+        icon: '/pwa-192x192.png',
+        tag: orderId,
+        requireInteraction: true,
       });
 
       notification.onclick = () => {
@@ -134,6 +145,11 @@ export const usePickingNotifications = () => {
     audioEnabled,
     enableAudio,
     hasPickingPermission,
-    requestPermission: () => Notification.requestPermission()
+    requestPermission: () => {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        return window.Notification.requestPermission();
+      }
+      return Promise.resolve('default' as NotificationPermission);
+    }
   };
 };
