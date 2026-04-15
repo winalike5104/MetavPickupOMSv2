@@ -128,7 +128,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </button>
           <Link to="/" className="flex items-center gap-2">
             <Package className="w-8 h-8 text-indigo-600" />
-            <span className="text-xl font-bold text-slate-900 hidden sm:block tracking-tight">Pickup System</span>
+            <span className="text-xl font-bold text-slate-900 hidden sm:block tracking-tight">WMS System</span>
           </Link>
         </div>
 

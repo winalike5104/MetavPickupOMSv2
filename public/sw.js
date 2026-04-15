@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nexwms-v1';
+const CACHE_NAME = 'wms-v1';
 const ASSETS = [
   '/',
   '/index.html',

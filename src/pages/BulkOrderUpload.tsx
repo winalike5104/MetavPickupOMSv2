@@ -184,7 +184,7 @@ export const BulkOrderUpload = () => {
       '# === IMPORT TEMPLATE RULES ===',
       '# [BLUE AREA] Order Info: booking_number, customer_name, customer_email, customer_ref, customer_id, scheduled_pickup_date, store_id, payment_state, payment_method, order_note, warehouse_id',
       '# -> RULE: booking_number MUST be filled on EVERY row. Other order info only needs to be on the FIRST row of an order.',
-      '# -> store_id: Must match existing Store ID in system (e.g., NZ-METAV).',
+      '# -> store_id: Must match existing Store ID in system (e.g., WMS-MAIN).',
       '# -> payment_state: Must be "Paid" or "Unpaid".',
       '# -> payment_method: If Paid, must be one of: Cash, EFTPOS, Bank Transfer, Online Payment. If Unpaid, can be empty.',
       '# -> warehouse_id: Must be "AKL" or "CHC".',
@@ -194,9 +194,9 @@ export const BulkOrderUpload = () => {
     ];
     
     const sampleData = [
-      ['BK-2026-001', 'Angus Dorahy', 'ceci@machter.com.au', 'REF-9988', 'CUST-102', '2026-03-25', 'NZ-METAV', 'Paid', 'EFTPOS', 'Handle with care', 'AKL', 'WPKIT-TA005', '2', '45.50'],
+      ['BK-2026-001', 'John Doe', 'john@example.com', 'REF-9988', 'CUST-102', '2026-03-25', 'WMS-MAIN', 'Paid', 'EFTPOS', 'Handle with care', 'AKL', 'WPKIT-TA005', '2', '45.50'],
       ['BK-2026-001', '', '', '', '', '', '', '', '', '', '', 'SKU-B', '1', '50.00'],
-      ['BK-2026-002', 'Shivnesh Chand', 'shiv@test.com', 'REF-1001', 'CUST-103', '2026-03-26', 'NZ-METAV', 'Unpaid', 'Bank Transfer', '', 'AKL', 'SKU-C', '1', '299.99']
+      ['BK-2026-002', 'Jane Smith', 'jane@example.com', 'REF-1001', 'CUST-103', '2026-03-26', 'WMS-MAIN', 'Unpaid', 'Bank Transfer', '', 'AKL', 'SKU-C', '1', '299.99']
     ];
 
     const csvContent = [...instructions, headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
