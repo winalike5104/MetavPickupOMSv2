@@ -50,7 +50,7 @@ export const Orders = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [statusFilter, setStatusFilter] = useState(location.state?.statusFilter || 'All');
+  const [statusFilter, setStatusFilter] = useState(location.state?.statusFilter || 'Active');
   const [overdueThreshold, setOverdueThreshold] = useState(location.state?.overdueThreshold || 7);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [storeFilter, setStoreFilter] = useState('All');
@@ -102,7 +102,7 @@ export const Orders = () => {
       }
     } else {
       // Reset to default if no state (e.g. clicking "Order List")
-      setStatusFilter('All');
+      setStatusFilter('Active');
       setOverdueThreshold(7);
       setSearchTerm('');
       setPaymentMethodFilter('All');
@@ -225,8 +225,6 @@ export const Orders = () => {
     order.status !== 'Reviewed';
 
   const filteredOrders = useMemo(() => {
-    const isDefaultListView = statusFilter === 'All' && !debouncedSearchTerm.trim();
-
     const result = orders.filter(order => {
       const searchLower = debouncedSearchTerm.toLowerCase();
       const matchesSearch = 
@@ -260,10 +258,6 @@ export const Orders = () => {
         matchesStatus = order.status === statusFilter;
       }
 
-      if (isDefaultListView && (order.status === 'Reviewed' || order.status === 'Cancelled')) {
-        matchesStatus = false;
-      }
-      
       const matchesPaymentMethod = paymentMethodFilter === 'All' || order.paymentMethod === paymentMethodFilter;
       const matchesStore = storeFilter === 'All' || order.storeId === storeFilter || order.storeName === storeFilter;
       
