@@ -50,7 +50,15 @@ export const Orders = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [statusFilter, setStatusFilter] = useState(location.state?.statusFilter || 'Active');
+  const normalizeStatusFilter = (value?: string) => {
+    if (!value) return 'Active';
+    if (value === 'All Orders') return 'All';
+    if (value === 'Active Orders') return 'Active';
+    const allowed = ['Active', 'All', 'Overdue', 'Created', 'Picked Up', 'Reviewed', 'Cancelled'];
+    return allowed.includes(value) ? value : 'Active';
+  };
+
+  const [statusFilter, setStatusFilter] = useState(normalizeStatusFilter(location.state?.statusFilter));
   const [overdueThreshold, setOverdueThreshold] = useState(location.state?.overdueThreshold || 7);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [storeFilter, setStoreFilter] = useState('All');
@@ -93,22 +101,17 @@ export const Orders = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (location.state) {
-      if (location.state.statusFilter) {
-        setStatusFilter(location.state.statusFilter);
-      }
-      if (location.state.overdueThreshold) {
-        setOverdueThreshold(location.state.overdueThreshold);
-      }
-    } else {
-      // Reset to default if no state (e.g. clicking "Order List")
-      setStatusFilter('Active');
-      setOverdueThreshold(7);
-      setSearchTerm('');
-      setPaymentMethodFilter('All');
-      setStoreFilter('All');
-      setDateRange({ start: '', end: '' });
-    }
+    const requestedStatus = normalizeStatusFilter(location.state?.statusFilter);
+    const requestedThreshold = location.state?.overdueThreshold || 7;
+
+    setStatusFilter(requestedStatus);
+    setOverdueThreshold(requestedThreshold);
+
+    // Always reset list filters when entering Order List to avoid stale filter state.
+    setSearchTerm('');
+    setPaymentMethodFilter('All');
+    setStoreFilter('All');
+    setDateRange({ start: '', end: '' });
   }, [location.state]);
 
   useClickOutside(menuRef, () => setActiveMenuId(null));
