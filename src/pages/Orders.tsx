@@ -225,6 +225,8 @@ export const Orders = () => {
     order.status !== 'Reviewed';
 
   const filteredOrders = useMemo(() => {
+    const isDefaultListView = statusFilter === 'All' && !debouncedSearchTerm.trim();
+
     const result = orders.filter(order => {
       const searchLower = debouncedSearchTerm.toLowerCase();
       const matchesSearch = 
@@ -256,6 +258,10 @@ export const Orders = () => {
         }
       } else if (statusFilter !== 'All') {
         matchesStatus = order.status === statusFilter;
+      }
+
+      if (isDefaultListView && (order.status === 'Reviewed' || order.status === 'Cancelled')) {
+        matchesStatus = false;
       }
       
       const matchesPaymentMethod = paymentMethodFilter === 'All' || order.paymentMethod === paymentMethodFilter;
