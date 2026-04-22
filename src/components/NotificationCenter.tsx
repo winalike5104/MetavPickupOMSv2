@@ -17,7 +17,7 @@ export const NotificationCenter: React.FC = () => {
   useClickOutside(dropdownRef, () => setShowDropdown(false));
 
     useEffect(() => {
-    if (!user || !profile) return;
+    if (!user || !profile || !profile.uid) return;
     if (profile.settings?.notificationsEnabled === false) {
       setNotifications([]);
       setUnreadCount(0);

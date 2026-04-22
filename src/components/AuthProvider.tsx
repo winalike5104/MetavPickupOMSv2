@@ -41,6 +41,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeWarehouse, setActiveWarehouseState] = useState<string | null>(() => sessionStorage.getItem('activeWarehouse'));
   const profileUnsubRef = useRef<(() => void) | null>(null);
 
+  const buildProfileFromUser = (rawUser: any): UserProfile => ({
+    uid: rawUser.uid,
+    username: rawUser.username,
+    email: rawUser.email,
+    name: rawUser.name || rawUser.username,
+    status: rawUser.status || 'Active',
+    allowedWarehouses: rawUser.allowedWarehouses,
+    roleTemplate: rawUser.role,
+    permissions: rawUser.permissions || (ROLE_TEMPLATES as any)[rawUser.role] || []
+  });
+
+  const mergeRealtimeProfile = (baseUser: any, realtimeData: any): UserProfile => ({
+    ...realtimeData,
+    uid: realtimeData?.uid || baseUser.uid,
+    username: realtimeData?.username || baseUser.username,
+    email: realtimeData?.email || baseUser.email,
+    name: realtimeData?.name || baseUser.name || baseUser.username,
+    status: realtimeData?.status || 'Active',
+    allowedWarehouses: realtimeData?.allowedWarehouses || baseUser.allowedWarehouses || [],
+    roleTemplate: realtimeData?.roleTemplate || baseUser.role,
+    permissions: realtimeData?.permissions || baseUser.permissions || (ROLE_TEMPLATES as any)[baseUser.role] || []
+  });
+
   // Initialize auth state from localStorage
   useEffect(() => {
     const savedToken = localStorage.getItem('x-v2-auth-token');
@@ -52,16 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(savedToken);
         setUser(parsedUser);
         
-        setProfile({
-          uid: parsedUser.uid,
-          username: parsedUser.username,
-          email: parsedUser.email,
-          name: parsedUser.username,
-          status: 'Active',
-          allowedWarehouses: parsedUser.allowedWarehouses,
-          roleTemplate: parsedUser.role,
-          permissions: parsedUser.permissions || (ROLE_TEMPLATES as any)[parsedUser.role] || []
-        });
+        setProfile(buildProfileFromUser(parsedUser));
 
         // Restore Firebase Auth session if custom token exists
         const savedFirebaseToken = localStorage.getItem('firebase_custom_token');
@@ -81,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (profileUnsubRef.current) profileUnsubRef.current();
               profileUnsubRef.current = onSnapshot(doc(db, 'users', parsedUser.uid), (docSnap) => {
                 if (docSnap.exists()) {
-                  setProfile(docSnap.data() as UserProfile);
+                  setProfile(mergeRealtimeProfile(parsedUser, docSnap.data()));
                 }
               });
             } else {
@@ -103,7 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (profileUnsubRef.current) profileUnsubRef.current();
               profileUnsubRef.current = onSnapshot(doc(db, 'users', parsedUser.uid), (docSnap) => {
                 if (docSnap.exists()) {
-                  setProfile(docSnap.data() as UserProfile);
+                  setProfile(mergeRealtimeProfile(parsedUser, docSnap.data()));
                 }
               });
               setLoading(false);
@@ -168,7 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (profileUnsubRef.current) profileUnsubRef.current();
         profileUnsubRef.current = onSnapshot(doc(db, 'users', data.user.uid), (docSnap) => {
           if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
+            setProfile(mergeRealtimeProfile(data.user, docSnap.data()));
           }
         });
       } catch (err) {
@@ -180,17 +194,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(data.user);
     
     // Construct initial profile from user data
-    const userProfile: UserProfile = {
-      uid: data.user.uid,
-      username: data.user.username,
-      email: data.user.email,
-      name: data.user.username,
-      status: 'Active',
-      allowedWarehouses: data.user.allowedWarehouses,
-      roleTemplate: data.user.role,
-      permissions: data.user.permissions || (ROLE_TEMPLATES as any)[data.user.role] || []
-    };
-    setProfile(userProfile);
+    setProfile(buildProfileFromUser(data.user));
     return data;
   };
 
@@ -221,16 +225,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const parsedUser = JSON.parse(savedUser);
             setToken(savedToken);
             setUser(parsedUser);
-            setProfile({
-              uid: parsedUser.uid,
-              username: parsedUser.username,
-              email: parsedUser.email,
-              name: parsedUser.username,
-              status: 'Active',
-              allowedWarehouses: parsedUser.allowedWarehouses,
-              roleTemplate: parsedUser.role,
-              permissions: parsedUser.permissions || (ROLE_TEMPLATES as any)[parsedUser.role] || []
-            });
+            setProfile(buildProfileFromUser(parsedUser));
           } catch (e) {
             logout();
           }
