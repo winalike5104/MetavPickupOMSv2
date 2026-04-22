@@ -9,3 +9,4 @@ export const WAREHOUSE_NAMES: Record<string, string> = {
 };
 
 export const API_BASE_URL = "";
+export const APP_VERSION = "1.0.1";

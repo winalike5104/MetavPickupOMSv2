@@ -25,6 +25,7 @@ import { useAuth } from './AuthProvider';
 import { hasPermission, isAdmin, isSystemAdmin } from '../utils';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { NotificationCenter } from './NotificationCenter';
+import { APP_VERSION } from '../constants';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, user, logout } = useAuth();
@@ -128,7 +129,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </button>
           <Link to="/" className="flex items-center gap-2">
             <Warehouse className="w-8 h-8 text-indigo-600" />
-            <span className="text-xl font-bold text-slate-900 hidden sm:block tracking-tight">WMS System</span>
+            <span className="hidden sm:flex items-end gap-2 tracking-tight">
+              <span className="text-xl font-bold text-slate-900">WMS System</span>
+              <span className="text-[10px] font-semibold text-slate-400 mb-0.5">v{APP_VERSION}</span>
+            </span>
           </Link>
         </div>
 
