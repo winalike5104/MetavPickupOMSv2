@@ -603,7 +603,7 @@ export const OrderDetail: React.FC = () => {
 
   const handleFinalizePartialPickup = async () => {
     if (!id || !token || !order) return;
-    if (!order.pickupExceptionStatus) return;
+    if (order.pickupExceptionStatus !== 'PendingFinalize') return;
 
     if (!window.confirm('Finalize this exception order into Picked Up?')) {
       return;
@@ -972,7 +972,7 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {hasPermission(profile, 'Finalize Partial Pickup', profile?.username || profile?.email) && order.status === 'Created' && !!order.pickupExceptionStatus && (
+            {hasPermission(profile, 'Finalize Partial Pickup', profile?.username || profile?.email) && order.status === 'Created' && order.pickupExceptionStatus === 'PendingFinalize' && (
               <button
                 onClick={handleFinalizePartialPickup}
                 disabled={partialFlowLoading}
@@ -1057,6 +1057,43 @@ export const OrderDetail: React.FC = () => {
                   <p className="text-xs mt-2 text-slate-700">
                     Reason: <span className="font-semibold">{order.partialPickupInfo.reason}</span>
                   </p>
+                )}
+                {(order.partialPickupInfo?.pickedItems?.length || order.partialPickupInfo?.unpickedItems?.length) && (
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                      <p className="text-xs font-bold text-emerald-800 mb-2">
+                        Picked Items ({order.partialPickupInfo?.pickedItems?.length || 0})
+                      </p>
+                      {order.partialPickupInfo?.pickedItems?.length ? (
+                        <div className="space-y-1">
+                          {order.partialPickupInfo.pickedItems.map((item, index) => (
+                            <p key={`picked-${item.sku}-${index}`} className="text-xs text-emerald-900">
+                              [{item.sku}] {item.productName || 'N/A'} x {item.qty || 0}
+                            </p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-emerald-700">No items marked as picked.</p>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs font-bold text-amber-800 mb-2">
+                        Not Picked Items ({order.partialPickupInfo?.unpickedItems?.length || 0})
+                      </p>
+                      {order.partialPickupInfo?.unpickedItems?.length ? (
+                        <div className="space-y-1">
+                          {order.partialPickupInfo.unpickedItems.map((item, index) => (
+                            <p key={`unpicked-${item.sku}-${index}`} className="text-xs text-amber-900">
+                              [{item.sku}] {item.productName || 'N/A'} x {item.qty || 0}
+                            </p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-700">All items were picked.</p>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

@@ -1204,8 +1204,11 @@ async function startServer() {
       if (order?.status !== 'Created') {
         return res.status(400).json({ success: false, error: "Only Created orders can be finalized from partial pickup flow" });
       }
-      if (!order?.pickupExceptionStatus || !['PartialPendingSales', 'PendingFinalize'].includes(order.pickupExceptionStatus)) {
-        return res.status(400).json({ success: false, error: "Order is not in partial pickup exception flow" });
+      if (order?.pickupExceptionStatus !== 'PendingFinalize') {
+        return res.status(400).json({
+          success: false,
+          error: "Order must be submitted for finalization before it can be finalized"
+        });
       }
 
       const timestamp = new Date().toISOString();
