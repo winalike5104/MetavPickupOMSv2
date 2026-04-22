@@ -83,6 +83,10 @@ export const OrderDetail: React.FC = () => {
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const signatureRef = React.useRef<SignatureCanvas>(null);
   const [signatureLoading, setSignatureLoading] = useState(false);
+  const [showPickupItemsModal, setShowPickupItemsModal] = useState(false);
+  const [pickupSelections, setPickupSelections] = useState<boolean[]>([]);
+  const [partialPickupReason, setPartialPickupReason] = useState('');
+  const [partialFlowLoading, setPartialFlowLoading] = useState(false);
   
   // Socket State
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -162,12 +166,64 @@ export const OrderDetail: React.FC = () => {
     };
   }, [order?.id]);
 
+  const getSelectedPickupIndexes = () => {
+    if (!order?.items?.length) return [];
+    if (pickupSelections.length !== order.items.length) {
+      return order.items.map((_, index) => index);
+    }
+    return pickupSelections
+      .map((selected, index) => (selected ? index : -1))
+      .filter(index => index >= 0);
+  };
+
+  const startPickupConfirmationFlow = () => {
+    if (!order) return;
+
+    if (order.status !== 'Created') {
+      alert('Only orders with Created status can be confirmed for pickup.');
+      return;
+    }
+
+    if (order.paymentStatus !== 'Paid') {
+      alert('Order must be paid before it can be confirmed for pickup.');
+      return;
+    }
+
+    if (order.pickupExceptionStatus) {
+      alert('This order is already in partial pickup exception flow.');
+      return;
+    }
+
+    setPickupSelections((order.items || []).map(() => true));
+    setPartialPickupReason('');
+    setShowPickupItemsModal(true);
+  };
+
+  const continueToSignatureStep = () => {
+    if (!order) return;
+    const selectedIndexes = getSelectedPickupIndexes();
+    if (!selectedIndexes.length) {
+      alert('Please select at least one picked item.');
+      return;
+    }
+
+    const isPartial = selectedIndexes.length < (order.items || []).length;
+    if (isPartial && !partialPickupReason.trim()) {
+      alert('Please provide a reason for partial pickup.');
+      return;
+    }
+
+    setShowPickupItemsModal(false);
+    setShowSignatureModal(true);
+  };
+
   const handleSaveRemoteSignature = async () => {
     if (!id || !profile || !order || !receivedRemoteSignature || !token) return;
     
     try {
       setSignatureLoading(true);
       
+      const selectedIndexes = getSelectedPickupIndexes();
       const response = await fetch('/api/orders/confirm-pickup', {
         method: 'POST',
         headers: {
@@ -177,7 +233,9 @@ export const OrderDetail: React.FC = () => {
         },
         body: JSON.stringify({
           orderId: id,
-          signatureData: receivedRemoteSignature
+          signatureData: receivedRemoteSignature,
+          pickedItemIndexes: selectedIndexes,
+          partialReason: partialPickupReason.trim() || null
         })
       });
 
@@ -187,6 +245,8 @@ export const OrderDetail: React.FC = () => {
       }
       
       setShowSignatureModal(false);
+      setPickupSelections([]);
+      setPartialPickupReason('');
       setReceivedRemoteSignature(null);
       fetchOrder();
       fetchLogs(id);
@@ -511,6 +571,70 @@ export const OrderDetail: React.FC = () => {
     }
   };
 
+  const handleMarkPartialReady = async () => {
+    if (!id || !token || !order) return;
+    if (order.pickupExceptionStatus !== 'PartialPendingSales') return;
+
+    try {
+      setPartialFlowLoading(true);
+      const response = await fetch('/api/orders/partial-pickup/mark-ready', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        },
+        body: JSON.stringify({ orderId: id })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to mark partial pickup ready for finalization');
+      }
+      fetchOrder();
+      fetchLogs(id);
+      alert('Order is now Pending Finalize. Authorized users can finalize it into Picked Up.');
+    } catch (err: any) {
+      console.error('Error marking partial pickup ready:', err);
+      alert(err.message || 'Failed to mark partial pickup ready');
+    } finally {
+      setPartialFlowLoading(false);
+    }
+  };
+
+  const handleFinalizePartialPickup = async () => {
+    if (!id || !token || !order) return;
+    if (!order.pickupExceptionStatus) return;
+
+    if (!window.confirm('Finalize this exception order into Picked Up?')) {
+      return;
+    }
+
+    try {
+      setPartialFlowLoading(true);
+      const response = await fetch('/api/orders/partial-pickup/finalize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        },
+        body: JSON.stringify({ orderId: id })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to finalize partial pickup');
+      }
+      fetchOrder();
+      fetchLogs(id);
+      alert('Order finalized as Picked Up.');
+    } catch (err: any) {
+      console.error('Error finalizing partial pickup:', err);
+      alert(err.message || 'Failed to finalize partial pickup');
+    } finally {
+      setPartialFlowLoading(false);
+    }
+  };
+
   const signatureAreaRef = React.useRef<HTMLDivElement>(null);
 
   const handleConfirmPickup = async () => {
@@ -520,6 +644,13 @@ export const OrderDetail: React.FC = () => {
       alert('Please provide a signature to confirm pickup.');
       return;
     }
+
+    const selectedIndexes = getSelectedPickupIndexes();
+    if (!selectedIndexes.length) {
+      alert('Please select at least one picked item.');
+      return;
+    }
+    const isPartialPickup = selectedIndexes.length < (order.items || []).length;
 
     // Warning if warehouse hasn't picked yet
     if (order.warehouseStatus !== 'Picked') {
@@ -552,7 +683,9 @@ export const OrderDetail: React.FC = () => {
         },
         body: JSON.stringify({
           orderId: id,
-          signatureData: signatureData
+          signatureData: signatureData,
+          pickedItemIndexes: selectedIndexes,
+          partialReason: partialPickupReason.trim() || null
         })
       });
 
@@ -562,8 +695,13 @@ export const OrderDetail: React.FC = () => {
       }
 
       setShowSignatureModal(false);
+      setPickupSelections([]);
+      setPartialPickupReason('');
       fetchOrder();
       fetchLogs(id);
+      if (isPartialPickup) {
+        alert('Partial pickup recorded. Sales can now resolve and submit for finalization.');
+      }
     } catch (err: any) {
       console.error('Error confirming pickup:', err);
       alert(err.message || 'Failed to confirm pickup');
@@ -814,13 +952,33 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email) && order.status === 'Created' && (
+            {hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email) && order.status === 'Created' && !order.pickupExceptionStatus && (
               <button
-                onClick={() => handleStatusChange('Picked Up')}
+                onClick={startPickupConfirmationFlow}
                 className="inline-flex items-center px-3 py-1.5 bg-emerald-600 rounded-xl text-xs font-bold text-white hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
               >
                 <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
                 Confirm Pickup
+              </button>
+            )}
+
+            {hasPermission(profile, 'Edit Order', profile?.username || profile?.email) && order.status === 'Created' && order.pickupExceptionStatus === 'PartialPendingSales' && (
+              <button
+                onClick={handleMarkPartialReady}
+                disabled={partialFlowLoading}
+                className="inline-flex items-center px-3 py-1.5 bg-orange-600 rounded-xl text-xs font-bold text-white hover:bg-orange-700 transition-all shadow-lg shadow-orange-200 disabled:opacity-50"
+              >
+                Submit For Finalization
+              </button>
+            )}
+
+            {hasPermission(profile, 'Finalize Partial Pickup', profile?.username || profile?.email) && order.status === 'Created' && !!order.pickupExceptionStatus && (
+              <button
+                onClick={handleFinalizePartialPickup}
+                disabled={partialFlowLoading}
+                className="inline-flex items-center px-3 py-1.5 bg-violet-600 rounded-xl text-xs font-bold text-white hover:bg-violet-700 transition-all shadow-lg shadow-violet-200 disabled:opacity-50"
+              >
+                Finalize Partial Pickup
               </button>
             )}
 
@@ -863,6 +1021,43 @@ export const OrderDetail: React.FC = () => {
                   This order has been confirmed as "Picked Up" by Reception, but the Warehouse has not yet marked it as "Ready". 
                   Please coordinate with the warehouse staff to ensure the items were correctly retrieved.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {order.pickupExceptionStatus && (
+            <div className={cn(
+              "border rounded-xl p-4 flex items-start gap-3",
+              order.pickupExceptionStatus === 'PartialPendingSales'
+                ? "bg-red-50 border-red-200"
+                : "bg-orange-50 border-orange-200"
+            )}>
+              <AlertTriangle className={cn(
+                "w-5 h-5 mt-0.5",
+                order.pickupExceptionStatus === 'PartialPendingSales' ? "text-red-600" : "text-orange-600"
+              )} />
+              <div>
+                <h4 className={cn(
+                  "text-sm font-bold",
+                  order.pickupExceptionStatus === 'PartialPendingSales' ? "text-red-900" : "text-orange-900"
+                )}>
+                  {order.pickupExceptionStatus === 'PartialPendingSales'
+                    ? 'Partial Pickup - Sales Action Needed'
+                    : 'Partial Pickup - Pending Finalization'}
+                </h4>
+                <p className={cn(
+                  "text-xs mt-1",
+                  order.pickupExceptionStatus === 'PartialPendingSales' ? "text-red-700" : "text-orange-700"
+                )}>
+                  {order.pickupExceptionStatus === 'PartialPendingSales'
+                    ? 'Front desk has completed a partial pickup. Sales should update the order and submit it for finalization.'
+                    : 'Order updates are complete. A user with Finalize Partial Pickup permission should finalize it to Picked Up.'}
+                </p>
+                {order.partialPickupInfo?.reason && (
+                  <p className="text-xs mt-2 text-slate-700">
+                    Reason: <span className="font-semibold">{order.partialPickupInfo.reason}</span>
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -1175,6 +1370,84 @@ export const OrderDetail: React.FC = () => {
         </div>
       </div>
 
+      {/* Pickup Item Selection Modal */}
+      {showPickupItemsModal && order && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <h2 className="text-lg font-bold text-gray-900">Confirm Picked Items</h2>
+              <button
+                onClick={() => {
+                  setShowPickupItemsModal(false);
+                  setPickupSelections([]);
+                  setPartialPickupReason('');
+                }}
+                className="p-2 hover:bg-gray-200 rounded-full"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                Select the items the customer actually picked up for order <span className="font-bold">{order.bookingNumber}</span>.
+              </p>
+              <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100">
+                {(order.items || []).map((item, index) => (
+                  <label key={`${item.sku}-${index}`} className="flex items-start gap-3 p-3 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pickupSelections[index] || false}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setPickupSelections(prev => prev.map((value, i) => (i === index ? checked : value)));
+                      }}
+                      className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-800">{item.sku}</p>
+                      <p className="text-xs text-gray-500">{item.productName || 'N/A'} · Qty {item.qty || 0}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              {pickupSelections.some(v => !v) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Partial Pickup</label>
+                  <textarea
+                    value={partialPickupReason}
+                    onChange={(e) => setPartialPickupReason(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="e.g. Out of stock for one SKU"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowPickupItemsModal(false);
+                    setPickupSelections([]);
+                    setPartialPickupReason('');
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={continueToSignatureStep}
+                  className="inline-flex items-center px-6 py-2 bg-indigo-600 rounded-lg text-sm font-medium text-white hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                  Continue to Signature
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Signature Modal */}
       {showSignatureModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -1186,6 +1459,8 @@ export const OrderDetail: React.FC = () => {
                   setShowSignatureModal(false);
                   setReceivedRemoteSignature(null);
                   setIsProjecting(false);
+                  setPickupSelections([]);
+                  setPartialPickupReason('');
                 }} 
                 className="p-2 hover:bg-gray-200 rounded-full"
                 disabled={signatureLoading}
@@ -1287,6 +1562,8 @@ export const OrderDetail: React.FC = () => {
                           setShowSignatureModal(false);
                           setReceivedRemoteSignature(null);
                           setIsProjecting(false);
+                          setPickupSelections([]);
+                          setPartialPickupReason('');
                         }}
                         className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                         disabled={signatureLoading}

@@ -1,5 +1,6 @@
 export type OrderStatus = 'Created' | 'Picked Up' | 'Reviewed' | 'Cancelled';
 export type WarehouseStatus = 'Pending' | 'Picking' | 'Picked';
+export type PickupExceptionStatus = 'PartialPendingSales' | 'PendingFinalize';
 export type PaymentStatus = 'Paid' | 'Unpaid';
 export type PaymentMethod = 'Cash' | 'EFTPOS' | 'Bank Transfer' | 'Online Payment';
 export type UserStatus = 'Active' | 'Disabled';
@@ -101,6 +102,28 @@ export interface FollowUpLog {
   content: string;
 }
 
+export interface PartialPickupInfo {
+  confirmedAt: string;
+  confirmedBy: string;
+  reason: string;
+  pickedItemIndexes: number[];
+  pickedItems: Array<{
+    sku: string;
+    productName?: string;
+    qty: number;
+  }>;
+  unpickedItems: Array<{
+    sku: string;
+    productName?: string;
+    qty: number;
+  }>;
+  salesResolvedAt?: string | null;
+  salesResolvedBy?: string | null;
+  resolutionNote?: string | null;
+  finalizedAt?: string | null;
+  finalizedBy?: string | null;
+}
+
 export interface Order {
   id?: string;
   bookingNumber: string;
@@ -140,6 +163,8 @@ export interface Order {
   emailLog?: EmailLog;
   auditLog?: AuditLog;
   followUpLogs?: FollowUpLog[];
+  pickupExceptionStatus?: PickupExceptionStatus | null;
+  partialPickupInfo?: PartialPickupInfo | null;
 }
 
 export type AccountType = 'Sales' | 'Reception' | 'Warehouse' | 'Admin';
@@ -183,7 +208,7 @@ export const PERMISSIONS = [
   'View SKU', 'Upload SKU', 'Edit SKU',
   'Manage Users', 'Manage User Groups', 'Manage Stores', 'View Logs',
   'Request Picking', 'Manage Picking', 'View Picking Queue', 'Report Inventory Issue',
-  'Audit Overdue Orders'
+  'Audit Overdue Orders', 'Finalize Partial Pickup'
 ] as const;
 
 export type Permission = typeof PERMISSIONS[number];

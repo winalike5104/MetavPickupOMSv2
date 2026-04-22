@@ -707,6 +707,15 @@ async function startServer() {
         }
       }
 
+      // Guard: partial-pickup exception orders can only be transitioned to Picked Up
+      // by users who have explicit permission.
+      if (updateData.status === 'Picked Up' && order?.pickupExceptionStatus && !hasPermission(req.user, 'Finalize Partial Pickup')) {
+        return res.status(403).json({
+          success: false,
+          error: "Forbidden: Finalize Partial Pickup permission required for exception orders"
+        });
+      }
+
       await orderRef.update({
         ...updateData,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -982,7 +991,7 @@ async function startServer() {
     }
 
     try {
-      const { orderId, signatureData } = req.body;
+      const { orderId, signatureData, pickedItemIndexes, partialReason } = req.body;
       if (!orderId || !signatureData) {
         return res.status(400).json({ success: false, error: "Missing orderId or signatureData" });
       }
@@ -1005,15 +1014,73 @@ async function startServer() {
         }
       }
 
-      await orderRef.update({
-        status: 'Picked Up',
-        statusUpdatedAt: new Date().toISOString(),
-        actualPickupTime: new Date().toISOString(),
-        pickedUpBy: req.user.name || req.user.username,
+      const items = Array.isArray(order?.items) ? order.items : [];
+      if (!items.length) {
+        return res.status(400).json({ success: false, error: "Order has no items to confirm pickup" });
+      }
+
+      const pickedIndexes = Array.isArray(pickedItemIndexes)
+        ? [...new Set(pickedItemIndexes.filter((idx: any) => Number.isInteger(idx) && idx >= 0 && idx < items.length))]
+        : items.map((_: any, idx: number) => idx);
+
+      if (!pickedIndexes.length) {
+        return res.status(400).json({ success: false, error: "At least one picked item is required" });
+      }
+
+      const pickedSet = new Set<number>(pickedIndexes);
+      const updatedItems = items.map((item: any, index: number) => ({
+        ...item,
+        status: pickedSet.has(index) ? 'Picked' : 'Pending'
+      }));
+
+      const pickedItems = updatedItems
+        .map((item: any, index: number) => ({ item, index }))
+        .filter(({ index }) => pickedSet.has(index))
+        .map(({ item }) => ({
+          sku: item.sku,
+          productName: item.productName || null,
+          qty: item.qty || 0
+        }));
+
+      const unpickedItems = updatedItems
+        .map((item: any, index: number) => ({ item, index }))
+        .filter(({ index }) => !pickedSet.has(index))
+        .map(({ item }) => ({
+          sku: item.sku,
+          productName: item.productName || null,
+          qty: item.qty || 0
+        }));
+
+      const isPartialPickup = pickedIndexes.length < items.length;
+      const timestamp = new Date().toISOString();
+      const updatePayload: any = {
+        items: updatedItems,
         customerSignature: signatureData,
-        updatedAt: new Date().toISOString(),
+        updatedAt: timestamp,
         updatedBy: req.user.username
-      });
+      };
+
+      if (isPartialPickup) {
+        updatePayload.status = 'Created';
+        updatePayload.statusUpdatedAt = timestamp;
+        updatePayload.pickupExceptionStatus = 'PartialPendingSales';
+        updatePayload.partialPickupInfo = {
+          confirmedAt: timestamp,
+          confirmedBy: req.user.name || req.user.username,
+          reason: typeof partialReason === 'string' && partialReason.trim() ? partialReason.trim() : 'Partial pickup confirmed by front desk',
+          pickedItemIndexes: pickedIndexes,
+          pickedItems,
+          unpickedItems
+        };
+      } else {
+        updatePayload.status = 'Picked Up';
+        updatePayload.statusUpdatedAt = timestamp;
+        updatePayload.actualPickupTime = timestamp;
+        updatePayload.pickedUpBy = req.user.name || req.user.username;
+        updatePayload.pickupExceptionStatus = null;
+      }
+
+      await orderRef.update(updatePayload);
 
       // Log the action
       try {
@@ -1021,17 +1088,154 @@ async function startServer() {
           timestamp: new Date().toISOString(),
           userId: req.user.uid,
           userName: req.user.name || req.user.username,
-          action: 'Confirm Pickup',
-          details: `Confirmed pickup for order ${orderId}`,
+          action: isPartialPickup ? 'Confirm Partial Pickup' : 'Confirm Pickup',
+          details: isPartialPickup
+            ? `Confirmed partial pickup for order ${orderId}. Picked ${pickedIndexes.length}/${items.length} items.`
+            : `Confirmed pickup for order ${orderId}`,
           orderId: orderId
         });
       } catch (logErr) {
         console.error("Failed to log pickup confirmation:", logErr);
       }
 
-      return res.json({ success: true });
+      return res.json({
+        success: true,
+        isPartialPickup,
+        pickupExceptionStatus: isPartialPickup ? 'PartialPendingSales' : null
+      });
     } catch (error: any) {
       console.error("Pickup Confirmation Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Mark partial pickup as ready for finalization after Sales has updated the order.
+  app.post("/api/orders/partial-pickup/mark-ready", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const { orderId, resolutionNote } = req.body;
+      if (!orderId) {
+        return res.status(400).json({ success: false, error: "Missing orderId" });
+      }
+
+      if (!hasPermission(req.user, 'Edit Order') && !hasPermission(req.user, 'Finalize Partial Pickup')) {
+        return res.status(403).json({ success: false, error: "Forbidden: Edit Order permission required" });
+      }
+
+      const orderRef = currentDb.collection("orders").doc(orderId);
+      const orderDoc = await orderRef.get();
+      if (!orderDoc.exists) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+
+      const order = orderDoc.data();
+      const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+      const allowedWarehouses = req.user.allowedWarehouses || [];
+      if (!isSuper && !allowedWarehouses.includes('*') && !allowedWarehouses.includes(order?.warehouseId)) {
+        return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
+      }
+
+      if (order?.pickupExceptionStatus !== 'PartialPendingSales') {
+        return res.status(400).json({ success: false, error: "Order is not in PartialPendingSales state" });
+      }
+
+      await orderRef.update({
+        pickupExceptionStatus: 'PendingFinalize',
+        partialPickupInfo: {
+          ...(order?.partialPickupInfo || {}),
+          salesResolvedAt: new Date().toISOString(),
+          salesResolvedBy: req.user.name || req.user.username,
+          resolutionNote: typeof resolutionNote === 'string' && resolutionNote.trim() ? resolutionNote.trim() : null
+        },
+        updatedAt: new Date().toISOString(),
+        updatedBy: req.user.username
+      });
+
+      await currentDb.collection("logs").add({
+        timestamp: new Date().toISOString(),
+        userId: req.user.uid,
+        userName: req.user.name || req.user.username,
+        action: 'Mark Partial Pickup Ready',
+        details: `Marked partial pickup order ${orderId} as PendingFinalize`,
+        orderId
+      });
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Mark Partial Pickup Ready Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Finalize partial pickup into standard Picked Up state (permission-based, exception-only).
+  app.post("/api/orders/partial-pickup/finalize", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const { orderId } = req.body;
+      if (!orderId) {
+        return res.status(400).json({ success: false, error: "Missing orderId" });
+      }
+
+      if (!hasPermission(req.user, 'Finalize Partial Pickup')) {
+        return res.status(403).json({ success: false, error: "Forbidden: Finalize Partial Pickup permission required" });
+      }
+
+      const orderRef = currentDb.collection("orders").doc(orderId);
+      const orderDoc = await orderRef.get();
+      if (!orderDoc.exists) {
+        return res.status(404).json({ success: false, error: "Order not found" });
+      }
+
+      const order = orderDoc.data();
+      const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
+      const allowedWarehouses = req.user.allowedWarehouses || [];
+      if (!isSuper && !allowedWarehouses.includes('*') && !allowedWarehouses.includes(order?.warehouseId)) {
+        return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
+      }
+
+      if (order?.status !== 'Created') {
+        return res.status(400).json({ success: false, error: "Only Created orders can be finalized from partial pickup flow" });
+      }
+      if (!order?.pickupExceptionStatus || !['PartialPendingSales', 'PendingFinalize'].includes(order.pickupExceptionStatus)) {
+        return res.status(400).json({ success: false, error: "Order is not in partial pickup exception flow" });
+      }
+
+      const timestamp = new Date().toISOString();
+      await orderRef.update({
+        status: 'Picked Up',
+        statusUpdatedAt: timestamp,
+        actualPickupTime: order?.actualPickupTime || timestamp,
+        pickedUpBy: order?.pickedUpBy || req.user.name || req.user.username,
+        pickupExceptionStatus: null,
+        partialPickupInfo: {
+          ...(order?.partialPickupInfo || {}),
+          finalizedAt: timestamp,
+          finalizedBy: req.user.name || req.user.username
+        },
+        updatedAt: timestamp,
+        updatedBy: req.user.username
+      });
+
+      await currentDb.collection("logs").add({
+        timestamp,
+        userId: req.user.uid,
+        userName: req.user.name || req.user.username,
+        action: 'Finalize Partial Pickup',
+        details: `Finalized partial pickup order ${orderId} into Picked Up`,
+        orderId
+      });
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Finalize Partial Pickup Error:", error);
       return res.status(500).json({ success: false, error: error.message });
     }
   });

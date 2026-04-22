@@ -77,6 +77,9 @@ export const Orders = () => {
   const [showPickupModal, setShowPickupModal] = useState(false);
   const [pickupOrder, setPickupOrder] = useState<Order | null>(null);
   const [confirmingPickup, setConfirmingPickup] = useState(false);
+  const [pickupStep, setPickupStep] = useState<'items' | 'signature'>('items');
+  const [pickupSelections, setPickupSelections] = useState<boolean[]>([]);
+  const [partialPickupReason, setPartialPickupReason] = useState('');
   const pickupSignatureRef = useRef<SignatureCanvas>(null);
 
   useEffect(() => {
@@ -223,9 +226,20 @@ export const Orders = () => {
   };
 
   const isPriorityPickupOrder = (order: Order) =>
+    !!order.pickupExceptionStatus ||
     getWarehouseStatusLabel(order) !== 'Not Requested' &&
     order.status !== 'Picked Up' &&
     order.status !== 'Reviewed';
+
+  const getPickupExceptionBadge = (order: Order) => {
+    if (order.pickupExceptionStatus === 'PartialPendingSales') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">PARTIAL</span>;
+    }
+    if (order.pickupExceptionStatus === 'PendingFinalize') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200">READY FINALIZE</span>;
+    }
+    return null;
+  };
 
   const filteredOrders = useMemo(() => {
     const result = orders.filter(order => {
@@ -544,8 +558,31 @@ export const Orders = () => {
       return;
     }
 
+    if (order.pickupExceptionStatus) {
+      setNotification({ message: 'This order is in partial pickup exception flow. Please process it in order detail.', type: 'error' });
+      return;
+    }
+
     setPickupOrder(order);
+    setPickupStep('items');
+    setPickupSelections((order.items || []).map(() => true));
+    setPartialPickupReason('');
     setShowPickupModal(true);
+  };
+
+  const proceedToPickupSignature = () => {
+    if (!pickupOrder) return;
+    const pickedCount = pickupSelections.filter(Boolean).length;
+    if (pickedCount === 0) {
+      setNotification({ message: 'Please select at least one picked item.', type: 'error' });
+      return;
+    }
+    const isPartial = pickedCount < pickupSelections.length;
+    if (isPartial && !partialPickupReason.trim()) {
+      setNotification({ message: 'Please provide a reason for partial pickup.', type: 'error' });
+      return;
+    }
+    setPickupStep('signature');
   };
 
   const handleQuickConfirmPickup = async () => {
@@ -568,6 +605,10 @@ export const Orders = () => {
 
     try {
       setConfirmingPickup(true);
+      const selectedIndexes = pickupSelections
+        .map((selected, index) => (selected ? index : -1))
+        .filter(index => index >= 0);
+
       const response = await fetch('/api/orders/confirm-pickup', {
         method: 'POST',
         headers: {
@@ -577,7 +618,9 @@ export const Orders = () => {
         },
         body: JSON.stringify({
           orderId: pickupOrder.id,
-          signatureData: pickupSignatureRef.current.toDataURL()
+          signatureData: pickupSignatureRef.current.toDataURL(),
+          pickedItemIndexes: selectedIndexes,
+          partialReason: partialPickupReason.trim() || null
         })
       });
 
@@ -586,9 +629,18 @@ export const Orders = () => {
         throw new Error(data.error || 'Failed to confirm pickup');
       }
 
+      const isPartialPickup = selectedIndexes.length < pickupSelections.length;
       setShowPickupModal(false);
       setPickupOrder(null);
-      setNotification({ message: `Order ${pickupOrder.bookingNumber} confirmed as picked up.`, type: 'success' });
+      setPickupStep('items');
+      setPickupSelections([]);
+      setPartialPickupReason('');
+      setNotification({
+        message: isPartialPickup
+          ? `Order ${pickupOrder.bookingNumber} marked as partial pickup for Sales follow-up.`
+          : `Order ${pickupOrder.bookingNumber} confirmed as picked up.`,
+        type: 'success'
+      });
       fetchOrders();
     } catch (err: any) {
       setNotification({ message: err.message || 'Failed to confirm pickup.', type: 'error' });
@@ -668,49 +720,100 @@ export const Orders = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl border border-slate-100">
             <h3 className="text-xl font-bold text-slate-900 mb-2">Confirm Pickup</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Booking <span className="font-semibold text-slate-700">{pickupOrder.bookingNumber}</span> requires customer signature.
-            </p>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-              <SignatureCanvas
-                ref={pickupSignatureRef}
-                penColor="black"
-                canvasProps={{ className: 'w-full h-44 bg-white rounded-lg border border-slate-200' }}
-              />
-            </div>
-
-            <div className="flex justify-between items-center mt-3 mb-6">
-              <button
-                type="button"
-                onClick={() => pickupSignatureRef.current?.clear()}
-                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-              >
-                Clear Signature
-              </button>
-              <span className={cn('text-xs font-semibold', getWarehouseStatusBadgeClass(pickupOrder))}>
-                Warehouse: {getWarehouseStatusLabel(pickupOrder)}
-              </span>
-            </div>
+            {pickupStep === 'items' ? (
+              <>
+                <p className="text-sm text-slate-500 mb-4">
+                  Booking <span className="font-semibold text-slate-700">{pickupOrder.bookingNumber}</span>: confirm which items were actually picked up.
+                </p>
+                <div className="max-h-72 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                  {(pickupOrder.items || []).map((item, index) => (
+                    <label key={`${item.sku}-${index}`} className="flex items-start gap-3 p-3 hover:bg-slate-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={pickupSelections[index] || false}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setPickupSelections(prev => prev.map((value, i) => (i === index ? checked : value)));
+                        }}
+                        className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-800">{item.sku}</p>
+                        <p className="text-xs text-slate-500">{item.productName || 'N/A'} · Qty {item.qty || 0}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {pickupSelections.some(v => !v) && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Reason for Partial Pickup</label>
+                    <textarea
+                      value={partialPickupReason}
+                      onChange={(e) => setPartialPickupReason(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="e.g. Out of stock for one SKU"
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-slate-500 mb-4">
+                  Continue with customer signature to finish confirmation.
+                </p>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <SignatureCanvas
+                    ref={pickupSignatureRef}
+                    penColor="black"
+                    canvasProps={{ className: 'w-full h-44 bg-white rounded-lg border border-slate-200' }}
+                  />
+                </div>
+                <div className="flex justify-between items-center mt-3 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => pickupSignatureRef.current?.clear()}
+                    className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                  >
+                    Clear Signature
+                  </button>
+                  <span className={cn('text-xs font-semibold', getWarehouseStatusBadgeClass(pickupOrder))}>
+                    Warehouse: {getWarehouseStatusLabel(pickupOrder)}
+                  </span>
+                </div>
+              </>
+            )}
 
             <div className="flex gap-3">
               <button
                 onClick={() => {
                   setShowPickupModal(false);
                   setPickupOrder(null);
+                  setPickupStep('items');
+                  setPickupSelections([]);
+                  setPartialPickupReason('');
                 }}
                 className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-all"
                 disabled={confirmingPickup}
               >
                 Cancel
               </button>
-              <button
-                onClick={handleQuickConfirmPickup}
-                disabled={confirmingPickup}
-                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all disabled:opacity-50"
-              >
-                {confirmingPickup ? 'Confirming...' : 'Confirm Pickup'}
-              </button>
+              {pickupStep === 'items' ? (
+                <button
+                  onClick={proceedToPickupSignature}
+                  className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all"
+                >
+                  Continue to Signature
+                </button>
+              ) : (
+                <button
+                  onClick={handleQuickConfirmPickup}
+                  disabled={confirmingPickup}
+                  className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all disabled:opacity-50"
+                >
+                  {confirmingPickup ? 'Confirming...' : 'Confirm Pickup'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -988,6 +1091,7 @@ export const Orders = () => {
                         <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900">{order.bookingNumber}</span>
+                            {getPickupExceptionBadge(order)}
                             {order.warehouseStatus === 'Picked' && (
                               <div className="flex items-center gap-1 text-emerald-600" title="Ready">
                                 <ShoppingCart className="w-3.5 h-3.5" />
@@ -1072,7 +1176,7 @@ export const Orders = () => {
                               
                               {activeMenuId === order.id && (
                                 <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-30 py-1 overflow-hidden">
-                                  {hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email) && order.status === 'Created' && (
+                                  {hasPermission(profile, 'Confirm Pickup', profile?.username || profile?.email) && order.status === 'Created' && !order.pickupExceptionStatus && (
                                     <button
                                       onClick={() => openConfirmPickup(order)}
                                       className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
@@ -1141,6 +1245,7 @@ export const Orders = () => {
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="font-bold text-slate-900">{order.bookingNumber}</h3>
+                          {getPickupExceptionBadge(order)}
                           {order.emailStatus === 'sent' && (
                             <Mail className="w-3 h-3 text-emerald-500" />
                           )}
