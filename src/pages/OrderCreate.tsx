@@ -21,12 +21,18 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SUPER_ADMINS } from '../lib/auth-shared';
+import { API_BASE_URL, CN_API_ONLY } from '../constants';
+import { useLocation } from 'react-router-dom';
 
 import { PageHeader } from '../components/PageHeader';
 
 export const OrderCreate = () => {
-  const { profile, activeWarehouse } = useAuth();
+  const { profile, activeWarehouse, token } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/cn') ? '/cn' : '';
+  const isCnApiMode = CN_API_ONLY && routePrefix === '/cn';
+  const ordersBasePath = `${routePrefix}/orders`;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -91,6 +97,26 @@ export const OrderCreate = () => {
   useEffect(() => {
     const fetchStores = async () => {
       try {
+        if (isCnApiMode) {
+          if (!token) return;
+          const response = await fetch(`${API_BASE_URL}/api/stores/list`, {
+            headers: {
+              'x-v2-auth-token': `Bearer ${token}`,
+              'x-warehouse-id': activeWarehouse || ''
+            }
+          });
+          const data = await response.json();
+          if (!data.success) throw new Error(data.error || 'Failed to fetch stores');
+          const storesData = (data.stores || []) as Store[];
+          const configs: Record<string, boolean> = {};
+          storesData.forEach((s: any) => {
+            if (s.storeId) configs[s.storeId] = s.autoSend || false;
+          });
+          setStoreConfigs(configs);
+          setStores(storesData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+          return;
+        }
+
         const q = query(collection(db, 'stores'));
         const snap = await getDocs(q);
         const storesData = snap.docs.map(doc => ({ 
@@ -110,7 +136,7 @@ export const OrderCreate = () => {
       }
     };
     fetchStores();
-  }, []);
+  }, [isCnApiMode, token, activeWarehouse]);
   
   useEffect(() => {
     const fetchUsersAndGroups = async () => {
@@ -146,6 +172,22 @@ export const OrderCreate = () => {
   useEffect(() => {
     if (skuSearch.length >= 2) {
       const fetchSKUs = async () => {
+        if (isCnApiMode) {
+          if (!token) return;
+          const params = new URLSearchParams({ q: skuSearch, limit: '50' });
+          const response = await fetch(`${API_BASE_URL}/api/skus/search?${params.toString()}`, {
+            headers: {
+              'x-v2-auth-token': `Bearer ${token}`,
+              'x-warehouse-id': activeWarehouse || ''
+            }
+          });
+          const data = await response.json();
+          if (!data.success) throw new Error(data.error || 'Failed to search SKU');
+          setSkuResults((data.skus || []) as SKU[]);
+          setShowSkuResults(true);
+          return;
+        }
+
         const q = query(
           collection(db, 'skus'),
           where('sku', '>=', skuSearch.toUpperCase()),
@@ -160,7 +202,7 @@ export const OrderCreate = () => {
       setSkuResults([]);
       setShowSkuResults(false);
     }
-  }, [skuSearch]);
+  }, [skuSearch, isCnApiMode, token, activeWarehouse]);
 
   const addItem = (sku?: SKU) => {
     if (sku) {
@@ -274,7 +316,7 @@ export const OrderCreate = () => {
         console.warn("⚠️ [Order Creation Warning]: No ID returned from server, using local booking number.");
       }
 
-      navigate(`/orders/${result || finalBookingNumber}`);
+      navigate(`${ordersBasePath}/${result || finalBookingNumber}`);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to create order. Please try again.');
@@ -290,7 +332,7 @@ export const OrderCreate = () => {
         <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
         <h2 className="text-2xl font-bold text-slate-900">No Warehouse Selected</h2>
         <p className="text-slate-500 mt-2">Please select a warehouse from the top menu or refresh the page to continue.</p>
-        <Link to="/orders" className="text-indigo-600 mt-4 inline-block font-medium">Back to Orders</Link>
+        <Link to={ordersBasePath} className="text-indigo-600 mt-4 inline-block font-medium">Back to Orders</Link>
       </div>
     );
   }
@@ -304,7 +346,7 @@ export const OrderCreate = () => {
         isScrolled={isScrolled}
         maxWidth="max-w-4xl"
         backButton={
-          <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors block">
+          <Link to={ordersBasePath} className="p-2 hover:bg-slate-100 rounded-full transition-colors block">
             <ArrowLeft className="w-6 h-6 text-slate-500" />
           </Link>
         }
@@ -728,7 +770,7 @@ export const OrderCreate = () => {
         <div className="flex justify-end gap-4">
           <button
             type="button"
-            onClick={() => navigate('/orders')}
+            onClick={() => navigate(ordersBasePath)}
             className="px-6 py-3 text-slate-600 font-semibold hover:bg-slate-100 rounded-xl transition-colors"
           >
             Cancel
