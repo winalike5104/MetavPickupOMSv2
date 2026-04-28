@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../components/AuthProvider';
 import { Package, Lock, User, AlertCircle, CheckCircle2, ChevronRight } from 'lucide-react';
+import { CN_API_ONLY } from '../constants';
 
 export const Login = () => {
   const [username, setUsername] = useState('');
@@ -18,7 +19,7 @@ export const Login = () => {
   useEffect(() => {
     if (user && profile) {
       if (activeWarehouse) {
-        navigate('/');
+        navigate(CN_API_ONLY ? '/cn' : '/');
       } else {
         navigate('/select-warehouse');
       }
@@ -55,7 +56,7 @@ export const Login = () => {
         
         // 确认存进去了
         if (localStorage.getItem('x-v2-auth-token')) {
-           navigate('/dashboard');
+           navigate(CN_API_ONLY ? '/cn' : '/');
         } else {
            alert("LocalStorage 写入失败！");
         }

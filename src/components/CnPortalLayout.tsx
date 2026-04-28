@@ -16,11 +16,11 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const navItems = [
-    { name: 'Portal Home', path: '/cn', icon: Home, visible: true },
-    { name: 'Order List', path: '/cn/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) },
-    { name: 'Overdue Orders', path: '/cn/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', profile?.email) || hasPermission(profile, 'View Orders', profile?.email) },
-    { name: 'User Management', path: '/cn/users', icon: Users, visible: isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage Users', profile?.email) },
-    { name: 'Mail Center', path: '/cn/orders', icon: Mail, visible: hasPermission(profile, 'View Orders', profile?.email) }
+    { name: '门户首页', path: '/cn', icon: Home, visible: true },
+    { name: '订单列表', path: '/cn/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) },
+    { name: '超期订单', path: '/cn/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', profile?.email) || hasPermission(profile, 'View Orders', profile?.email) },
+    { name: '账号管理', path: '/cn/users', icon: Users, visible: isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage Users', profile?.email) },
+    { name: '邮件中心', path: '/cn/orders', icon: Mail, visible: hasPermission(profile, 'View Orders', profile?.email) }
   ];
 
   return (
@@ -29,7 +29,7 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
         <Link to="/cn" className="flex items-center gap-2">
           <Warehouse className="w-7 h-7 text-indigo-600" />
           <div className="flex items-end gap-2">
-            <span className="text-lg font-bold text-slate-900 tracking-tight">WMS CN Portal</span>
+            <span className="text-lg font-bold text-slate-900 tracking-tight">WMS 中国门户</span>
             <span className="text-[10px] font-semibold text-slate-400 mb-0.5">v{APP_VERSION}</span>
           </div>
         </Link>
@@ -43,7 +43,7 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
             className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />
-            Logout
+            退出登录
           </button>
         </div>
       </header>

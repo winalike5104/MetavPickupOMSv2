@@ -5,6 +5,7 @@ import { db, auth } from '../firebase';
 import { UserProfile, ROLE_TEMPLATES } from '../types';
 import { requestNotificationPermission } from '../messaging';
 import { WarehouseSelector } from './WarehouseSelector';
+import { CN_API_ONLY } from '../constants';
 
 interface AuthContextType {
   user: { uid: string; username: string; email?: string; role: string; allowedWarehouses: string[] } | null;
@@ -76,6 +77,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(parsedUser);
         
         setProfile(buildProfileFromUser(parsedUser));
+
+        // CN API-only mode: skip all Firebase dependencies.
+        if (CN_API_ONLY) {
+          setLoading(false);
+          setIsAuthReady(true);
+          return;
+        }
 
         // Restore Firebase Auth session if custom token exists
         const savedFirebaseToken = localStorage.getItem('firebase_custom_token');
@@ -173,7 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('x-v2-auth-token', data.token);
     localStorage.setItem('user_info', JSON.stringify(data.user));
     
-    if (data.firebaseCustomToken) {
+    if (!CN_API_ONLY && data.firebaseCustomToken) {
       localStorage.setItem('firebase_custom_token', data.firebaseCustomToken);
       try {
         await signInWithCustomToken(auth, data.firebaseCustomToken);
@@ -204,7 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('firebase_custom_token');
     sessionStorage.removeItem('activeWarehouse');
     if (profileUnsubRef.current) profileUnsubRef.current();
-    auth.signOut();
+    if (!CN_API_ONLY) auth.signOut();
     setToken(null);
     setUser(null);
     setProfile(null);

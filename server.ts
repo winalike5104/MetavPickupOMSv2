@@ -266,6 +266,126 @@ async function startServer() {
     }
   });
 
+  // Orders list endpoint (API-first mode support for CN portal)
+  app.get("/api/orders/list", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      const warehouseId = (req.query.warehouseId as string) || "";
+      const limitValue = Math.min(Math.max(Number(req.query.limit) || 3000, 1), 5000);
+      const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
+      const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
+
+      let q: any;
+      if (isSuper && (!warehouseId || warehouseId === "AKL")) {
+        q = currentDb.collection("orders").orderBy("createdTime", "desc").limit(limitValue);
+      } else {
+        if (!warehouseId) {
+          return res.status(400).json({ success: false, error: "Missing warehouseId" });
+        }
+        if (!isSuper && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(warehouseId)) {
+          return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
+        }
+        q = currentDb.collection("orders")
+          .where("warehouseId", "==", warehouseId)
+          .orderBy("createdTime", "desc")
+          .limit(limitValue);
+      }
+
+      const snap = await q.get();
+      const orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      return res.json({ success: true, orders });
+    } catch (error: any) {
+      console.error("Orders List Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Order detail endpoint (API-first mode support for CN portal)
+  app.get("/api/orders/detail/:orderId", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      const { orderId } = req.params;
+      const orderDoc = await currentDb.collection("orders").doc(orderId).get();
+      if (!orderDoc.exists) return res.status(404).json({ success: false, error: "Order not found" });
+
+      const order = { id: orderDoc.id, ...orderDoc.data() } as any;
+      const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
+      const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
+      if (!isSuper && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(order.warehouseId)) {
+        return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
+      }
+
+      return res.json({ success: true, order });
+    } catch (error: any) {
+      console.error("Order Detail Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Stores list endpoint
+  app.get("/api/stores/list", authenticate, async (_req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      const snap = await currentDb.collection("stores").get();
+      const stores = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      return res.json({ success: true, stores });
+    } catch (error: any) {
+      console.error("Stores List Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Order logs endpoint
+  app.get("/api/logs/order/:orderId", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      const { orderId } = req.params;
+      const limitValue = Math.min(Math.max(Number(req.query.limit) || 300, 1), 1000);
+      const snap = await currentDb.collection("logs")
+        .where("orderId", "==", orderId)
+        .limit(limitValue)
+        .get();
+      const logs = snap.docs
+        .map((d: any) => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      return res.json({ success: true, logs });
+    } catch (error: any) {
+      console.error("Order Logs Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // SKU search endpoint (for edit item search in CN API-only mode)
+  app.get("/api/skus/search", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      const term = ((req.query.q as string) || "").trim().toUpperCase();
+      const limitValue = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+      if (term.length < 2) return res.json({ success: true, skus: [] });
+
+      const snap = await currentDb.collection("skus")
+        .where("sku", ">=", term)
+        .where("sku", "<=", term + "\uf8ff")
+        .limit(limitValue)
+        .get();
+      const skus = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      return res.json({ success: true, skus });
+    } catch (error: any) {
+      console.error("SKU Search Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: {

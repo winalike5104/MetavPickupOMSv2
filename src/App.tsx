@@ -25,6 +25,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationManager } from './components/NotificationManager';
 import { CnPortalLayout } from './components/CnPortalLayout';
 import { CnPortalHome } from './pages/CnPortalHome';
+import { CN_API_ONLY } from './constants';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthReady, profile, activeWarehouse } = useAuth();
@@ -147,7 +148,7 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/select-warehouse" element={<WarehouseSelection />} />
               <Route path="/guest-display" element={<GuestDisplay />} />
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/" element={CN_API_ONLY ? <Navigate to="/cn" /> : <ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
               <Route path="/orders/create" element={<ProtectedRoute><OrderCreate /></ProtectedRoute>} />
               <Route path="/orders/bulk-import" element={<ProtectedRoute><BulkOrderUpload /></ProtectedRoute>} />
@@ -169,7 +170,7 @@ export default function App() {
               <Route path="/cn/orders/:id" element={<ProtectedCnRoute><OrderDetail /></ProtectedCnRoute>} />
               <Route path="/cn/overdue" element={<ProtectedCnRoute><OverdueOrders /></ProtectedCnRoute>} />
               <Route path="/cn/users" element={<ProtectedCnRoute><UserManagement /></ProtectedCnRoute>} />
-              <Route path="*" element={<Navigate to="/" />} />
+              <Route path="*" element={<Navigate to={CN_API_ONLY ? "/cn" : "/"} />} />
             </Routes>
           </Router>
         </TaskProvider>

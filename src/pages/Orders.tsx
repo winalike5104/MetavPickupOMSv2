@@ -34,7 +34,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useOrderService } from '../hooks/useOrderService';
 import { useDebounce } from '../hooks/useDebounce';
-import { API_BASE_URL } from '../constants';
+import { API_BASE_URL, CN_API_ONLY } from '../constants';
 import { useTask } from '../components/TaskProvider';
 import SignatureCanvas from 'react-signature-canvas';
 
@@ -103,6 +103,37 @@ export const Orders = () => {
 
   const navigate = useNavigate();
   const routePrefix = location.pathname.startsWith('/cn') ? '/cn' : '';
+  const isCnApiMode = CN_API_ONLY && routePrefix === '/cn';
+  const cnText = {
+    orderManagement: isCnApiMode ? '订单管理' : 'Order Management',
+    warehouse: isCnApiMode ? '仓库' : 'Warehouse',
+    bulkImport: isCnApiMode ? '批量导入' : 'Bulk Import',
+    newOrder: isCnApiMode ? '新建订单' : 'New Order',
+    export: isCnApiMode ? '导出' : 'Export',
+    searchPlaceholder: isCnApiMode ? '搜索 预订号/参考号/客户/证件号/SKU...' : 'Search by Booking #, Ref #, Customer, ID, or SKU...',
+    reviewed: isCnApiMode ? '已审核' : 'Reviewed',
+    sendEmails: isCnApiMode ? '发送邮件' : 'Send Emails',
+    activeOrders: isCnApiMode ? '进行中订单' : 'Active Orders',
+    allOrders: isCnApiMode ? '全部订单' : 'All Orders',
+    overdueOrders: isCnApiMode ? '超期订单' : 'Overdue Orders',
+    to: isCnApiMode ? '至' : 'to',
+    allPayments: isCnApiMode ? '全部付款方式' : 'All Payments',
+    allStores: isCnApiMode ? '全部门店' : 'All Stores',
+    noOrders: isCnApiMode ? '未找到订单。' : 'No orders found.',
+    refreshList: isCnApiMode ? '刷新列表' : 'Refresh List',
+    bookingNo: isCnApiMode ? '预订号' : 'Booking #',
+    customer: isCnApiMode ? '客户' : 'Customer',
+    store: isCnApiMode ? '门店' : 'Store',
+    pickupDate: isCnApiMode ? '提货日期' : 'Pickup Date',
+    payment: isCnApiMode ? '付款' : 'Payment',
+    total: isCnApiMode ? '总额' : 'Total',
+    status: isCnApiMode ? '状态' : 'Status',
+    warehouseStatus: isCnApiMode ? '仓库状态' : 'Warehouse Status',
+    action: isCnApiMode ? '操作' : 'Action',
+    confirmPickup: isCnApiMode ? '确认提货' : 'Confirm Pickup',
+    sendPickupEmail: isCnApiMode ? '发送提货邮件' : 'Send Pickup Email',
+    viewDetails: isCnApiMode ? '查看详情' : 'View Details'
+  };
   const ordersBasePath = `${routePrefix}/orders`;
   const getOrderDetailPath = (orderId?: string) => `${ordersBasePath}/${orderId || ''}`;
 
@@ -134,10 +165,28 @@ export const Orders = () => {
       fetchOrders();
     }
     fetchStores();
-  }, [activeWarehouse]);
+  }, [activeWarehouse, token, isCnApiMode]);
 
   const fetchStores = async () => {
     try {
+      if (isCnApiMode) {
+        if (!token) return;
+        const response = await fetch(`${API_BASE_URL}/api/stores/list`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Failed to fetch stores');
+        const storesData = (data.stores || []).map((s: any) => ({
+          id: s.id,
+          name: s.name || s.storeId || s.id
+        }));
+        setStores(storesData.sort((a, b) => a.name.localeCompare(b.name)));
+        return;
+      }
+
       const q = query(collection(db, 'stores'));
       const snap = await getDocs(q);
       const storesData = snap.docs.map(doc => ({ 
@@ -152,8 +201,32 @@ export const Orders = () => {
 
   const fetchOrders = async () => {
     if (!activeWarehouse) return;
+    if (isCnApiMode && !token) return;
     setLoading(true);
     try {
+      if (isCnApiMode) {
+        const params = new URLSearchParams({
+          warehouseId: activeWarehouse,
+          limit: '3000'
+        });
+        const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Failed to fetch orders');
+        const fetched = (data.orders || []) as Order[];
+        const filteredOrders = fetched.filter(order => {
+          const orderWarehouse = order.warehouseId || 'AKL';
+          return orderWarehouse === activeWarehouse;
+        });
+        setOrders(filteredOrders);
+        setLoading(false);
+        return;
+      }
+
       const ordersRef = collection(db, 'orders');
       
       // 核心优化：确保查询条件与安全规则匹配 (Query Matching)
@@ -706,7 +779,7 @@ export const Orders = () => {
                 onClick={() => setShowConfirmModal(false)}
                 className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-semibold hover:bg-slate-200 transition-all"
               >
-                Cancel
+                {isCnApiMode ? '取消' : 'Cancel'}
               </button>
               <button
                 onClick={executeBulkAction}
@@ -806,7 +879,7 @@ export const Orders = () => {
                   onClick={proceedToPickupSignature}
                   className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all"
                 >
-                  Continue to Signature
+                  {isCnApiMode ? '继续签名' : 'Continue to Signature'}
                 </button>
               ) : (
                 <button
@@ -814,7 +887,7 @@ export const Orders = () => {
                   disabled={confirmingPickup}
                   className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all disabled:opacity-50"
                 >
-                  {confirmingPickup ? 'Confirming...' : 'Confirm Pickup'}
+                  {confirmingPickup ? (isCnApiMode ? '确认中...' : 'Confirming...') : cnText.confirmPickup}
                 </button>
               )}
             </div>
@@ -823,11 +896,11 @@ export const Orders = () => {
       )}
 
       <PageHeader
-        title="Order Management"
+        title={cnText.orderManagement}
         subtitle={
           <>
             <MapPin className="w-4 h-4" />
-            <span>Warehouse: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
+            <span>{cnText.warehouse}: <span className="font-bold text-indigo-600">{activeWarehouse}</span></span>
           </>
         }
         icon={ShoppingBag}
@@ -844,7 +917,7 @@ export const Orders = () => {
                   "p-2 rounded-lg transition-all",
                   viewMode === 'table' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
                 )}
-                title="Table View"
+                title={isCnApiMode ? "表格视图" : "Table View"}
               >
                 <TableIcon className="w-5 h-5" />
               </button>
@@ -854,7 +927,7 @@ export const Orders = () => {
                   "p-2 rounded-lg transition-all",
                   viewMode === 'card' ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:bg-slate-50"
                 )}
-                title="Card View"
+                title={isCnApiMode ? "卡片视图" : "Card View"}
               >
                 <LayoutGrid className="w-5 h-5" />
               </button>
@@ -871,7 +944,7 @@ export const Orders = () => {
                 <span className={cn(
                   "transition-all",
                   isScrolled ? "hidden group-hover:inline" : "inline"
-                )}>Bulk Import</span>
+                )}>{cnText.bulkImport}</span>
               </Link>
             )}
             {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
@@ -883,7 +956,7 @@ export const Orders = () => {
                 )}
               >
                 <Plus className={isScrolled ? "w-3 h-3 group-hover:w-4 group-hover:h-4" : "w-4 h-4"} />
-                New Order
+                {cnText.newOrder}
               </Link>
             )}
             <button 
@@ -897,7 +970,7 @@ export const Orders = () => {
               <span className={cn(
                 "transition-all",
                 isScrolled ? "hidden group-hover:inline" : "inline"
-              )}>Export</span>
+              )}>{cnText.export}</span>
             </button>
           </>
         }
@@ -911,13 +984,13 @@ export const Orders = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                placeholder="Search by Booking #, Ref #, Customer, ID, or SKU..."
+                placeholder={cnText.searchPlaceholder}
               />
               <button 
                 onClick={fetchOrders}
                 disabled={loading}
                 className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-200 rounded-lg transition-colors text-slate-400 hover:text-indigo-600 disabled:opacity-50"
-                title="Refresh orders"
+                title={isCnApiMode ? "刷新订单" : "Refresh orders"}
               >
                 <Loader2 className={cn("w-5 h-5", loading && "animate-spin")} />
               </button>
@@ -936,7 +1009,7 @@ export const Orders = () => {
                   ) : (
                     <CheckCircle className="w-4 h-4" />
                   )}
-                  Mark {selectedOrderIds.length} Reviewed
+                  {isCnApiMode ? `标记 ${selectedOrderIds.length} 条为已审核` : `Mark ${selectedOrderIds.length} Reviewed`}
                 </button>
                 <button
                   onClick={handleBulkEmailClick}
@@ -950,7 +1023,7 @@ export const Orders = () => {
                   ) : (
                     <Mail className="w-4 h-4" />
                   )}
-                  Send {selectedOrderIds.length} Emails
+                  {isCnApiMode ? `发送 ${selectedOrderIds.length} 封邮件` : `Send ${selectedOrderIds.length} Emails`}
                 </button>
               </div>
             )}
@@ -969,9 +1042,9 @@ export const Orders = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="bg-transparent outline-none text-sm flex-1 font-medium"
               >
-                <option value="Active">Active Orders</option>
-                <option value="All">All Orders</option>
-                <option value="Overdue">Overdue Orders</option>
+                <option value="Active">{cnText.activeOrders}</option>
+                <option value="All">{cnText.allOrders}</option>
+                <option value="Overdue">{cnText.overdueOrders}</option>
                 <option value="Created">Created</option>
                 <option value="Picked Up">Picked Up</option>
                 <option value="Reviewed">Reviewed</option>
@@ -986,7 +1059,7 @@ export const Orders = () => {
                 onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
                 className="bg-transparent outline-none text-xs flex-1"
               />
-              <span className="text-slate-400">to</span>
+              <span className="text-slate-400">{cnText.to}</span>
               <input 
                 type="date" 
                 value={dateRange.end} 
@@ -1001,7 +1074,7 @@ export const Orders = () => {
                 onChange={(e) => setPaymentMethodFilter(e.target.value)}
                 className="bg-transparent outline-none text-sm flex-1 font-medium"
               >
-                <option value="All">All Payments</option>
+                <option value="All">{cnText.allPayments}</option>
                 <option value="Cash">Cash</option>
                 <option value="EFTPOS">EFTPOS</option>
                 <option value="Bank Transfer">Bank Transfer</option>
@@ -1015,7 +1088,7 @@ export const Orders = () => {
                 onChange={(e) => setStoreFilter(e.target.value)}
                 className="bg-transparent outline-none text-sm flex-1 font-medium"
               >
-                <option value="All">All Stores</option>
+                <option value="All">{cnText.allStores}</option>
                 {stores.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -1035,12 +1108,12 @@ export const Orders = () => {
         ) : filteredOrders.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border border-slate-100 border-dashed">
             <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500 font-medium mb-4">No orders found.</p>
+            <p className="text-slate-500 font-medium mb-4">{cnText.noOrders}</p>
             <button 
               onClick={fetchOrders}
               className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-medium"
             >
-              Refresh List
+              {cnText.refreshList}
             </button>
           </div>
         ) : (
@@ -1058,15 +1131,15 @@ export const Orders = () => {
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
                       </th>
-                      <th className="px-6 py-4">Booking #</th>
-                      <th className="px-6 py-4">Customer</th>
-                      <th className="px-6 py-4">Store</th>
-                      <th className="px-6 py-4">Pickup Date</th>
-                      <th className="px-6 py-4">Payment</th>
-                      <th className="px-6 py-4 text-right">Total</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4">Warehouse Status</th>
-                      <th className="px-6 py-4 text-right">Action</th>
+                      <th className="px-6 py-4">{cnText.bookingNo}</th>
+                      <th className="px-6 py-4">{cnText.customer}</th>
+                      <th className="px-6 py-4">{cnText.store}</th>
+                      <th className="px-6 py-4">{cnText.pickupDate}</th>
+                      <th className="px-6 py-4">{cnText.payment}</th>
+                      <th className="px-6 py-4 text-right">{cnText.total}</th>
+                      <th className="px-6 py-4">{cnText.status}</th>
+                      <th className="px-6 py-4">{cnText.warehouseStatus}</th>
+                      <th className="px-6 py-4 text-right">{cnText.action}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -1185,7 +1258,7 @@ export const Orders = () => {
                                       className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                                     >
                                       <CheckCircle className="w-4 h-4 text-emerald-500" />
-                                      Confirm Pickup
+                                      {cnText.confirmPickup}
                                     </button>
                                   )}
                                   <button
@@ -1193,14 +1266,14 @@ export const Orders = () => {
                                     className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                                   >
                                     <Mail className="w-4 h-4 text-emerald-500" />
-                                    Send Pickup Email
+                                    {cnText.sendPickupEmail}
                                   </button>
                                   <button
                                     onClick={() => navigate(getOrderDetailPath(order.id))}
                                     className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                                   >
                                     <FileText className="w-4 h-4 text-indigo-500" />
-                                    View Details
+                                    {cnText.viewDetails}
                                   </button>
                                 </div>
                               )}

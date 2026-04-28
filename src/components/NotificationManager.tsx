@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { usePickingNotifications } from '../hooks/usePickingNotifications';
 import { Bell, Volume2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { CN_API_ONLY } from '../constants';
 
 export const NotificationManager: React.FC = () => {
   const { audioEnabled, enableAudio, hasPickingPermission } = usePickingNotifications();
+  if (CN_API_ONLY) return null;
   const [showBanner, setShowBanner] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<any>(
     typeof window !== 'undefined' && 'Notification' in window 

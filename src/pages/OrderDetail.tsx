@@ -55,7 +55,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas-pro';
 import { io, Socket } from 'socket.io-client';
-import { API_BASE_URL } from '../constants';
+import { API_BASE_URL, CN_API_ONLY } from '../constants';
 
 import { PageHeader } from '../components/PageHeader';
 
@@ -65,6 +65,19 @@ export const OrderDetail: React.FC = () => {
   const location = useLocation();
   const { profile, user, activeWarehouse, token } = useAuth();
   const ordersBasePath = location.pathname.startsWith('/cn') ? '/cn/orders' : '/orders';
+  const isCnApiMode = CN_API_ONLY && location.pathname.startsWith('/cn');
+  const cnText = {
+    backToOrders: isCnApiMode ? '返回订单列表' : 'Back to Orders',
+    edit: isCnApiMode ? '编辑' : 'Edit',
+    print: isCnApiMode ? '打印' : 'Print',
+    requestPicking: isCnApiMode ? '请求拣货' : 'Request Picking',
+    confirmPickup: isCnApiMode ? '确认提货' : 'Confirm Pickup',
+    submitForFinalization: isCnApiMode ? '提交终审' : 'Submit For Finalization',
+    finalizePartialPickup: isCnApiMode ? '完成部分提货' : 'Finalize Partial Pickup',
+    markReviewed: isCnApiMode ? '标记已审核' : 'Mark Reviewed',
+    cancel: isCnApiMode ? '取消订单' : 'Cancel',
+    ref: isCnApiMode ? '参考号' : 'Ref'
+  };
   
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,10 +140,11 @@ export const OrderDetail: React.FC = () => {
   const [showSkuResults, setShowSkuResults] = useState(false);
 
   useEffect(() => {
+    if (isCnApiMode && !token) return;
     fetchOrder();
     fetchStores();
     if (id) fetchLogs(id);
-  }, [id]);
+  }, [id, token, isCnApiMode]);
 
   // Socket setup for signature projection
   useEffect(() => {
@@ -293,6 +307,23 @@ export const OrderDetail: React.FC = () => {
     if (!id) return;
     try {
       setLoading(true);
+      if (isCnApiMode) {
+        if (!token) return;
+        const response = await fetch(`${API_BASE_URL}/api/orders/detail/${id}`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to load order details');
+        }
+        const orderData = data.order as Order;
+        setOrder(orderData);
+        setEditForm(orderData);
+        return;
+      }
       const docRef = doc(db, 'orders', id);
       const docSnap = await getDoc(docRef);
       
@@ -349,6 +380,19 @@ export const OrderDetail: React.FC = () => {
 
   const fetchStores = async () => {
     try {
+      if (isCnApiMode) {
+        if (!token) return;
+        const response = await fetch(`${API_BASE_URL}/api/stores/list`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Failed to fetch stores');
+        setStores((data.stores || []) as Store[]);
+        return;
+      }
       const querySnapshot = await getDocs(collection(db, 'stores'));
       const storesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Store));
       setStores(storesData);
@@ -359,6 +403,19 @@ export const OrderDetail: React.FC = () => {
 
   const fetchLogs = async (orderId: string) => {
     try {
+      if (isCnApiMode) {
+        if (!token) return;
+        const response = await fetch(`${API_BASE_URL}/api/logs/order/${orderId}?limit=300`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Failed to fetch logs');
+        setLogs((data.logs || []) as OperationLog[]);
+        return;
+      }
       const q = query(
         collection(db, 'logs'),
         where('orderId', '==', orderId)
@@ -755,6 +812,21 @@ export const OrderDetail: React.FC = () => {
     }
 
     try {
+      if (isCnApiMode) {
+        if (!token) return;
+        const params = new URLSearchParams({ q: term, limit: '50' });
+        const response = await fetch(`${API_BASE_URL}/api/skus/search?${params.toString()}`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Failed to search SKU');
+        setSkuResults((data.skus || []) as SKU[]);
+        setShowSkuResults(true);
+        return;
+      }
       const q = query(
         collection(db, 'skus'),
         where('sku', '>=', term.toUpperCase()),
@@ -885,13 +957,13 @@ export const OrderDetail: React.FC = () => {
         <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mb-4">
           <AlertCircle className="w-8 h-8" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">{error || 'Order not found'}</h2>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">{error || (isCnApiMode ? '未找到订单' : 'Order not found')}</h2>
         <button
           onClick={() => navigate(ordersBasePath)}
           className="text-indigo-600 hover:text-indigo-700 font-bold inline-flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Orders
+          {cnText.backToOrders}
         </button>
       </div>
     );
@@ -908,7 +980,7 @@ export const OrderDetail: React.FC = () => {
         subtitle={
           <div className="flex items-center gap-3">
             {renderStatusBadge(order.status)}
-            <span className="text-slate-500 text-sm">Ref: {order.refNumber}</span>
+            <span className="text-slate-500 text-sm">{cnText.ref}: {order.refNumber}</span>
           </div>
         }
         isScrolled={isScrolled}
@@ -930,7 +1002,7 @@ export const OrderDetail: React.FC = () => {
                 className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
               >
                 <Edit className="w-3.5 h-3.5 mr-1.5" />
-                Edit
+                {cnText.edit}
               </button>
             )}
             
@@ -940,7 +1012,7 @@ export const OrderDetail: React.FC = () => {
                 className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
               >
                 <Printer className="w-3.5 h-3.5 mr-1.5" />
-                Print
+                {cnText.print}
               </button>
             )}
 
@@ -950,7 +1022,7 @@ export const OrderDetail: React.FC = () => {
                 className="inline-flex items-center px-3 py-1.5 bg-indigo-600 rounded-xl text-xs font-bold text-white hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
               >
                 <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
-                Request Picking
+                {cnText.requestPicking}
               </button>
             )}
 
@@ -960,7 +1032,7 @@ export const OrderDetail: React.FC = () => {
                 className="inline-flex items-center px-3 py-1.5 bg-emerald-600 rounded-xl text-xs font-bold text-white hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
               >
                 <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
-                Confirm Pickup
+                {cnText.confirmPickup}
               </button>
             )}
 
@@ -970,7 +1042,7 @@ export const OrderDetail: React.FC = () => {
                 disabled={partialFlowLoading}
                 className="inline-flex items-center px-3 py-1.5 bg-orange-600 rounded-xl text-xs font-bold text-white hover:bg-orange-700 transition-all shadow-lg shadow-orange-200 disabled:opacity-50"
               >
-                Submit For Finalization
+                {cnText.submitForFinalization}
               </button>
             )}
 
@@ -980,7 +1052,7 @@ export const OrderDetail: React.FC = () => {
                 disabled={partialFlowLoading}
                 className="inline-flex items-center px-3 py-1.5 bg-violet-600 rounded-xl text-xs font-bold text-white hover:bg-violet-700 transition-all shadow-lg shadow-violet-200 disabled:opacity-50"
               >
-                Finalize Partial Pickup
+                {cnText.finalizePartialPickup}
               </button>
             )}
 
@@ -990,7 +1062,7 @@ export const OrderDetail: React.FC = () => {
                 className="inline-flex items-center px-3 py-1.5 bg-purple-600 rounded-xl text-xs font-bold text-white hover:bg-purple-700 transition-all shadow-lg shadow-purple-200"
               >
                 <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
-                Mark Reviewed
+                {cnText.markReviewed}
               </button>
             )}
 
@@ -1000,7 +1072,7 @@ export const OrderDetail: React.FC = () => {
                 className="inline-flex items-center px-3 py-1.5 bg-red-50 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100 transition-all"
               >
                 <XCircle className="w-3.5 h-3.5 mr-1.5" />
-                Cancel
+                {cnText.cancel}
               </button>
             )}
           </>

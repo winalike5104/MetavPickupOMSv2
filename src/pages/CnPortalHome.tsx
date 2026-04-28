@@ -9,29 +9,29 @@ export const CnPortalHome: React.FC = () => {
 
   const cards = [
     {
-      title: 'Order Management',
-      desc: 'Create/edit orders, process pickup, review picked-up orders.',
+      title: '订单管理',
+      desc: '创建/编辑订单，处理提货，审核已提货订单。',
       to: '/cn/orders',
       icon: ClipboardList,
       visible: hasPermission(profile, 'View Orders', profile?.email)
     },
     {
-      title: 'Overdue Handling',
-      desc: 'Handle overdue non-picked-up orders and audit closure workflow.',
+      title: '超期处理',
+      desc: '处理超期未提货订单并执行结案审核流程。',
       to: '/cn/overdue',
       icon: Clock,
       visible: hasPermission(profile, 'Audit Overdue Orders', profile?.email) || hasPermission(profile, 'View Orders', profile?.email)
     },
     {
-      title: 'Pickup Mail',
-      desc: 'Send pickup notification email from order list actions.',
+      title: '提货通知',
+      desc: '在订单列表中发送提货通知邮件。',
       to: '/cn/orders',
       icon: Mail,
       visible: hasPermission(profile, 'View Orders', profile?.email)
     },
     {
-      title: 'Account Management',
-      desc: 'Create and manage sales/admin accounts and permissions.',
+      title: '账号管理',
+      desc: '创建并管理销售/管理员账号及权限。',
       to: '/cn/users',
       icon: Users,
       visible: isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage Users', profile?.email)
@@ -42,8 +42,8 @@ export const CnPortalHome: React.FC = () => {
     <div className="p-4 md:p-8 overflow-y-auto">
       <div className="max-w-6xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">China Lightweight Portal</h1>
-          <p className="text-slate-500 mt-1">Direct-access daily operations for sales and admin teams.</p>
+          <h1 className="text-2xl font-bold text-slate-900">中国轻量门户</h1>
+          <p className="text-slate-500 mt-1">面向销售与管理员的本地直连日常操作入口。</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {cards.filter(c => c.visible).map((card) => (

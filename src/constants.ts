@@ -10,3 +10,4 @@ export const WAREHOUSE_NAMES: Record<string, string> = {
 
 export const API_BASE_URL = "";
 export const APP_VERSION = "1.0.1";
+export const CN_API_ONLY = import.meta.env.VITE_CN_API_ONLY === "true";

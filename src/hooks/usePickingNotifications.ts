@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
+import { CN_API_ONLY } from '../constants';
 
 // Sound URL - using a more distinctive and professional digital chime
 const NOTIFICATION_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
@@ -86,6 +87,7 @@ export const usePickingNotifications = () => {
   };
 
   useEffect(() => {
+    if (CN_API_ONLY) return;
     // Kill switch: if no user, no warehouse, or permission revoked, stop everything
     if (!user || !activeWarehouse || !hasPickingPermission) {
       setIsInitialized(false);
