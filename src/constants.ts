@@ -10,4 +10,9 @@ export const WAREHOUSE_NAMES: Record<string, string> = {
 
 export const API_BASE_URL = "";
 export const APP_VERSION = "1.0.1";
-export const CN_API_ONLY = import.meta.env.VITE_CN_API_ONLY === "true";
+const isCnHostname =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "cn.acapickup.com" ||
+    window.location.hostname.startsWith("cn."));
+
+export const CN_API_ONLY = import.meta.env.VITE_CN_API_ONLY === "true" || isCnHostname;
