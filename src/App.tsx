@@ -23,6 +23,8 @@ import { OverdueOrders } from './pages/OverdueOrders';
 import { TaskProvider } from './components/TaskProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationManager } from './components/NotificationManager';
+import { CnPortalLayout } from './components/CnPortalLayout';
+import { CnPortalHome } from './pages/CnPortalHome';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthReady, profile, activeWarehouse } = useAuth();
@@ -106,6 +108,34 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <Layout>{children}</Layout>;
 };
 
+const ProtectedCnRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAuthReady, profile, activeWarehouse } = useAuth();
+
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+        <p className="text-slate-500 animate-pulse">Initializing CN portal...</p>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" />;
+  if (!activeWarehouse && window.location.pathname !== '/select-warehouse') return <Navigate to="/select-warehouse" />;
+  if (profile?.status === 'Disabled') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 text-center">
+        <div>
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Account Disabled</h1>
+          <p className="text-slate-600">Please contact your administrator for assistance.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <CnPortalLayout>{children}</CnPortalLayout>;
+};
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -133,6 +163,12 @@ export default function App() {
               <Route path="/report-settings" element={<ProtectedRoute><ReportSettings /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/logs" element={<ProtectedRoute><OperationLogs /></ProtectedRoute>} />
+              <Route path="/cn" element={<ProtectedCnRoute><CnPortalHome /></ProtectedCnRoute>} />
+              <Route path="/cn/orders" element={<ProtectedCnRoute><Orders /></ProtectedCnRoute>} />
+              <Route path="/cn/orders/create" element={<ProtectedCnRoute><OrderCreate /></ProtectedCnRoute>} />
+              <Route path="/cn/orders/:id" element={<ProtectedCnRoute><OrderDetail /></ProtectedCnRoute>} />
+              <Route path="/cn/overdue" element={<ProtectedCnRoute><OverdueOrders /></ProtectedCnRoute>} />
+              <Route path="/cn/users" element={<ProtectedCnRoute><UserManagement /></ProtectedCnRoute>} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </Router>

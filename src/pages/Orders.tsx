@@ -102,6 +102,9 @@ export const Orders = () => {
   }, []);
 
   const navigate = useNavigate();
+  const routePrefix = location.pathname.startsWith('/cn') ? '/cn' : '';
+  const ordersBasePath = `${routePrefix}/orders`;
+  const getOrderDetailPath = (orderId?: string) => `${ordersBasePath}/${orderId || ''}`;
 
   useEffect(() => {
     const requestedStatus = normalizeStatusFilter(location.state?.statusFilter);
@@ -858,7 +861,7 @@ export const Orders = () => {
             </div>
             {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
               <Link 
-                to="/orders/bulk-import"
+                to={`${ordersBasePath}/bulk-import`}
                 className={cn(
                   "inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm",
                   isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
@@ -873,7 +876,7 @@ export const Orders = () => {
             )}
             {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
               <Link 
-                to="/orders/create"
+                to={`${ordersBasePath}/create`}
                 className={cn(
                   "inline-flex items-center gap-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200",
                   isScrolled ? "px-3 py-1.5 text-xs group-hover:px-4 group-hover:py-2.5 group-hover:text-sm" : "px-4 py-2.5 text-sm"
@@ -1088,7 +1091,7 @@ export const Orders = () => {
                             )}
                           />
                         </td>
-                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900">{order.bookingNumber}</span>
                             {getPickupExceptionBadge(order)}
@@ -1124,17 +1127,17 @@ export const Orders = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           <p className="font-medium text-slate-700">{order.customerName}</p>
                           <p className="text-xs text-slate-500">{order.customerId}</p>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           {stores.find(s => s.id === order.storeId)?.name || order.storeId || 'N/A'}
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4 text-sm text-slate-500" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           {formatDate(order.pickupDateScheduled, 'yyyy-MM-dd')}
                         </td>
-                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           <span className={cn(
                             "px-2 py-1 rounded text-[10px] font-bold",
                             order.paymentStatus === 'Paid' ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
@@ -1142,10 +1145,10 @@ export const Orders = () => {
                             {order.paymentStatus}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4 text-right" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           <span className="font-bold text-slate-900">${(order.totalAmount || 0).toFixed(2)}</span>
                         </td>
-                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           <span className={cn(
                             "px-3 py-1 rounded-full text-xs font-bold",
                             order.status === 'Created' ? "bg-amber-100 text-amber-700" :
@@ -1156,7 +1159,7 @@ export const Orders = () => {
                             {order.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4" onClick={() => navigate(`/orders/${order.id}`)}>
+                        <td className="px-6 py-4" onClick={() => navigate(getOrderDetailPath(order.id))}>
                           <span className={cn(
                             "px-2.5 py-1 rounded-full text-xs font-bold",
                             getWarehouseStatusBadgeClass(order)
@@ -1193,7 +1196,7 @@ export const Orders = () => {
                                     Send Pickup Email
                                   </button>
                                   <button
-                                    onClick={() => navigate(`/orders/${order.id}`)}
+                                    onClick={() => navigate(getOrderDetailPath(order.id))}
                                     className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                                   >
                                     <FileText className="w-4 h-4 text-indigo-500" />
@@ -1204,7 +1207,7 @@ export const Orders = () => {
                             </div>
                             <ChevronRight 
                               className="w-5 h-5 text-slate-300 cursor-pointer hover:text-indigo-500" 
-                              onClick={() => navigate(`/orders/${order.id}`)}
+                              onClick={() => navigate(getOrderDetailPath(order.id))}
                             />
                             {isPriorityPickupOrder(order) && (
                               <span
@@ -1225,7 +1228,7 @@ export const Orders = () => {
               {filteredOrders.map((order) => (
                 <div
                   key={order.id}
-                  onClick={() => navigate(`/orders/${order.id}`)}
+                  onClick={() => navigate(getOrderDetailPath(order.id))}
                   className={cn(
                     "bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-4",
                     isPriorityPickupOrder(order) && "bg-amber-50 border-amber-200"
@@ -1340,3 +1343,4 @@ export const Orders = () => {
   </div>
 );
 };
+

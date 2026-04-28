@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   doc, 
   getDoc, 
@@ -62,7 +62,9 @@ import { PageHeader } from '../components/PageHeader';
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile, user, activeWarehouse, token } = useAuth();
+  const ordersBasePath = location.pathname.startsWith('/cn') ? '/cn/orders' : '/orders';
   
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -885,7 +887,7 @@ export const OrderDetail: React.FC = () => {
         </div>
         <h2 className="text-xl font-bold text-slate-900 mb-2">{error || 'Order not found'}</h2>
         <button
-          onClick={() => navigate('/orders')}
+          onClick={() => navigate(ordersBasePath)}
           className="text-indigo-600 hover:text-indigo-700 font-bold inline-flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -914,7 +916,7 @@ export const OrderDetail: React.FC = () => {
         className="print:hidden"
         backButton={
           <button
-            onClick={() => navigate('/orders')}
+            onClick={() => navigate(ordersBasePath)}
             className="p-2 hover:bg-slate-100 rounded-full transition-colors"
           >
             <ArrowLeft className="w-6 h-6 text-slate-500" />
