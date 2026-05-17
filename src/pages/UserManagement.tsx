@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { UserProfile, PERMISSIONS, ROLE_TEMPLATES, UserStatus, AccountType } from '../types';
 import { logAction, hasPermission, handleFirestoreError, OperationType, isSystemAdmin, cn } from '../utils';
@@ -74,12 +72,21 @@ export const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, 'users'));
-      const allUsers = snap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+      const response = await fetch('/api/admin/list-users', {
+        headers: {
+          'x-v2-auth-token': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch users');
+      }
+      const allUsers = (data.users || []) as UserProfile[];
       // Hide system administrator from the list
       setUsers(allUsers.filter(u => !isSystemAdmin(u.username)));
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err.message || 'Failed to load users');
     } finally {
       setLoading(false);
     }

@@ -972,6 +972,18 @@ async function startServer() {
         });
       }
 
+      // Build field-level change summary for operation logs.
+      const changeLines: string[] = [];
+      Object.keys(enrichedUpdateData || {}).forEach((k) => {
+        const beforeValue = (order as any)?.[k];
+        const afterValue = (enrichedUpdateData as any)[k];
+        if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+          const beforeText = typeof beforeValue === 'undefined' ? 'undefined' : JSON.stringify(beforeValue);
+          const afterText = typeof afterValue === 'undefined' ? 'undefined' : JSON.stringify(afterValue);
+          changeLines.push(`${k}: ${beforeText} -> ${afterText}`);
+        }
+      });
+
       // Log the action
       try {
         await currentDb.collection("logs").add({
@@ -979,7 +991,9 @@ async function startServer() {
           userId: req.user.uid,
           userName: req.user.name || req.user.username,
           action: 'Order Updated',
-          details: `Updated order ${orderId}`,
+          details: changeLines.length
+            ? `Updated order ${orderId}; changes: ${changeLines.join(' | ')}`
+            : `Updated order ${orderId}; no material field changes detected`,
           orderId: orderId
         });
       } catch (logErr) {
@@ -2256,6 +2270,38 @@ async function startServer() {
       return res.json({ success: true, message: "User created successfully", uid: newUserRef.id });
     } catch (error: any) {
       console.error("Admin Create User Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin: Update User
+  app.get("/api/admin/list-users", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) {
+      return res.status(503).json({ success: false, error: "Database not initialized" });
+    }
+
+    try {
+      const callerUsername = (req.user.username || "").toLowerCase();
+      const isSuper = SUPER_ADMINS.includes(callerUsername);
+      const isAdmin = req.user.role === 'Admin' || isSuper;
+
+      if (!isAdmin && !hasPermission(req.user, 'Manage Users')) {
+        return res.status(403).json({ success: false, error: "Forbidden: Manage Users permission required" });
+      }
+
+      const snap = await currentDb.collection("users").get();
+      const users = snap.docs
+        .map((d: any) => ({ uid: d.id, ...d.data() }))
+        // Never expose password hash to frontend.
+        .map((u: any) => {
+          const { password, ...rest } = u;
+          return rest;
+        });
+
+      return res.json({ success: true, users });
+    } catch (error: any) {
+      console.error("Admin List Users Error:", error);
       return res.status(500).json({ success: false, error: error.message });
     }
   });
