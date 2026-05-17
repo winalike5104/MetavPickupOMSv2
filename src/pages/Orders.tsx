@@ -206,7 +206,7 @@ export const Orders = () => {
     try {
       if (isCnApiMode) {
         const params = new URLSearchParams({
-          limit: '3000'
+          limit: '500'
         });
         const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
           headers: {

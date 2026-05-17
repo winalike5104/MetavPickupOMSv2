@@ -274,13 +274,55 @@ async function startServer() {
     try {
       const warehouseId = (req.query.warehouseId as string) || "";
       const requestedWh = (req.headers['x-warehouse-id'] as string) || "";
-      const limitValue = Math.min(Math.max(Number(req.query.limit) || 3000, 1), 5000);
+      // Keep payload bounded to avoid oversized-response 500s on Cloud Run.
+      const limitValue = Math.min(Math.max(Number(req.query.limit) || 500, 1), 1000);
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
 
       if (!isSuper && !allowedWarehouses.includes("*") && warehouseId && !allowedWarehouses.includes(warehouseId)) {
         return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
       }
+
+      const sortByCreatedDesc = (rows: any[]) =>
+        rows.sort((a: any, b: any) => {
+          const ta = a?.createdTime ? new Date(a.createdTime).getTime() : 0;
+          const tb = b?.createdTime ? new Date(b.createdTime).getTime() : 0;
+          return tb - ta;
+        });
+
+      const fetchByWarehouseEq = async (wh: string) => {
+        try {
+          const snap = await currentDb.collection("orders")
+            .where("warehouseId", "==", wh)
+            .orderBy("createdTime", "desc")
+            .limit(limitValue)
+            .get();
+          return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+        } catch (_e) {
+          const snap = await currentDb.collection("orders")
+            .where("warehouseId", "==", wh)
+            .limit(limitValue)
+            .get();
+          return sortByCreatedDesc(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
+        }
+      };
+
+      const fetchByWarehouseIn = async (warehouseList: string[]) => {
+        try {
+          const snap = await currentDb.collection("orders")
+            .where("warehouseId", "in", warehouseList.slice(0, 10))
+            .orderBy("createdTime", "desc")
+            .limit(limitValue)
+            .get();
+          return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+        } catch (_e) {
+          const snap = await currentDb.collection("orders")
+            .where("warehouseId", "in", warehouseList.slice(0, 10))
+            .limit(limitValue)
+            .get();
+          return sortByCreatedDesc(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
+        }
+      };
 
       // Compatibility: legacy orders without warehouseId should be treated as AKL,
       // matching the existing NZ front-end behavior.
@@ -317,27 +359,12 @@ async function startServer() {
               .get();
             orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
           } else if (effectiveWarehouses.length === 1) {
-            const snap = await currentDb.collection("orders")
-              .where("warehouseId", "==", effectiveWarehouses[0])
-              .orderBy("createdTime", "desc")
-              .limit(limitValue)
-              .get();
-            orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+            orders = await fetchByWarehouseEq(effectiveWarehouses[0]);
           } else {
-            const snap = await currentDb.collection("orders")
-              .where("warehouseId", "in", effectiveWarehouses.slice(0, 10))
-              .orderBy("createdTime", "desc")
-              .limit(limitValue)
-              .get();
-            orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+            orders = await fetchByWarehouseIn(effectiveWarehouses);
           }
         } else {
-          const snap = await currentDb.collection("orders")
-            .where("warehouseId", "==", warehouseId)
-            .orderBy("createdTime", "desc")
-            .limit(limitValue)
-            .get();
-          orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          orders = await fetchByWarehouseEq(warehouseId);
         }
       }
       return res.json({ success: true, orders });
