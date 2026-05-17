@@ -339,7 +339,7 @@ async function startServer() {
       if (needsAklCompatScan) {
         const snap = await currentDb.collection("orders").orderBy("createdTime", "desc").limit(limitValue).get();
         orders = snap.docs
-          .map((d: any) => ({ id: d.id, ...d.data() }))
+          .map((d: any) => toListOrder({ id: d.id, ...d.data() }))
           .filter((o: any) => {
             const wh = o.warehouseId || "AKL";
             if (warehouseId) {
@@ -357,7 +357,7 @@ async function startServer() {
               .orderBy("createdTime", "desc")
               .limit(limitValue)
               .get();
-            orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+            orders = snap.docs.map((d: any) => toListOrder({ id: d.id, ...d.data() }));
           } else if (effectiveWarehouses.length === 1) {
             orders = await fetchByWarehouseEq(effectiveWarehouses[0]);
           } else {
@@ -367,6 +367,7 @@ async function startServer() {
           orders = await fetchByWarehouseEq(warehouseId);
         }
       }
+      orders = orders.map(toListOrder);
       return res.json({ success: true, orders });
     } catch (error: any) {
       console.error("Orders List Error:", error);
@@ -2443,3 +2444,12 @@ async function startServer() {
 }
 
 startServer();
+      const toListOrder = (o: any) => {
+        // Avoid large payload fields (e.g. base64 signatures) in list endpoint.
+        const {
+          customerSignature,
+          signatureData,
+          ...rest
+        } = o || {};
+        return rest;
+      };
