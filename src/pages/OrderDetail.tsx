@@ -1776,6 +1776,62 @@ export const OrderDetail: React.FC = () => {
         </div>
       )}
 
+      {/* Payment Modal */}
+      {isPaymentEditing && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <h2 className="text-xl font-bold text-gray-900">Update Payment</h2>
+              <button onClick={() => setIsPaymentEditing(false)} className="p-2 hover:bg-gray-200 rounded-full">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
+                <select
+                  value={paymentForm.paymentStatus}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentStatus: e.target.value as PaymentStatus }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Unpaid">Unpaid</option>
+                  <option value="Paid">Paid</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <select
+                  value={paymentForm.paymentMethod}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value as PaymentMethod }))}
+                  disabled={paymentForm.paymentStatus !== 'Paid'}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  <option value="">Select Method</option>
+                  <option value="Cash">Cash</option>
+                  <option value="EFTPOS">EFTPOS</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Online Payment">Online Payment</option>
+                </select>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setIsPaymentEditing(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdatePayment}
+                className="px-6 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm"
+              >
+                Save Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Modal */}
       {isEditing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -1886,61 +1942,6 @@ export const OrderDetail: React.FC = () => {
                             </button>
       )}
 
-      {/* Payment Modal */}
-      {isPaymentEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-              <h2 className="text-xl font-bold text-gray-900">Update Payment</h2>
-              <button onClick={() => setIsPaymentEditing(false)} className="p-2 hover:bg-gray-200 rounded-full">
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
-                <select
-                  value={paymentForm.paymentStatus}
-                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentStatus: e.target.value as PaymentStatus }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="Unpaid">Unpaid</option>
-                  <option value="Paid">Paid</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                <select
-                  value={paymentForm.paymentMethod}
-                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value as PaymentMethod }))}
-                  disabled={paymentForm.paymentStatus !== 'Paid'}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
-                >
-                  <option value="">Select Method</option>
-                  <option value="Cash">Cash</option>
-                  <option value="EFTPOS">EFTPOS</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                  <option value="Online Payment">Online Payment</option>
-                </select>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
-              <button
-                onClick={() => setIsPaymentEditing(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdatePayment}
-                className="px-6 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm"
-              >
-                Save Payment
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
                         </div>
                       )}
                     </div>
