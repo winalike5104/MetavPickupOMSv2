@@ -273,6 +273,7 @@ async function startServer() {
 
     try {
       const warehouseId = (req.query.warehouseId as string) || "";
+      const requestedWh = (req.headers['x-warehouse-id'] as string) || "";
       const limitValue = Math.min(Math.max(Number(req.query.limit) || 3000, 1), 5000);
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
@@ -284,9 +285,14 @@ async function startServer() {
       // Compatibility: legacy orders without warehouseId should be treated as AKL,
       // matching the existing NZ front-end behavior.
       const needsAklCompatScan = !warehouseId || warehouseId === "AKL";
-      const effectiveWarehouses = isSuper || allowedWarehouses.includes("*")
+      let effectiveWarehouses = isSuper || allowedWarehouses.includes("*")
         ? null
         : allowedWarehouses;
+      // Compatibility fallback: if user's warehouse permissions are empty,
+      // use current selected warehouse from header to avoid empty-list false negatives.
+      if (!effectiveWarehouses || effectiveWarehouses.length === 0) {
+        effectiveWarehouses = requestedWh ? [requestedWh] : effectiveWarehouses;
+      }
       let orders: any[] = [];
       if (needsAklCompatScan) {
         const snap = await currentDb.collection("orders").orderBy("createdTime", "desc").limit(limitValue).get();

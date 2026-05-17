@@ -362,10 +362,13 @@ export const OrderDetail: React.FC = () => {
 
         const finalOrderData = needsEnrichment ? { ...orderData, items: enrichedItems } : orderData;
 
-        // Warehouse Isolation Check
+        // Warehouse Isolation Check (unified pool): check against user allowed warehouses,
+        // not the currently selected warehouse tab.
         const isSuper = profile?.allowedWarehouses?.includes('*');
-        if (!isSuper && activeWarehouse && finalOrderData.warehouseId !== activeWarehouse) {
-          setError('Access Denied: Order belongs to a different warehouse');
+        const orderWarehouse = finalOrderData.warehouseId || 'AKL';
+        const allowedWarehouses = profile?.allowedWarehouses || [];
+        if (!isSuper && allowedWarehouses.length > 0 && !allowedWarehouses.includes(orderWarehouse)) {
+          setError('Access Denied: You do not have permission for this warehouse');
           setLoading(false);
           return;
         }
