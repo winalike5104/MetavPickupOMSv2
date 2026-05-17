@@ -83,8 +83,13 @@ export const OrderDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isPaymentEditing, setIsPaymentEditing] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
   const [logs, setLogs] = useState<OperationLog[]>([]);
+  const [paymentForm, setPaymentForm] = useState<{ paymentStatus: PaymentStatus; paymentMethod: PaymentMethod | '' }>({
+    paymentStatus: 'Unpaid',
+    paymentMethod: ''
+  });
   
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
@@ -478,6 +483,62 @@ export const OrderDetail: React.FC = () => {
     }
   };
 
+  const openPaymentEditor = () => {
+    if (!order) return;
+    setPaymentForm({
+      paymentStatus: order.paymentStatus || 'Unpaid',
+      paymentMethod: (order.paymentMethod as PaymentMethod) || ''
+    });
+    setIsPaymentEditing(true);
+  };
+
+  const handleUpdatePayment = async () => {
+    if (!id || !profile || !order || !token) return;
+
+    const updateData: any = {
+      paymentStatus: paymentForm.paymentStatus,
+      paymentMethod: paymentForm.paymentStatus === 'Paid' ? (paymentForm.paymentMethod || null) : null
+    };
+
+    if (paymentForm.paymentStatus === 'Paid' && order.paymentStatus === 'Unpaid') {
+      updateData.paymentTime = new Date().toISOString();
+      updateData.paymentBy = profile.name;
+    } else if (paymentForm.paymentStatus === 'Unpaid' && order.paymentStatus === 'Paid') {
+      updateData.paymentTime = null;
+      updateData.paymentBy = null;
+    } else if (paymentForm.paymentStatus === 'Paid' && order.paymentStatus === 'Paid') {
+      updateData.paymentTime = order.paymentTime || new Date().toISOString();
+      updateData.paymentBy = order.paymentBy || profile.name;
+    }
+
+    try {
+      const response = await fetch('/api/orders/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        },
+        body: JSON.stringify({
+          orderId: id,
+          updateData
+        })
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to update payment');
+      }
+
+      setIsPaymentEditing(false);
+      fetchOrder();
+      fetchLogs(id);
+    } catch (err: any) {
+      console.error('Error updating payment:', err);
+      alert(err.message || 'Failed to update payment');
+    }
+  };
+
   const handleStatusChange = async (newStatus: OrderStatus) => {
     if (!id || !profile || !order) {
       console.warn('Cannot update status: missing context', { id, hasProfile: !!profile, hasOrder: !!order });
@@ -499,8 +560,8 @@ export const OrderDetail: React.FC = () => {
     // Rule: Only unpaid orders can be cancelled
     if (newStatus === 'Cancelled') {
       if (order.paymentStatus === 'Paid') {
-        alert('Only orders with removed payment (Unpaid) can be cancelled. Please edit the order to change payment status first.');
-        return;
+      alert('Only unpaid orders can be cancelled. Please use Update Payment to set status to Unpaid first.');
+      return;
       }
       
       setConfirmAction({
@@ -1003,6 +1064,16 @@ export const OrderDetail: React.FC = () => {
               >
                 <Edit className="w-3.5 h-3.5 mr-1.5" />
                 {cnText.edit}
+              </button>
+            )}
+
+            {(hasPermission(profile, 'Add Payment', profile?.username || profile?.email) || hasPermission(profile, 'Edit Payment', profile?.username || profile?.email)) && order.status !== 'Cancelled' && (
+              <button
+                onClick={openPaymentEditor}
+                className="inline-flex items-center px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all"
+              >
+                <CreditCard className="w-3.5 h-3.5 mr-1.5" />
+                Update Payment
               </button>
             )}
             
@@ -1758,34 +1829,6 @@ export const OrderDetail: React.FC = () => {
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
-                        <select
-                          value={editForm.paymentStatus || 'Unpaid'}
-                          onChange={e => setEditForm({ ...editForm, paymentStatus: e.target.value as PaymentStatus })}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="Unpaid">Unpaid</option>
-                          <option value="Paid">Paid</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                        <select
-                          value={editForm.paymentMethod || ''}
-                          onChange={e => setEditForm({ ...editForm, paymentMethod: e.target.value as PaymentMethod })}
-                          disabled={editForm.paymentStatus !== 'Paid'}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
-                        >
-                          <option value="">Select Method</option>
-                          <option value="Cash">Cash</option>
-                          <option value="EFTPOS">EFTPOS</option>
-                          <option value="Bank Transfer">Bank Transfer</option>
-                          <option value="Online Payment">Online Payment</option>
-                        </select>
-                      </div>
-                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                       <textarea
@@ -1838,7 +1881,63 @@ export const OrderDetail: React.FC = () => {
                                 <span className="text-[10px] opacity-70 italic">Not in database</span>
                               </div>
                             </button>
-                          )}
+      )}
+
+      {/* Payment Modal */}
+      {isPaymentEditing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <h2 className="text-xl font-bold text-gray-900">Update Payment</h2>
+              <button onClick={() => setIsPaymentEditing(false)} className="p-2 hover:bg-gray-200 rounded-full">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
+                <select
+                  value={paymentForm.paymentStatus}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentStatus: e.target.value as PaymentStatus }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Unpaid">Unpaid</option>
+                  <option value="Paid">Paid</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <select
+                  value={paymentForm.paymentMethod}
+                  onChange={e => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value as PaymentMethod }))}
+                  disabled={paymentForm.paymentStatus !== 'Paid'}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  <option value="">Select Method</option>
+                  <option value="Cash">Cash</option>
+                  <option value="EFTPOS">EFTPOS</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Online Payment">Online Payment</option>
+                </select>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setIsPaymentEditing(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdatePayment}
+                className="px-6 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm"
+              >
+                Save Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
                         </div>
                       )}
                     </div>

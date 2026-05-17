@@ -290,7 +290,7 @@ export const OrderCreate = () => {
           customerEmail,
           customerId,
           storeId,
-          warehouseId: activeWarehouse,
+          warehouseId: null,
           pickupDateScheduled,
           notes,
           items,
@@ -331,7 +331,7 @@ export const OrderCreate = () => {
       <div className="max-w-4xl mx-auto py-12 text-center">
         <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
         <h2 className="text-2xl font-bold text-slate-900">No Warehouse Selected</h2>
-        <p className="text-slate-500 mt-2">Please select a warehouse from the top menu or refresh the page to continue.</p>
+        <p className="text-slate-500 mt-2">Please select your current operation warehouse before continuing.</p>
         <Link to={ordersBasePath} className="text-indigo-600 mt-4 inline-block font-medium">Back to Orders</Link>
       </div>
     );

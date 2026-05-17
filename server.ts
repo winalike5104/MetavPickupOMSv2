@@ -277,24 +277,34 @@ async function startServer() {
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
 
-      let q: any;
-      if (isSuper && (!warehouseId || warehouseId === "AKL")) {
-        q = currentDb.collection("orders").orderBy("createdTime", "desc").limit(limitValue);
-      } else {
-        if (!warehouseId) {
-          return res.status(400).json({ success: false, error: "Missing warehouseId" });
-        }
-        if (!isSuper && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(warehouseId)) {
-          return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
-        }
-        q = currentDb.collection("orders")
-          .where("warehouseId", "==", warehouseId)
-          .orderBy("createdTime", "desc")
-          .limit(limitValue);
+      if (!warehouseId && !isSuper) {
+        return res.status(400).json({ success: false, error: "Missing warehouseId" });
+      }
+      if (!isSuper && !allowedWarehouses.includes("*") && warehouseId && !allowedWarehouses.includes(warehouseId)) {
+        return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
       }
 
-      const snap = await q.get();
-      const orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      // Compatibility: legacy orders without warehouseId should be treated as AKL,
+      // matching the existing NZ front-end behavior.
+      const needsAklCompatScan = !warehouseId || warehouseId === "AKL";
+      let orders: any[] = [];
+      if (needsAklCompatScan) {
+        const snap = await currentDb.collection("orders").orderBy("createdTime", "desc").limit(limitValue).get();
+        orders = snap.docs
+          .map((d: any) => ({ id: d.id, ...d.data() }))
+          .filter((o: any) => {
+            const wh = o.warehouseId || "AKL";
+            if (isSuper) return !warehouseId || wh === warehouseId;
+            return wh === warehouseId;
+          });
+      } else {
+        const snap = await currentDb.collection("orders")
+          .where("warehouseId", "==", warehouseId)
+          .orderBy("createdTime", "desc")
+          .limit(limitValue)
+          .get();
+        orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      }
       return res.json({ success: true, orders });
     } catch (error: any) {
       console.error("Orders List Error:", error);
@@ -313,9 +323,10 @@ async function startServer() {
       if (!orderDoc.exists) return res.status(404).json({ success: false, error: "Order not found" });
 
       const order = { id: orderDoc.id, ...orderDoc.data() } as any;
+      const orderWarehouse = order.warehouseId || "AKL";
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
-      if (!isSuper && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(order.warehouseId)) {
+      if (!isSuper && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(orderWarehouse)) {
         return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
       }
 
@@ -645,7 +656,7 @@ async function startServer() {
         notificationRecipients 
       } = req.body;
 
-      if (!bookingNumber || typeof bookingNumber !== 'string' || !customerName || !warehouseId) {
+      if (!bookingNumber || typeof bookingNumber !== 'string' || !customerName) {
         return res.status(400).json({ success: false, error: "Missing required fields or invalid Booking Number." });
       }
 
@@ -683,7 +694,7 @@ async function startServer() {
             customerEmail: customerEmail || null,
             customerId: customerId || null,
             storeId: storeId || null,
-            warehouseId,
+            warehouseId: warehouseId || null,
             pickupDateScheduled: pickupDateScheduled || null,
             notes: notes || null,
             createdBy: req.user.name || req.user.username,
@@ -817,12 +828,17 @@ async function startServer() {
       }
 
       const order = orderDoc.data();
+      const requestedWh = (req.headers['x-warehouse-id'] as string) || '';
+      const orderWarehouse = order?.warehouseId || requestedWh || null;
       const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
       const allowedWarehouses = req.user.allowedWarehouses || [];
 
       // Data Isolation Check
       if (!isSuper) {
-        if (!allowedWarehouses.includes('*') && !allowedWarehouses.includes(order?.warehouseId)) {
+        if (!orderWarehouse) {
+          return res.status(403).json({ success: false, error: "Forbidden: Missing warehouse context" });
+        }
+        if (!allowedWarehouses.includes('*') && !allowedWarehouses.includes(orderWarehouse)) {
           return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
         }
       }
@@ -836,8 +852,21 @@ async function startServer() {
         });
       }
 
+      const enrichedUpdateData: any = { ...updateData };
+      // Late-binding warehouse: for legacy/new orders without warehouse assignment,
+      // bind warehouse at first operational touch (picking/status update).
+      const isOperationalTouch =
+        typeof enrichedUpdateData.status !== 'undefined' ||
+        typeof enrichedUpdateData.warehouseStatus !== 'undefined' ||
+        typeof enrichedUpdateData['pickingLog.requestedAt'] !== 'undefined' ||
+        typeof enrichedUpdateData['pickingLog.startedAt'] !== 'undefined' ||
+        typeof enrichedUpdateData['pickingLog.finishedAt'] !== 'undefined';
+      if (!order?.warehouseId && requestedWh && isOperationalTouch) {
+        enrichedUpdateData.warehouseId = requestedWh;
+      }
+
       await orderRef.update({
-        ...updateData,
+        ...enrichedUpdateData,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedBy: req.user.username
       });
@@ -1124,12 +1153,17 @@ async function startServer() {
       }
 
       const order = orderDoc.data();
+      const requestedWh = (req.headers['x-warehouse-id'] as string) || '';
+      const orderWarehouse = order?.warehouseId || requestedWh || null;
       const isSuper = SUPER_ADMINS.includes(req.user.username.toLowerCase());
       const allowedWarehouses = req.user.allowedWarehouses || [];
 
       // Data Isolation Check
       if (!isSuper) {
-        if (!allowedWarehouses.includes('*') && !allowedWarehouses.includes(order?.warehouseId)) {
+        if (!orderWarehouse) {
+          return res.status(403).json({ success: false, error: "Forbidden: Missing warehouse context" });
+        }
+        if (!allowedWarehouses.includes('*') && !allowedWarehouses.includes(orderWarehouse)) {
           return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
         }
       }
@@ -1179,6 +1213,9 @@ async function startServer() {
         updatedAt: timestamp,
         updatedBy: req.user.username
       };
+      if (!order?.warehouseId && requestedWh) {
+        updatePayload.warehouseId = requestedWh;
+      }
 
       if (isPartialPickup) {
         updatePayload.status = 'Created';

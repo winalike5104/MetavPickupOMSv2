@@ -54,9 +54,10 @@ export const Login = () => {
         localStorage.setItem('x-v2-auth-token', result.token);
         localStorage.setItem('user_info', JSON.stringify(result.user));
         
-        // 确认存进去了
+        // Ensure warehouse is selected before entering order pages.
         if (localStorage.getItem('x-v2-auth-token')) {
-           navigate(CN_API_ONLY ? '/cn' : '/');
+           const savedWarehouse = sessionStorage.getItem('activeWarehouse');
+           navigate(savedWarehouse ? (CN_API_ONLY ? '/cn' : '/') : '/select-warehouse');
         } else {
            alert("LocalStorage 写入失败！");
         }
