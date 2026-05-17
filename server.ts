@@ -277,9 +277,6 @@ async function startServer() {
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
 
-      if (!warehouseId && !isSuper) {
-        return res.status(400).json({ success: false, error: "Missing warehouseId" });
-      }
       if (!isSuper && !allowedWarehouses.includes("*") && warehouseId && !allowedWarehouses.includes(warehouseId)) {
         return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
       }
@@ -287,6 +284,9 @@ async function startServer() {
       // Compatibility: legacy orders without warehouseId should be treated as AKL,
       // matching the existing NZ front-end behavior.
       const needsAklCompatScan = !warehouseId || warehouseId === "AKL";
+      const effectiveWarehouses = isSuper || allowedWarehouses.includes("*")
+        ? null
+        : allowedWarehouses;
       let orders: any[] = [];
       if (needsAklCompatScan) {
         const snap = await currentDb.collection("orders").orderBy("createdTime", "desc").limit(limitValue).get();
@@ -294,16 +294,45 @@ async function startServer() {
           .map((d: any) => ({ id: d.id, ...d.data() }))
           .filter((o: any) => {
             const wh = o.warehouseId || "AKL";
-            if (isSuper) return !warehouseId || wh === warehouseId;
-            return wh === warehouseId;
+            if (warehouseId) {
+              if (isSuper || allowedWarehouses.includes("*")) return wh === warehouseId;
+              return wh === warehouseId && allowedWarehouses.includes(warehouseId);
+            }
+            if (!effectiveWarehouses) return true;
+            return effectiveWarehouses.includes(wh);
           });
       } else {
-        const snap = await currentDb.collection("orders")
-          .where("warehouseId", "==", warehouseId)
-          .orderBy("createdTime", "desc")
-          .limit(limitValue)
-          .get();
-        orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+        // If no explicit warehouse is provided, aggregate by allowed warehouses.
+        if (!warehouseId) {
+          if (!effectiveWarehouses || effectiveWarehouses.length === 0) {
+            const snap = await currentDb.collection("orders")
+              .orderBy("createdTime", "desc")
+              .limit(limitValue)
+              .get();
+            orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          } else if (effectiveWarehouses.length === 1) {
+            const snap = await currentDb.collection("orders")
+              .where("warehouseId", "==", effectiveWarehouses[0])
+              .orderBy("createdTime", "desc")
+              .limit(limitValue)
+              .get();
+            orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          } else {
+            const snap = await currentDb.collection("orders")
+              .where("warehouseId", "in", effectiveWarehouses.slice(0, 10))
+              .orderBy("createdTime", "desc")
+              .limit(limitValue)
+              .get();
+            orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          }
+        } else {
+          const snap = await currentDb.collection("orders")
+            .where("warehouseId", "==", warehouseId)
+            .orderBy("createdTime", "desc")
+            .limit(limitValue)
+            .get();
+          orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+        }
       }
       return res.json({ success: true, orders });
     } catch (error: any) {

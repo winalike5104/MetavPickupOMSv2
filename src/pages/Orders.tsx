@@ -206,7 +206,6 @@ export const Orders = () => {
     try {
       if (isCnApiMode) {
         const params = new URLSearchParams({
-          warehouseId: activeWarehouse,
           limit: '3000'
         });
         const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
@@ -217,34 +216,27 @@ export const Orders = () => {
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.error || 'Failed to fetch orders');
-        const fetched = (data.orders || []) as Order[];
-        const filteredOrders = fetched.filter(order => {
-          const orderWarehouse = order.warehouseId || 'AKL';
-          return orderWarehouse === activeWarehouse;
-        });
-        setOrders(filteredOrders);
+        setOrders((data.orders || []) as Order[]);
         setLoading(false);
         return;
       }
 
       const ordersRef = collection(db, 'orders');
-      
-      // 核心优化：确保查询条件与安全规则匹配 (Query Matching)
-      // 即使是 AKL 仓库，也必须显式指定 warehouseId 过滤，除非是超级管理员
-      let q;
+      let q: any;
       const isSuper = isSystemAdmin(profile?.username || profile?.email);
-      
-      if (isSuper) {
-        // 超级管理员可以扫描全库
-        if (activeWarehouse === 'AKL') {
-          q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
-        } else {
-          q = query(ordersRef, where('warehouseId', '==', activeWarehouse), orderBy('createdTime', 'desc'), limit(3000));
-        }
+      const allowedWarehouses = profile?.allowedWarehouses || [];
+
+      // NZ unified order pool: do not hard-filter by currently selected warehouse.
+      if (isSuper || allowedWarehouses.includes('*')) {
+        q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
+      } else if (allowedWarehouses.length === 1) {
+        q = query(ordersRef, where('warehouseId', '==', allowedWarehouses[0]), orderBy('createdTime', 'desc'), limit(3000));
+      } else if (allowedWarehouses.length > 1) {
+        q = query(ordersRef, where('warehouseId', 'in', allowedWarehouses.slice(0, 10)), orderBy('createdTime', 'desc'), limit(3000));
       } else {
-        // 普通用户必须严格遵守仓库隔离
-        // 如果 activeWarehouse 是 AKL，且用户有权限，也必须显式过滤以通过规则校验
-        q = query(ordersRef, where('warehouseId', '==', activeWarehouse), orderBy('createdTime', 'desc'), limit(3000));
+        setOrders([]);
+        setLoading(false);
+        return;
       }
       
       let snap;
@@ -269,14 +261,11 @@ export const Orders = () => {
       
       const filteredOrders = allFetched.filter(order => {
         const orderWarehouse = order.warehouseId || 'AKL';
-        const matches = orderWarehouse === activeWarehouse;
-        if (!matches) {
-          console.log(`DEBUG: Order ${order.bookingNumber} skipped (Warehouse: ${orderWarehouse}, Active: ${activeWarehouse})`);
-        }
-        return matches;
+        if (isSuper || allowedWarehouses.includes('*')) return true;
+        return allowedWarehouses.includes(orderWarehouse);
       });
       
-      console.log(`DEBUG: Found ${filteredOrders.length} orders for warehouse ${activeWarehouse}`);
+      console.log(`DEBUG: Found ${filteredOrders.length} orders for user scope ${allowedWarehouses.join(',') || 'none'}`);
       if (filteredOrders.length > 0) {
         console.log('DEBUG: First order in list:', filteredOrders[0]);
       } else {
