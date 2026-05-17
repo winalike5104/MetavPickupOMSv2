@@ -343,7 +343,8 @@ async function startServer() {
       return res.json({ success: true, orders });
     } catch (error: any) {
       console.error("Orders List Error:", error);
-      return res.status(500).json({ success: false, error: error.message });
+      const safeMessage = error?.message || "Unknown server error";
+      return res.status(500).json({ success: false, error: safeMessage });
     }
   });
 

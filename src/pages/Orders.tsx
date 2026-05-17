@@ -214,7 +214,16 @@ export const Orders = () => {
             'x-warehouse-id': activeWarehouse || ''
           }
         });
-        const data = await response.json();
+        const raw = await response.text();
+        let data: any = null;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+          throw new Error(`Invalid JSON from /api/orders/list (status ${response.status})`);
+        }
+        if (!response.ok) {
+          throw new Error(data?.error || `Failed to fetch orders (status ${response.status})`);
+        }
         if (!data.success) throw new Error(data.error || 'Failed to fetch orders');
         setOrders((data.orders || []) as Order[]);
         setLoading(false);
