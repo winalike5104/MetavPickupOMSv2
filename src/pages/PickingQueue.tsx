@@ -43,6 +43,7 @@ interface PickingTask {
     qty: number;
     status: string;
     warehouseStatus: string;
+    pickerId?: string | null;
   }[];
 }
 
@@ -138,7 +139,8 @@ export const PickingQueue: React.FC = () => {
           bookingNumber: order.bookingNumber,
           qty: item.qty,
           status: order.status,
-          warehouseStatus: item.status === 'Picked' ? 'Picked' : (order.warehouseStatus || 'Pending')
+          warehouseStatus: item.status === 'Picked' ? 'Picked' : (order.warehouseStatus || 'Pending'),
+          pickerId: order.pickingLog?.pickerId || null
         });
       });
     });
@@ -158,6 +160,8 @@ export const PickingQueue: React.FC = () => {
         createdTime: order.createdTime,
         status: order.status,
         warehouseStatus: order.warehouseStatus || 'Pending',
+        pickerId: order.pickingLog?.pickerId || null,
+        pickerName: order.pickingLog?.pickerName || null,
         totalItems,
         pickedItems,
         items: order.items
@@ -545,7 +549,7 @@ export const PickingQueue: React.FC = () => {
                                     ) : (
                                       <button
                                         onClick={() => handleUpdateItemStatus(order.id, task.sku, 'Picked')}
-                                        disabled={updatingIds.includes(`${order.id}-${task.sku}`)}
+                                        disabled={updatingIds.includes(`${order.id}-${task.sku}`) || ((order as any).pickerId && (order as any).pickerId !== profile?.uid)}
                                         className="flex items-center justify-center bg-emerald-50 text-emerald-600 w-10 h-10 rounded-xl border border-emerald-100 active:bg-emerald-100 transition-all disabled:opacity-50"
                                         title="Complete Picking"
                                       >
@@ -645,17 +649,9 @@ export const PickingQueue: React.FC = () => {
                         {task.warehouseStatus === 'Picking' && (
                           <button
                             onClick={() => {
-                              if (task.pickedItems === task.totalItems) {
-                                handleMarkAsPicked([task.id]);
-                              } else {
-                                // If not all items picked, maybe show a hint or allow completing?
-                                // User said "confirm picking", let's assume they mean completing the order if all items are picked.
-                                // Or maybe they want to complete individual items?
-                                // Let's keep the logic: if all items picked, complete order.
-                                handleMarkAsPicked([task.id]);
-                              }
+                              if (task.pickedItems === task.totalItems) handleMarkAsPicked([task.id]);
                             }}
-                            disabled={updatingIds.includes(task.id)}
+                            disabled={updatingIds.includes(task.id) || task.pickedItems !== task.totalItems || (task as any).pickerId !== profile?.uid}
                             className="flex items-center justify-center bg-emerald-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md active:scale-95 disabled:opacity-50"
                           >
                             {updatingIds.includes(task.id) ? (

@@ -929,11 +929,48 @@ async function startServer() {
         enrichedUpdateData.warehouseId = requestedWh;
       }
 
-      await orderRef.update({
-        ...enrichedUpdateData,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedBy: req.user.username
-      });
+      // Atomic lock/ownership checks for picking flow.
+      if (enrichedUpdateData.warehouseStatus === 'Picking' || enrichedUpdateData.warehouseStatus === 'Picked') {
+        await currentDb.runTransaction(async (tx) => {
+          const snap = await tx.get(orderRef);
+          if (!snap.exists) throw new Error("Order not found");
+          const latest = snap.data() as any;
+          const currentStatus = latest?.warehouseStatus || 'Pending';
+          const currentPickerId = latest?.pickingLog?.pickerId || null;
+
+          if (enrichedUpdateData.warehouseStatus === 'Picking') {
+            if (currentStatus !== 'Pending') {
+              throw new Error("Order is already being handled by another picker");
+            }
+            enrichedUpdateData['pickingLog.startedAt'] = enrichedUpdateData['pickingLog.startedAt'] || new Date().toISOString();
+            enrichedUpdateData['pickingLog.pickerId'] = req.user.uid;
+            enrichedUpdateData['pickingLog.pickerName'] = req.user.name || req.user.username;
+          }
+
+          if (enrichedUpdateData.warehouseStatus === 'Picked') {
+            if (currentPickerId && currentPickerId !== req.user.uid) {
+              throw new Error("Only the picker who started this order can complete it");
+            }
+            const items = latest?.items || [];
+            const allPicked = items.length > 0 && items.every((i: any) => i.status === 'Picked');
+            if (!allPicked) {
+              throw new Error("All items must be picked before completing order");
+            }
+          }
+
+          tx.update(orderRef, {
+            ...enrichedUpdateData,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedBy: req.user.username
+          });
+        });
+      } else {
+        await orderRef.update({
+          ...enrichedUpdateData,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedBy: req.user.username
+        });
+      }
 
       // Log the action
       try {
@@ -977,6 +1014,23 @@ async function startServer() {
       }
 
       const order = orderDoc.data()!;
+      const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
+      const allowedWarehouses = req.user.allowedWarehouses || [];
+      const orderWarehouse = order?.warehouseId || 'AKL';
+      if (!isSuper && !allowedWarehouses.includes('*') && !allowedWarehouses.includes(orderWarehouse)) {
+        return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
+      }
+
+      const currentPickerId = order?.pickingLog?.pickerId || null;
+      const currentWarehouseStatus = order?.warehouseStatus || 'Pending';
+      if (status === 'Picked') {
+        if (currentWarehouseStatus !== 'Picking') {
+          return res.status(409).json({ success: false, error: "Order must be started before picking items" });
+        }
+        if (currentPickerId && currentPickerId !== req.user.uid) {
+          return res.status(403).json({ success: false, error: "Only the assigned picker can update item status" });
+        }
+      }
       const items = order.items || [];
       const updatedItems = items.map((item: any) => {
         if (item.sku === sku) {
