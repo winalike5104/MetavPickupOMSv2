@@ -26,9 +26,13 @@ import {
 
 import { PageHeader } from '../components/PageHeader';
 import { useRef } from 'react';
+import { API_BASE_URL, CN_API_ONLY } from '../constants';
+import { useLocation } from 'react-router-dom';
 
 export const OverdueOrders = () => {
-  const { profile, user, activeWarehouse } = useAuth();
+  const { profile, user, activeWarehouse, token } = useAuth();
+  const location = useLocation();
+  const isCnApiMode = CN_API_ONLY && location.pathname.startsWith('/cn');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,6 +83,26 @@ export const OverdueOrders = () => {
   const fetchOverdueOrders = async () => {
     setLoading(true);
     try {
+      if (isCnApiMode) {
+        if (!token) return;
+        const params = new URLSearchParams({ limit: '500' });
+        const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const raw = await response.text();
+        const data = raw ? JSON.parse(raw) : null;
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || `Failed to fetch overdue orders (status ${response.status})`);
+        }
+        const fetchedOrders = ((data.orders || []) as Order[]).filter((o) => o.paymentStatus === 'Paid' && o.status === 'Created');
+        setOrders(fetchedOrders);
+        setLoading(false);
+        return;
+      }
+
       const ordersRef = collection(db, 'orders');
       // Base filter: Paid but not Picked Up
       // Note: We also exclude Reviewed and Cancelled as they are terminal
