@@ -657,10 +657,6 @@ export const OrderDetail: React.FC = () => {
       if (!order.customerEmail) {
         throw new Error("Missing customer email address");
       }
-      if (!order.warehouseId && !activeWarehouse) {
-        throw new Error("Missing warehouse/shop selection");
-      }
-
       const response = await fetch(`${API_BASE_URL}/api/orders/send-notification`, {
         method: 'POST',
         headers: {
