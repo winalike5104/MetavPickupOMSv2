@@ -920,6 +920,16 @@ async function startServer() {
       }
 
       const enrichedUpdateData: any = { ...updateData };
+      // Late-binding warehouse: keep orders unassigned at creation/email stage,
+      // but bind warehouse once picking is explicitly requested/started.
+      const isPickingFlowTouch =
+        typeof enrichedUpdateData.warehouseStatus !== 'undefined' ||
+        typeof enrichedUpdateData['pickingLog.requestedAt'] !== 'undefined' ||
+        typeof enrichedUpdateData['pickingLog.startedAt'] !== 'undefined' ||
+        typeof enrichedUpdateData['pickingLog.finishedAt'] !== 'undefined';
+      if (!order?.warehouseId && requestedWh && isPickingFlowTouch) {
+        enrichedUpdateData.warehouseId = requestedWh;
+      }
 
       // Atomic lock/ownership checks for picking flow.
       if (enrichedUpdateData.warehouseStatus === 'Picking' || enrichedUpdateData.warehouseStatus === 'Picked') {
