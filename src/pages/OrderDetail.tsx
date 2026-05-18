@@ -365,9 +365,9 @@ export const OrderDetail: React.FC = () => {
         // Warehouse Isolation Check (unified pool): check against user allowed warehouses,
         // not the currently selected warehouse tab.
         const isSuper = profile?.allowedWarehouses?.includes('*');
-        const orderWarehouse = finalOrderData.warehouseId || 'AKL';
+        const orderWarehouse = finalOrderData.warehouseId || null;
         const allowedWarehouses = profile?.allowedWarehouses || [];
-        if (!isSuper && allowedWarehouses.length > 0 && !allowedWarehouses.includes(orderWarehouse)) {
+        if (!isSuper && orderWarehouse && allowedWarehouses.length > 0 && !allowedWarehouses.includes(orderWarehouse)) {
           setError('Access Denied: You do not have permission for this warehouse');
           setLoading(false);
           return;
@@ -657,7 +657,7 @@ export const OrderDetail: React.FC = () => {
       if (!order.customerEmail) {
         throw new Error("Missing customer email address");
       }
-      if (!order.warehouseId) {
+      if (!order.warehouseId && !activeWarehouse) {
         throw new Error("Missing warehouse/shop selection");
       }
 

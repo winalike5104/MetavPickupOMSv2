@@ -235,18 +235,13 @@ export const Orders = () => {
       const isSuper = isSystemAdmin(profile?.username || profile?.email);
       const allowedWarehouses = profile?.allowedWarehouses || [];
 
-      // NZ unified order pool: do not hard-filter by currently selected warehouse.
-      if (isSuper || allowedWarehouses.includes('*')) {
-        q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
-      } else if (allowedWarehouses.length === 1) {
-        q = query(ordersRef, where('warehouseId', '==', allowedWarehouses[0]), orderBy('createdTime', 'desc'), limit(3000));
-      } else if (allowedWarehouses.length > 1) {
-        q = query(ordersRef, where('warehouseId', 'in', allowedWarehouses.slice(0, 10)), orderBy('createdTime', 'desc'), limit(3000));
-      } else {
+      // Orders are created without warehouse assignment first; fetch unified pool.
+      if (!isSuper && !allowedWarehouses.includes('*') && allowedWarehouses.length === 0) {
         setOrders([]);
         setLoading(false);
         return;
       }
+      q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
       
       let snap;
       try {
@@ -269,7 +264,9 @@ export const Orders = () => {
       });
       
       const filteredOrders = allFetched.filter(order => {
-        const orderWarehouse = order.warehouseId || 'AKL';
+        // Unassigned orders must be visible cross-warehouse until pickup confirms warehouse.
+        if (!order.warehouseId) return true;
+        const orderWarehouse = order.warehouseId;
         if (isSuper || allowedWarehouses.includes('*')) return true;
         return allowedWarehouses.includes(orderWarehouse);
       });
@@ -522,7 +519,7 @@ export const Orders = () => {
         if (!order.customerEmail) {
           throw new Error("Missing customer email address");
         }
-        if (!order.warehouseId) {
+        if (!order.warehouseId && !activeWarehouse) {
           throw new Error("Missing warehouse/shop selection");
         }
 

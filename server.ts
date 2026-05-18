@@ -324,8 +324,7 @@ async function startServer() {
         }
       };
 
-      // Compatibility: legacy orders without warehouseId should be treated as AKL,
-      // matching the existing NZ front-end behavior.
+      // Unassigned orders stay cross-warehouse visible until pickup confirms warehouse.
       const needsAklCompatScan = !warehouseId || warehouseId === "AKL";
       let effectiveWarehouses = isSuper || allowedWarehouses.includes("*")
         ? null
@@ -341,11 +340,13 @@ async function startServer() {
         orders = snap.docs
           .map((d: any) => toListOrder({ id: d.id, ...d.data() }))
           .filter((o: any) => {
-            const wh = o.warehouseId || "AKL";
+            const wh = o.warehouseId || null;
             if (warehouseId) {
+              if (!wh) return true;
               if (isSuper || allowedWarehouses.includes("*")) return wh === warehouseId;
               return wh === warehouseId && allowedWarehouses.includes(warehouseId);
             }
+            if (!wh) return true;
             if (!effectiveWarehouses) return true;
             return effectiveWarehouses.includes(wh);
           });
@@ -387,10 +388,10 @@ async function startServer() {
       if (!orderDoc.exists) return res.status(404).json({ success: false, error: "Order not found" });
 
       const order = { id: orderDoc.id, ...orderDoc.data() } as any;
-      const orderWarehouse = order.warehouseId || "AKL";
+      const orderWarehouse = order.warehouseId || null;
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
-      if (!isSuper && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(orderWarehouse)) {
+      if (!isSuper && orderWarehouse && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(orderWarehouse)) {
         return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
       }
 
@@ -550,13 +551,14 @@ async function startServer() {
       const allowedWarehouses = user.allowedWarehouses || [];
       const isSuper = SUPER_ADMINS.includes(user.username.toLowerCase());
 
+      const orderWarehouse = order?.warehouseId || requestedWh || null;
       if (!isSuper) {
         // Must have access to the order's warehouse
-        if (!allowedWarehouses.includes('*') && !allowedWarehouses.includes(order?.warehouseId)) {
+        if (!allowedWarehouses.includes('*') && orderWarehouse && !allowedWarehouses.includes(orderWarehouse)) {
           throw new Error("Forbidden: You do not have access to this warehouse");
         }
         // If a specific warehouse was selected in the session, it must match the order's warehouse
-        if (requestedWh && order?.warehouseId !== requestedWh) {
+        if (requestedWh && orderWarehouse && orderWarehouse !== requestedWh) {
           throw new Error("Forbidden: Order belongs to a different warehouse than selected");
         }
       }
@@ -719,6 +721,7 @@ async function startServer() {
         paymentMethod,
         notificationRecipients 
       } = req.body;
+      const effectiveWarehouseId = warehouseId || null;
 
       if (!bookingNumber || typeof bookingNumber !== 'string' || !customerName) {
         return res.status(400).json({ success: false, error: "Missing required fields or invalid Booking Number." });
@@ -758,7 +761,7 @@ async function startServer() {
             customerEmail: customerEmail || null,
             customerId: customerId || null,
             storeId: storeId || null,
-            warehouseId: warehouseId || null,
+            warehouseId: effectiveWarehouseId,
             pickupDateScheduled: pickupDateScheduled || null,
             notes: notes || null,
             createdBy: req.user.name || req.user.username,
@@ -917,17 +920,6 @@ async function startServer() {
       }
 
       const enrichedUpdateData: any = { ...updateData };
-      // Late-binding warehouse: for legacy/new orders without warehouse assignment,
-      // bind warehouse at first operational touch (picking/status update).
-      const isOperationalTouch =
-        typeof enrichedUpdateData.status !== 'undefined' ||
-        typeof enrichedUpdateData.warehouseStatus !== 'undefined' ||
-        typeof enrichedUpdateData['pickingLog.requestedAt'] !== 'undefined' ||
-        typeof enrichedUpdateData['pickingLog.startedAt'] !== 'undefined' ||
-        typeof enrichedUpdateData['pickingLog.finishedAt'] !== 'undefined';
-      if (!order?.warehouseId && requestedWh && isOperationalTouch) {
-        enrichedUpdateData.warehouseId = requestedWh;
-      }
 
       // Atomic lock/ownership checks for picking flow.
       if (enrichedUpdateData.warehouseStatus === 'Picking' || enrichedUpdateData.warehouseStatus === 'Picked') {
