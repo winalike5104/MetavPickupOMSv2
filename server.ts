@@ -327,7 +327,17 @@ async function startServer() {
             .get();
           return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
         } catch (_e) {
-          return [];
+          // Fallback for environments where compound ordering/indexes are not ready.
+          try {
+            const snap = await currentDb.collection("orders")
+              .where("warehouseId", "==", null)
+              .limit(Math.min(limitValue, 200))
+              .get();
+            const rows = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+            return sortByCreatedDesc(rows);
+          } catch (_e2) {
+            return [];
+          }
         }
       };
 

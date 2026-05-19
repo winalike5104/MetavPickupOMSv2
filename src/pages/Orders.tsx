@@ -51,11 +51,11 @@ export const Orders = () => {
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const normalizeStatusFilter = (value?: string) => {
-    if (!value) return 'Active';
+    if (!value) return 'All';
     if (value === 'All Orders') return 'All';
     if (value === 'Active Orders') return 'Active';
     const allowed = ['Active', 'All', 'Overdue', 'Created', 'Picked Up', 'Reviewed', 'Cancelled'];
-    return allowed.includes(value) ? value : 'Active';
+    return allowed.includes(value) ? value : 'All';
   };
 
   const [statusFilter, setStatusFilter] = useState(normalizeStatusFilter(location.state?.statusFilter));
