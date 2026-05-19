@@ -369,7 +369,16 @@ async function startServer() {
           orders = await fetchByWarehouseEq(warehouseId);
         }
       }
-      orders = orders.map(toListOrder);
+      orders = orders.map(toListOrder).map((o: any) => {
+        if (o?.warehouseStatus) return o;
+        const requestedAt = o?.pickingLog?.requestedAt;
+        const startedAt = o?.pickingLog?.startedAt;
+        const finishedAt = o?.pickingLog?.finishedAt;
+        if (finishedAt) return { ...o, warehouseStatus: 'Picked' };
+        if (startedAt) return { ...o, warehouseStatus: 'Picking' };
+        if (requestedAt) return { ...o, warehouseStatus: 'Pending' };
+        return o;
+      });
       return res.json({ success: true, orders });
     } catch (error: any) {
       console.error("Orders List Error:", error);
@@ -397,6 +406,11 @@ async function startServer() {
         return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
       }
 
+      if (!order.warehouseStatus) {
+        if (order?.pickingLog?.finishedAt) order.warehouseStatus = 'Picked';
+        else if (order?.pickingLog?.startedAt) order.warehouseStatus = 'Picking';
+        else if (order?.pickingLog?.requestedAt) order.warehouseStatus = 'Pending';
+      }
       return res.json({ success: true, order });
     } catch (error: any) {
       console.error("Order Detail Error:", error);
