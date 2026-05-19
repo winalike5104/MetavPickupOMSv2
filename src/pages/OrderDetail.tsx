@@ -65,7 +65,7 @@ export const OrderDetail: React.FC = () => {
   const location = useLocation();
   const { profile, user, activeWarehouse, token } = useAuth();
   const ordersBasePath = location.pathname.startsWith('/cn') ? '/cn/orders' : '/orders';
-  const isCnApiMode = CN_API_ONLY && location.pathname.startsWith('/cn');
+  const isCnApiMode = location.pathname.startsWith('/cn');
   const cnText = {
     backToOrders: isCnApiMode ? '返回订单列表' : 'Back to Orders',
     edit: isCnApiMode ? '编辑' : 'Edit',

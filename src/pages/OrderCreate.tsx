@@ -31,6 +31,7 @@ export const OrderCreate = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = location.pathname.startsWith('/cn') ? '/cn' : '';
+  const isCnRoute = routePrefix === '/cn';
   const isCnApiMode = CN_API_ONLY && routePrefix === '/cn';
   const ordersBasePath = `${routePrefix}/orders`;
   const [loading, setLoading] = useState(false);
@@ -319,7 +320,7 @@ export const OrderCreate = () => {
       navigate(`${ordersBasePath}/${result || finalBookingNumber}`);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to create order. Please try again.');
+      setError(err.message || (isCnRoute ? '创建订单失败，请重试。' : 'Failed to create order. Please try again.'));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setLoading(false);
@@ -330,9 +331,9 @@ export const OrderCreate = () => {
     return (
       <div className="max-w-4xl mx-auto py-12 text-center">
         <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-slate-900">No Warehouse Selected</h2>
-        <p className="text-slate-500 mt-2">Please select your current operation warehouse before continuing.</p>
-        <Link to={ordersBasePath} className="text-indigo-600 mt-4 inline-block font-medium">Back to Orders</Link>
+        <h2 className="text-2xl font-bold text-slate-900">{isCnRoute ? '未选择仓库' : 'No Warehouse Selected'}</h2>
+        <p className="text-slate-500 mt-2">{isCnRoute ? '请先选择当前操作仓库后再继续。' : 'Please select your current operation warehouse before continuing.'}</p>
+        <Link to={ordersBasePath} className="text-indigo-600 mt-4 inline-block font-medium">{isCnRoute ? '返回订单列表' : 'Back to Orders'}</Link>
       </div>
     );
   }
@@ -340,8 +341,8 @@ export const OrderCreate = () => {
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
       <PageHeader
-        title="Create New Order"
-        subtitle="Fill in the details to create a new pickup order."
+        title={isCnRoute ? "创建新订单" : "Create New Order"}
+        subtitle={isCnRoute ? "填写信息以创建新的提货订单。" : "Fill in the details to create a new pickup order."}
         icon={Plus}
         isScrolled={isScrolled}
         maxWidth="max-w-4xl"
@@ -360,7 +361,7 @@ export const OrderCreate = () => {
             <div className="p-4 bg-red-50 border-2 border-red-500 rounded-xl flex items-start gap-3 text-red-700 text-sm animate-shake">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
               <div className="flex-1">
-                <p className="font-bold mb-1">Error Occurred</p>
+                <p className="font-bold mb-1">{isCnRoute ? '发生错误' : 'Error Occurred'}</p>
                 <p>{error}</p>
               </div>
             </div>
@@ -477,7 +478,7 @@ export const OrderCreate = () => {
                   value={skuSearch}
                   onChange={(e) => setSkuSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Search SKU or Product Name..."
+                  placeholder={isCnRoute ? "搜索 SKU 或商品名称..." : "Search SKU or Product Name..."}
                 />
               </div>
               
@@ -509,7 +510,7 @@ export const OrderCreate = () => {
                     >
                       <Plus className="w-5 h-5" />
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold">Add Custom: {skuSearch.toUpperCase()}</span>
+                        <span className="text-sm font-bold">{isCnRoute ? `添加自定义：${skuSearch.toUpperCase()}` : `Add Custom: ${skuSearch.toUpperCase()}`}</span>
                         <span className="text-[10px] opacity-70 italic uppercase tracking-wider">Not in SKU database</span>
                       </div>
                     </button>
@@ -523,7 +524,7 @@ export const OrderCreate = () => {
               className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap"
             >
               <Plus className="w-5 h-5" />
-              Manual Add
+              {isCnRoute ? '手动添加' : 'Manual Add'}
             </button>
           </div>
 
@@ -531,7 +532,7 @@ export const OrderCreate = () => {
             {items.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-2xl">
                 <Package className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                <p className="text-slate-400">No items added yet. Search above to add items.</p>
+                <p className="text-slate-400">{isCnRoute ? '尚未添加商品，请先搜索后添加。' : 'No items added yet. Search above to add items.'}</p>
               </div>
             ) : (
               <div className="overflow-hidden border border-slate-100 rounded-xl">
@@ -773,7 +774,7 @@ export const OrderCreate = () => {
             onClick={() => navigate(ordersBasePath)}
             className="px-6 py-3 text-slate-600 font-semibold hover:bg-slate-100 rounded-xl transition-colors"
           >
-            Cancel
+            {isCnRoute ? '取消' : 'Cancel'}
           </button>
           <button
             type="submit"
@@ -781,7 +782,7 @@ export const OrderCreate = () => {
             className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
           >
             <Save className="w-5 h-5" />
-            {loading ? 'Creating...' : 'Create Order'}
+            {loading ? (isCnRoute ? '创建中...' : 'Creating...') : (isCnRoute ? '创建订单' : 'Create Order')}
           </button>
         </div>
       </form>

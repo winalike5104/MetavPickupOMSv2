@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { CN_API_ONLY } from '../constants';
 
 // Sound URL - using a more distinctive and professional digital chime
@@ -10,6 +10,8 @@ const NOTIFICATION_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358
 
 export const usePickingNotifications = () => {
   const { user, profile, activeWarehouse } = useAuth();
+  const location = useLocation();
+  const isCnRoute = location.pathname.startsWith('/cn');
   const [isInitialized, setIsInitialized] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const knownOrderIds = useRef(new Set<string>());
@@ -87,7 +89,7 @@ export const usePickingNotifications = () => {
   };
 
   useEffect(() => {
-    if (CN_API_ONLY) return;
+    if (CN_API_ONLY || isCnRoute) return;
     // Kill switch: if no user, no warehouse, or permission revoked, stop everything
     if (!user || !activeWarehouse || !hasPickingPermission) {
       setIsInitialized(false);
@@ -141,7 +143,7 @@ export const usePickingNotifications = () => {
       console.log('🛑 Stopping picking queue listener');
       unsubscribe();
     };
-  }, [user?.uid, activeWarehouse, hasPickingPermission, isInitialized]);
+  }, [user?.uid, activeWarehouse, hasPickingPermission, isInitialized, isCnRoute]);
 
   return {
     audioEnabled,

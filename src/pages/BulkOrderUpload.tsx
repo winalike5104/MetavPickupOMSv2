@@ -31,7 +31,7 @@ import {
   AlertTriangle,
   Download
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Order, OrderItem, OrderStatus, PaymentStatus, PaymentMethod, SKU } from '../types';
 import { cn } from '../utils';
@@ -106,7 +106,10 @@ import { PageHeader } from '../components/PageHeader';
 
 export const BulkOrderUpload = () => {
   const { profile } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
+  const isCnRoute = location.pathname.startsWith('/cn');
+  const ordersBasePath = location.pathname.startsWith('/cn') ? '/cn/orders' : '/orders';
   const [rows, setRows] = useState<ProcessedRow[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isChecking, setIsChecking] = useState(false);
@@ -155,7 +158,7 @@ export const BulkOrderUpload = () => {
         addLog(`Loaded ${ids.length} store configurations for validation`, 'info');
       } catch (err) {
         console.error("Error fetching stores:", err);
-        addLog("Failed to load store configurations", 'warning');
+        addLog(isCnRoute ? "加载店铺配置失败" : "Failed to load store configurations", 'warning');
       }
     };
 
@@ -209,7 +212,7 @@ export const BulkOrderUpload = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    addLog('CSV template downloaded', 'info');
+    addLog(isCnRoute ? 'CSV 模板已下载' : 'CSV template downloaded', 'info');
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -379,7 +382,7 @@ export const BulkOrderUpload = () => {
   const handleImport = async () => {
     const readyRows = rows.filter(r => r.status === 'ready');
     if (readyRows.length === 0) {
-      addLog('No valid rows to import', 'warning');
+      addLog(isCnRoute ? '没有可导入的有效数据行' : 'No valid rows to import', 'warning');
       return;
     }
 
@@ -594,12 +597,12 @@ export const BulkOrderUpload = () => {
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
       <PageHeader
-        title="Bulk Order Upload"
-        subtitle="Import orders using CSV with atomic transaction safety"
+        title={isCnRoute ? "批量导入订单" : "Bulk Order Upload"}
+        subtitle={isCnRoute ? "通过 CSV 批量导入订单（事务安全）" : "Import orders using CSV with atomic transaction safety"}
         icon={Upload}
         isScrolled={isScrolled}
         backButton={
-          <Link to="/orders" className="p-2 hover:bg-slate-100 rounded-full transition-colors block">
+          <Link to={ordersBasePath} className="p-2 hover:bg-slate-100 rounded-full transition-colors block">
             <ArrowLeft className="w-6 h-6 text-slate-500" />
           </Link>
         }
@@ -778,7 +781,7 @@ export const BulkOrderUpload = () => {
                 {rows.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-400 p-12">
                     <FileText className="w-16 h-16 mb-4 opacity-20" />
-                    <p>No data loaded. Upload a CSV to begin.</p>
+                    <p>{isCnRoute ? '尚未加载数据，请先上传 CSV 文件。' : 'No data loaded. Upload a CSV to begin.'}</p>
                   </div>
                 ) : (
                   <table className="w-full text-left border-collapse">

@@ -55,7 +55,8 @@ const mergeOrdersById = (base: Order[], incoming: Order[]): Order[] => {
 export const OverdueOrders = () => {
   const { profile, user, activeWarehouse, token } = useAuth();
   const location = useLocation();
-  const isCnApiMode = CN_API_ONLY && location.pathname.startsWith('/cn');
+  const isCnApiMode = location.pathname.startsWith('/cn');
+  const isCnRoute = isCnApiMode;
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -340,11 +341,11 @@ export const OverdueOrders = () => {
       setNote('');
       if (activeOrder?.id === selectedOrderForAudit.id) setActiveOrder(null);
       
-      alert('Order successfully audited and closed.');
+      alert(isCnRoute ? '订单已完成审核并关闭。' : 'Order successfully audited and closed.');
     } catch (err: any) {
       console.error('Error closing order:', err);
-      const errorMessage = err.message || 'Unknown error';
-      alert(`Failed to close order: ${errorMessage}`);
+      const errorMessage = err.message || (isCnRoute ? '未知错误' : 'Unknown error');
+      alert(isCnRoute ? `关闭订单失败：${errorMessage}` : `Failed to close order: ${errorMessage}`);
     } finally {
       setSubmitting(false);
     }
@@ -354,8 +355,8 @@ export const OverdueOrders = () => {
     <div className="flex-1 flex flex-row min-w-0 bg-slate-50 overflow-hidden relative">
       <div className="flex-1 flex flex-col min-w-0">
         <PageHeader
-          title="Overdue Audit"
-          subtitle="Aging Order Management"
+          title={isCnRoute ? "超期订单审核" : "Overdue Audit"}
+          subtitle={isCnRoute ? "超期订单管理" : "Aging Order Management"}
           icon={Clock}
           isScrolled={isScrolled}
           actions={
@@ -364,7 +365,7 @@ export const OverdueOrders = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder={isCnRoute ? "搜索..." : "Search..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl text-sm w-48 transition-all outline-none"
@@ -375,24 +376,24 @@ export const OverdueOrders = () => {
                 onChange={(e) => setWarehouseFilter(e.target.value)}
                 className="bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl text-sm px-4 py-2 outline-none transition-all font-bold text-slate-600"
               >
-                <option value="All">All Warehouses</option>
+                <option value="All">{isCnRoute ? '全部仓库' : 'All Warehouses'}</option>
                 <option value="AKL">AKL</option>
                 <option value="CHC">CHC</option>
               </select>
               <button 
                 onClick={fetchOverdueOrders}
                 className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400"
-                title="Refresh"
+                title={isCnRoute ? "刷新" : "Refresh"}
               >
                 <Loader2 className={cn("w-5 h-5", loading && "animate-spin")} />
               </button>
               <button 
                 onClick={() => window.location.href = '/logs?category=Audit'}
                 className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl hover:bg-amber-100 transition-all text-sm font-bold shadow-sm active:scale-95"
-                title="View Audit History"
+                title={isCnRoute ? "查看审核历史" : "View Audit History"}
               >
                 <HistoryIcon className="w-4 h-4" />
-                Audit History
+                {isCnRoute ? '审核历史' : 'Audit History'}
               </button>
             </>
           }
@@ -404,7 +405,7 @@ export const OverdueOrders = () => {
             {/* Advanced Filters */}
             <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Created Range:</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{isCnRoute ? '创建日期范围：' : 'Created Range:'}</span>
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                 <input
                   type="date"
@@ -428,7 +429,7 @@ export const OverdueOrders = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Aging Depth:</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{isCnRoute ? '超期层级：' : 'Aging Depth:'}</span>
               <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
                 <button
                   onClick={() => setOverdueThreshold('all')}
@@ -437,7 +438,7 @@ export const OverdueOrders = () => {
                     overdueThreshold === 'all' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  All
+                  {isCnRoute ? '全部' : 'All'}
                 </button>
                 <button
                   onClick={() => setOverdueThreshold('14')}
@@ -446,7 +447,7 @@ export const OverdueOrders = () => {
                     overdueThreshold === '14' ? "bg-amber-500 text-white shadow-sm" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  &gt; 14 Days
+                  {isCnRoute ? '> 14天' : '> 14 Days'}
                 </button>
                 <button
                   onClick={() => setOverdueThreshold('30')}
@@ -455,7 +456,7 @@ export const OverdueOrders = () => {
                     overdueThreshold === '30' ? "bg-red-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  &gt; 30 Days
+                  {isCnRoute ? '> 30天' : '> 30 Days'}
                 </button>
               </div>
             </div>
@@ -465,17 +466,17 @@ export const OverdueOrders = () => {
         <div className="bg-slate-900 text-white px-6 py-3 flex items-center gap-8 flex-shrink-0">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-indigo-400" />
-            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Total Overdue:</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{isCnRoute ? '超期总数：' : 'Total Overdue:'}</span>
             <span className="text-lg font-black">{stats.total}</span>
           </div>
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-red-500" />
-            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Critical (30+):</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{isCnRoute ? '严重(30+)：' : 'Critical (30+):'}</span>
             <span className="text-lg font-black text-red-500">{stats.critical}</span>
           </div>
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-500" />
-            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Potential (14+):</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{isCnRoute ? '预警(14+)：' : 'Potential (14+):'}</span>
             <span className="text-lg font-black text-amber-500">{stats.potential}</span>
           </div>
         </div>
@@ -485,15 +486,15 @@ export const OverdueOrders = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
-              <p className="text-slate-500">Processing aging data...</p>
+              <p className="text-slate-500">{isCnRoute ? '正在处理超期数据...' : 'Processing aging data...'}</p>
             </div>
           ) : processedOrders.length === 0 ? (
             <div className="bg-white rounded-3xl border border-slate-200 border-dashed p-16 text-center">
               <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
-              <h3 className="text-xl font-black text-slate-900">Queue Cleared</h3>
-              <p className="text-slate-500 mt-2">No orders match the current overdue criteria.</p>
+              <h3 className="text-xl font-black text-slate-900">{isCnRoute ? '当前无超期订单' : 'Queue Cleared'}</h3>
+              <p className="text-slate-500 mt-2">{isCnRoute ? '没有订单匹配当前超期筛选条件。' : 'No orders match the current overdue criteria.'}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

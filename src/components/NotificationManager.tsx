@@ -3,10 +3,13 @@ import { usePickingNotifications } from '../hooks/usePickingNotifications';
 import { Bell, Volume2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CN_API_ONLY } from '../constants';
+import { useLocation } from 'react-router-dom';
 
 export const NotificationManager: React.FC = () => {
+  const location = useLocation();
+  const isCnRoute = location.pathname.startsWith('/cn');
   const { audioEnabled, enableAudio, hasPickingPermission } = usePickingNotifications();
-  if (CN_API_ONLY) return null;
+  if (CN_API_ONLY || isCnRoute) return null;
   const [showBanner, setShowBanner] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<any>(
     typeof window !== 'undefined' && 'Notification' in window 

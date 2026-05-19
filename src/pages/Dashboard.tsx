@@ -25,6 +25,7 @@ import {
   Warehouse
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { subDays, startOfDay, isAfter } from 'date-fns';
 import { 
   LineChart, 
@@ -66,6 +67,8 @@ const mergeOrdersById = (base: Order[], incoming: Order[]): Order[] => {
 
 export const Dashboard = () => {
   const { profile, user, activeWarehouse, token } = useAuth();
+  const location = useLocation();
+  const isCnRoute = location.pathname.startsWith('/cn');
   console.log("Dashboard - User:", user?.uid, "Email:", profile?.email, "IsAdmin:", isSystemAdmin(profile?.username || profile?.email));
   console.log("Dashboard - Profile Loaded:", !!profile, "Warehouse:", activeWarehouse);
   
@@ -308,8 +311,8 @@ export const Dashboard = () => {
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden font-sans">
       <PageHeader
-        title="Dashboard Overview"
-        subtitle="Welcome back to the Warehouse Management System."
+        title={isCnRoute ? "仪表盘总览" : "Dashboard Overview"}
+        subtitle={isCnRoute ? "欢迎回来，仓库管理系统已就绪。" : "Welcome back to the Warehouse Management System."}
         icon={Warehouse}
         isScrolled={isScrolled}
         actions={
@@ -323,7 +326,7 @@ export const Dashboard = () => {
                 "p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all",
                 isScrolled ? "p-2 group-hover:p-3" : "p-3"
               )}
-              title="Refresh Data"
+              title={isCnRoute ? "刷新数据" : "Refresh Data"}
             >
               <RefreshCw className={cn(
                 loading ? 'animate-spin' : '',
@@ -342,7 +345,7 @@ export const Dashboard = () => {
                 <span className={cn(
                   "transition-all",
                   isScrolled ? "hidden group-hover:inline" : "inline"
-                )}>Post Announcement</span>
+                )}>{isCnRoute ? '发布公告' : 'Post Announcement'}</span>
               </button>
             )}
             {hasPermission(profile, 'Create Order', profile?.username || profile?.email) && (
@@ -354,7 +357,7 @@ export const Dashboard = () => {
                 )}
               >
                 <Plus className={isScrolled ? "w-4 h-4 group-hover:w-5 group-hover:h-5" : "w-5 h-5"} />
-                Create New Order
+                {isCnRoute ? '创建新订单' : 'Create New Order'}
               </Link>
             )}
           </>
@@ -367,25 +370,25 @@ export const Dashboard = () => {
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title="Total Orders" 
+          title={isCnRoute ? "订单总数" : "Total Orders"} 
           value={stats.total} 
           icon={ShoppingBag} 
           color="bg-blue-500" 
         />
         <StatCard 
-          title="Created" 
+          title={isCnRoute ? "已创建" : "Created"} 
           value={stats.created} 
           icon={Clock} 
           color="bg-amber-500" 
         />
         <StatCard 
-          title="Picked Up" 
+          title={isCnRoute ? "已提货" : "Picked Up"} 
           value={stats.pickedUp} 
           icon={CheckCircle2} 
           color="bg-emerald-500" 
         />
         <StatCard 
-          title="Cancelled" 
+          title={isCnRoute ? "已取消" : "Cancelled"} 
           value={stats.cancelled} 
           icon={XCircle} 
           color="bg-red-500" 

@@ -179,7 +179,7 @@ export const Orders = () => {
 
   const navigate = useNavigate();
   const routePrefix = location.pathname.startsWith('/cn') ? '/cn' : '';
-  const isCnApiMode = CN_API_ONLY && routePrefix === '/cn';
+  const isCnApiMode = routePrefix === '/cn';
   const cnText = {
     orderManagement: isCnApiMode ? '订单管理' : 'Order Management',
     warehouse: isCnApiMode ? '仓库' : 'Warehouse',

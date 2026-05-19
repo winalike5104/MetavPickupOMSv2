@@ -16,11 +16,14 @@ import {
 import { AdminChangePasswordModal } from '../components/AdminChangePasswordModal';
 
 import { WAREHOUSE_NAMES } from '../constants';
+import { useLocation } from 'react-router-dom';
 
 import { PageHeader } from '../components/PageHeader';
 
 export const UserManagement = () => {
   const { profile: currentProfile, user, token } = useAuth();
+  const location = useLocation();
+  const isCnRoute = location.pathname.startsWith('/cn');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -79,14 +82,14 @@ export const UserManagement = () => {
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch users');
+        throw new Error(data.error || (isCnRoute ? '获取用户失败' : 'Failed to fetch users'));
       }
       const allUsers = (data.users || []) as UserProfile[];
       // Hide system administrator from the list
       setUsers(allUsers.filter(u => !isSystemAdmin(u.username)));
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to load users');
+      setError(err.message || (isCnRoute ? '加载用户失败' : 'Failed to load users'));
     } finally {
       setLoading(false);
     }
@@ -96,7 +99,7 @@ export const UserManagement = () => {
     e.preventDefault();
     if (!currentProfile) return;
     if (!canManage) {
-      setError('You do not have permission to manage users.');
+      setError(isCnRoute ? '你没有管理用户的权限。' : 'You do not have permission to manage users.');
       return;
     }
     setSubmitting(true);
@@ -223,7 +226,7 @@ export const UserManagement = () => {
   const handleDeleteUser = async (user: UserProfile) => {
     if (!currentProfile) return;
     if (!canManage) {
-      setError('You do not have permission to delete users.');
+      setError(isCnRoute ? '你没有删除用户的权限。' : 'You do not have permission to delete users.');
       return;
     }
 
@@ -254,8 +257,8 @@ export const UserManagement = () => {
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
       <PageHeader
-        title="User Management"
-        subtitle="Manage employee accounts and permissions."
+        title={isCnRoute ? "账号管理" : "User Management"}
+        subtitle={isCnRoute ? "管理员工账号与权限配置。" : "Manage employee accounts and permissions."}
         icon={UserIcon}
         isScrolled={isScrolled}
         actions={
@@ -265,7 +268,7 @@ export const UserManagement = () => {
               className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200"
             >
               <UserPlus className="w-5 h-5" />
-              Create Account
+              {isCnRoute ? '创建账号' : 'Create Account'}
             </button>
           )
         }
