@@ -922,13 +922,6 @@ async function startServer() {
       }
 
       const enrichedUpdateData: any = { ...updateData };
-      const requestedPickingAt = enrichedUpdateData['pickingLog.requestedAt'];
-      if (typeof requestedPickingAt !== 'undefined') {
-        const incomingWarehouseStatus = String(enrichedUpdateData.warehouseStatus || '').trim().toLowerCase();
-        if (!incomingWarehouseStatus || incomingWarehouseStatus === 'not requested') {
-          enrichedUpdateData.warehouseStatus = 'Pending';
-        }
-      }
       // Late-binding warehouse: keep orders unassigned at creation/email stage,
       // but bind warehouse once picking is explicitly requested/started.
       const isPickingFlowTouch =
@@ -1011,8 +1004,7 @@ async function startServer() {
         console.error("Failed to log order update:", logErr);
       }
 
-      const updatedSnap = await orderRef.get();
-      return res.json({ success: true, order: { id: updatedSnap.id, ...updatedSnap.data() } });
+      return res.json({ success: true });
     } catch (error: any) {
       console.error("Order Update Error:", error);
       return res.status(500).json({ success: false, error: error.message });
