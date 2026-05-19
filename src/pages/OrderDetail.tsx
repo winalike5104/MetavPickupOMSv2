@@ -432,8 +432,9 @@ export const OrderDetail: React.FC = () => {
 
   const fetchLogs = async (orderId: string) => {
     try {
-      if (isCnApiMode) {
-        if (!token) return;
+      // Use API-first for logs to avoid Firestore log-read permission mismatches
+      // (e.g. Reception role without global View Logs claim).
+      if (token) {
         const response = await fetch(`${API_BASE_URL}/api/logs/order/${orderId}?limit=300`, {
           headers: {
             'x-v2-auth-token': `Bearer ${token}`,
@@ -441,10 +442,12 @@ export const OrderDetail: React.FC = () => {
           }
         });
         const data = await response.json();
-        if (!data.success) throw new Error(data.error || 'Failed to fetch logs');
-        setLogs((data.logs || []) as OperationLog[]);
-        return;
+        if (data.success) {
+          setLogs((data.logs || []) as OperationLog[]);
+          return;
+        }
       }
+      if (isCnApiMode) return;
       const q = query(
         collection(db, 'logs'),
         where('orderId', '==', orderId)
