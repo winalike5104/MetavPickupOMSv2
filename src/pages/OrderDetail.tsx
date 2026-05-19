@@ -632,7 +632,7 @@ export const OrderDetail: React.FC = () => {
 
     try {
       setRequestPickingLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/orders/update`, {
+      const response = await fetch('/api/orders/update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -649,6 +649,9 @@ export const OrderDetail: React.FC = () => {
       });
 
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to request picking (status ${response.status})`);
+      }
       if (!data.success) {
         throw new Error(data.error || 'Failed to request picking');
       }
