@@ -76,7 +76,11 @@ service cloud.firestore {
     // 订单集合 (数据隔离与行为授权)
     match /orders/{orderId} {
       // 读：只要仓库授权匹配就放行
-      allow read: if isAuthenticated() && hasWarehouseAccess(resource.data.warehouseId);
+      allow read: if isAuthenticated() &&
+                  (
+                    resource.data.warehouseId == null ||
+                    hasWarehouseAccess(resource.data.warehouseId)
+                  );
       
       // 写：创建需要仓库授权
       allow create: if isAuthenticated() && 
@@ -149,3 +153,4 @@ service cloud.firestore {
     }
   }
 }
+
