@@ -285,7 +285,7 @@ async function startServer() {
       const warehouseId = (req.query.warehouseId as string) || "";
       const requestedWh = (req.headers['x-warehouse-id'] as string) || "";
       // Keep payload bounded to avoid oversized-response 500s on Cloud Run.
-      const limitValue = Math.min(Math.max(Number(req.query.limit) || 500, 1), 1000);
+      const limitValue = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 2000);
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const isSales = (req.user.role === 'Sales') || (req.user.roleTemplate === 'Sales');
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
@@ -294,10 +294,24 @@ async function startServer() {
         return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
       }
 
+      const getOrderSortTime = (o: any) => {
+        const updated = o?.updatedAt;
+        let updatedMs = 0;
+        if (updated && typeof updated === 'object' && typeof updated._seconds === 'number') {
+          updatedMs = updated._seconds * 1000;
+        } else if (typeof updated === 'string') {
+          const t = new Date(updated).getTime();
+          updatedMs = Number.isFinite(t) ? t : 0;
+        }
+        if (updatedMs > 0) return updatedMs;
+        const created = o?.createdTime ? new Date(o.createdTime).getTime() : 0;
+        return Number.isFinite(created) ? created : 0;
+      };
+
       const sortByCreatedDesc = (rows: any[]) =>
         rows.sort((a: any, b: any) => {
-          const ta = a?.createdTime ? new Date(a.createdTime).getTime() : 0;
-          const tb = b?.createdTime ? new Date(b.createdTime).getTime() : 0;
+          const ta = getOrderSortTime(a);
+          const tb = getOrderSortTime(b);
           return tb - ta;
         });
 
@@ -323,7 +337,7 @@ async function startServer() {
           const snap = await currentDb.collection("orders")
             .where("warehouseId", "==", null)
             .orderBy("updatedAt", "desc")
-            .limit(Math.min(limitValue, 200))
+            .limit(Math.min(limitValue, 1000))
             .get();
           return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
         } catch (_e) {
@@ -331,7 +345,7 @@ async function startServer() {
           try {
             const snap = await currentDb.collection("orders")
               .where("warehouseId", "==", null)
-              .limit(Math.min(limitValue, 200))
+              .limit(Math.min(limitValue, 1000))
               .get();
             const rows = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
             return sortByCreatedDesc(rows);

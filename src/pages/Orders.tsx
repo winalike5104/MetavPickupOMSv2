@@ -205,7 +205,7 @@ export const Orders = () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        limit: '500'
+        limit: '1000'
       });
       const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
         headers: {
