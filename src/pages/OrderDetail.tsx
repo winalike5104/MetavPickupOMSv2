@@ -380,6 +380,27 @@ export const OrderDetail: React.FC = () => {
       }
     } catch (err) {
       console.error('Error fetching order:', err);
+      // NZ keeps Firestore as primary path; fallback to API when Firestore access is blocked.
+      if (!isCnApiMode && token) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/orders/detail/${id}`, {
+            headers: {
+              'x-v2-auth-token': `Bearer ${token}`,
+              'x-warehouse-id': activeWarehouse || ''
+            }
+          });
+          const data = await response.json();
+          if (data.success && data.order) {
+            const orderData = data.order as Order;
+            setOrder(orderData);
+            setEditForm(orderData);
+            setError(null);
+            return;
+          }
+        } catch (fallbackErr) {
+          console.error('Order detail API fallback failed:', fallbackErr);
+        }
+      }
       setError('Failed to load order details');
     } finally {
       setLoading(false);
@@ -435,6 +456,24 @@ export const OrderDetail: React.FC = () => {
       setLogs(logsData);
     } catch (err) {
       console.error('Error fetching logs:', err);
+      // NZ keeps Firestore as primary path; fallback to API when Firestore access is blocked.
+      if (!isCnApiMode && token) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/logs/order/${orderId}?limit=300`, {
+            headers: {
+              'x-v2-auth-token': `Bearer ${token}`,
+              'x-warehouse-id': activeWarehouse || ''
+            }
+          });
+          const data = await response.json();
+          if (data.success) {
+            setLogs((data.logs || []) as OperationLog[]);
+            return;
+          }
+        } catch (fallbackErr) {
+          console.error('Order logs API fallback failed:', fallbackErr);
+        }
+      }
     }
   };
 

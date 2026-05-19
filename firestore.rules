@@ -42,6 +42,7 @@ service cloud.firestore {
       return isAuthenticated() && 
              (
                isSystemAdmin() ||
+               warehouseId == null ||
                (allowed is list && allowed.hasAny(['*', warehouseId]))
              );
     }
@@ -60,7 +61,7 @@ service cloud.firestore {
       return data.bookingNumber is string && 
              data.customerName is string && 
              data.status is string &&
-             data.warehouseId is string;
+             (data.warehouseId is string || data.warehouseId == null);
     }
 
     // ===============================================================
