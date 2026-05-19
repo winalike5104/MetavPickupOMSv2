@@ -122,6 +122,16 @@ const logAction = async (user: any, action: string, details: string, orderId?: s
   }
 };
 
+const toListOrder = (o: any) => {
+  // Avoid large payload fields (e.g. base64 signatures) in list endpoint.
+  const {
+    customerSignature,
+    signatureData,
+    ...rest
+  } = o || {};
+  return rest;
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -339,7 +349,7 @@ async function startServer() {
       if (needsAklCompatScan) {
         const snap = await currentDb.collection("orders").orderBy("createdTime", "desc").limit(limitValue).get();
         orders = snap.docs
-          .map((d: any) => toListOrder({ id: d.id, ...d.data() }))
+          .map((d: any) => ({ id: d.id, ...d.data() }))
           .filter((o: any) => {
             const wh = o.warehouseId || null;
             if (warehouseId) {
@@ -1032,9 +1042,10 @@ async function startServer() {
       }
 
       const order = orderDoc.data()!;
+      const requestedWh = (req.headers['x-warehouse-id'] as string) || '';
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
       const allowedWarehouses = req.user.allowedWarehouses || [];
-      const orderWarehouse = order?.warehouseId || 'AKL';
+      const orderWarehouse = order?.warehouseId || requestedWh || null;
       if (!isSuper && !allowedWarehouses.includes('*') && !allowedWarehouses.includes(orderWarehouse)) {
         return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
       }
@@ -1307,6 +1318,12 @@ async function startServer() {
       const items = Array.isArray(order?.items) ? order.items : [];
       if (!items.length) {
         return res.status(400).json({ success: false, error: "Order has no items to confirm pickup" });
+      }
+      if (order?.status !== 'Created') {
+        return res.status(409).json({ success: false, error: "Only orders in Created status can be confirmed for pickup" });
+      }
+      if (order?.warehouseStatus !== 'Picked') {
+        return res.status(409).json({ success: false, error: "Warehouse must mark this order as Picked before front desk confirmation" });
       }
 
       const pickedIndexes = Array.isArray(pickedItemIndexes)
@@ -2548,12 +2565,3 @@ async function startServer() {
 }
 
 startServer();
-      const toListOrder = (o: any) => {
-        // Avoid large payload fields (e.g. base64 signatures) in list endpoint.
-        const {
-          customerSignature,
-          signatureData,
-          ...rest
-        } = o || {};
-        return rest;
-      };
