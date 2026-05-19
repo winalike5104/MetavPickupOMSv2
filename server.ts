@@ -284,6 +284,8 @@ async function startServer() {
     try {
       const warehouseId = (req.query.warehouseId as string) || "";
       const requestedWh = (req.headers['x-warehouse-id'] as string) || "";
+      const updatedAfterRaw = (req.query.updatedAfter as string) || "";
+      const updatedAfterMs = updatedAfterRaw ? new Date(updatedAfterRaw).getTime() : 0;
       // Keep payload bounded to avoid oversized-response 500s on Cloud Run.
       const limitValue = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 2000);
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
@@ -431,8 +433,15 @@ async function startServer() {
         // Keep them visible in all warehouse contexts until warehouse is assigned in picking flow.
         orders = mergeOrdersDedup(orders, await fetchRecentUnassigned());
       }
-      orders = orders.map(toListOrder);
-      return res.json({ success: true, orders });
+      let normalizedOrders = orders.map(toListOrder);
+      if (updatedAfterMs > 0) {
+        normalizedOrders = normalizedOrders.filter((o: any) => getOrderSortTime(o) > updatedAfterMs);
+      }
+      const maxOrderTime = normalizedOrders.reduce((max: number, o: any) => {
+        const t = getOrderSortTime(o);
+        return t > max ? t : max;
+      }, 0);
+      return res.json({ success: true, orders: normalizedOrders, maxOrderTime });
     } catch (error: any) {
       console.error("Orders List Error:", error);
       const safeMessage = error?.message || "Unknown server error";
@@ -1038,15 +1047,75 @@ async function startServer() {
         });
       }
 
-      // Build field-level change summary for operation logs.
+      // Build readable field-level change summary for operation logs.
+      const prettyName: Record<string, string> = {
+        status: 'Order Status',
+        warehouseStatus: 'Warehouse Status',
+        warehouseId: 'Warehouse',
+        notes: 'Notes',
+        paymentStatus: 'Payment Status',
+        paymentMethod: 'Payment Method',
+        customerEmail: 'Customer Email',
+        customerName: 'Customer Name',
+        pickupDateScheduled: 'Scheduled Pickup Date'
+      };
+      const ignoredKeys = new Set([
+        'id',
+        'updatedAt',
+        'updatedBy',
+        'createdTime',
+        'pickingLog.requestedAt',
+        'pickingLog.startedAt',
+        'pickingLog.finishedAt',
+        'pickingLog.pickerName',
+        'pickingLog.pickerId'
+      ]);
+      const toText = (v: any) => {
+        if (typeof v === 'undefined' || v === null || v === '') return '(none)';
+        if (typeof v === 'string') return v;
+        if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+        try {
+          return JSON.stringify(v);
+        } catch {
+          return String(v);
+        }
+      };
+      const normalizedItems = (arr: any[]) =>
+        (Array.isArray(arr) ? arr : []).map((it: any) => ({
+          sku: it?.sku || '',
+          qty: Number(it?.qty || 0),
+          unit_price: Number(it?.unit_price || 0),
+          location: it?.location || '',
+          status: it?.status || ''
+        }));
+      const stable = (obj: any): any => {
+        if (Array.isArray(obj)) return obj.map(stable);
+        if (!obj || typeof obj !== 'object') return obj;
+        return Object.keys(obj).sort().reduce((acc: any, k: string) => {
+          acc[k] = stable(obj[k]);
+          return acc;
+        }, {});
+      };
       const changeLines: string[] = [];
       Object.keys(enrichedUpdateData || {}).forEach((k) => {
-        const beforeValue = (order as any)?.[k];
-        const afterValue = (enrichedUpdateData as any)[k];
-        if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
-          const beforeText = typeof beforeValue === 'undefined' ? 'undefined' : JSON.stringify(beforeValue);
-          const afterText = typeof afterValue === 'undefined' ? 'undefined' : JSON.stringify(afterValue);
-          changeLines.push(`${k}: ${beforeText} -> ${afterText}`);
+        if (ignoredKeys.has(k)) return;
+        let beforeValue = (order as any)?.[k];
+        let afterValue = (enrichedUpdateData as any)[k];
+
+        if (k === 'items') {
+          const beforeNorm = normalizedItems(beforeValue);
+          const afterNorm = normalizedItems(afterValue);
+          if (JSON.stringify(stable(beforeNorm)) !== JSON.stringify(stable(afterNorm))) {
+            const beforeCount = Array.isArray(beforeValue) ? beforeValue.length : 0;
+            const afterCount = Array.isArray(afterValue) ? afterValue.length : 0;
+            changeLines.push(`Items Updated (${beforeCount} -> ${afterCount})`);
+          }
+          return;
+        }
+
+        if (JSON.stringify(stable(beforeValue)) !== JSON.stringify(stable(afterValue))) {
+          const label = prettyName[k] || k;
+          changeLines.push(`${label}: ${toText(beforeValue)} -> ${toText(afterValue)}`);
         }
       });
 

@@ -40,6 +40,80 @@ import SignatureCanvas from 'react-signature-canvas';
 
 import { PageHeader } from '../components/PageHeader';
 
+const ORDER_CACHE_DB = 'mvp_orders_cache_v1';
+const ORDER_CACHE_STORE = 'order_lists';
+
+type OrderCacheRecord = {
+  key: string;
+  orders: Order[];
+  lastSyncAt: string;
+  updatedAt: string;
+};
+
+const openOrderCacheDb = (): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    const req = indexedDB.open(ORDER_CACHE_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(ORDER_CACHE_STORE)) {
+        db.createObjectStore(ORDER_CACHE_STORE, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+const getOrderCache = async (key: string): Promise<OrderCacheRecord | null> => {
+  try {
+    const db = await openOrderCacheDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(ORDER_CACHE_STORE, 'readonly');
+      const store = tx.objectStore(ORDER_CACHE_STORE);
+      const req = store.get(key);
+      req.onsuccess = () => resolve((req.result as OrderCacheRecord) || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const setOrderCache = async (record: OrderCacheRecord): Promise<void> => {
+  try {
+    const db = await openOrderCacheDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(ORDER_CACHE_STORE, 'readwrite');
+      const store = tx.objectStore(ORDER_CACHE_STORE);
+      const req = store.put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // Best-effort cache
+  }
+};
+
+const getOrderSortMs = (order: any): number => {
+  const updated = order?.updatedAt;
+  if (updated && typeof updated === 'object' && typeof updated._seconds === 'number') {
+    return updated._seconds * 1000;
+  }
+  if (typeof updated === 'string') {
+    const t = new Date(updated).getTime();
+    if (Number.isFinite(t) && t > 0) return t;
+  }
+  const created = order?.createdTime ? new Date(order.createdTime).getTime() : 0;
+  return Number.isFinite(created) ? created : 0;
+};
+
+const mergeOrdersById = (base: Order[], incoming: Order[]): Order[] => {
+  const map = new Map<string, Order>();
+  [...base, ...incoming].forEach((o: Order) => {
+    if (o?.id) map.set(o.id, o);
+  });
+  return Array.from(map.values()).sort((a: Order, b: Order) => getOrderSortMs(b) - getOrderSortMs(a));
+};
+
 export const Orders = () => {
   const { profile, user, activeWarehouse, token } = useAuth();
   const { bulkUpdateStatus } = useOrderService(token, API_BASE_URL);
@@ -206,9 +280,19 @@ export const Orders = () => {
     if (!token) return;
     setLoading(true);
     try {
+      const cacheKey = `orders:${user?.uid || 'anon'}:${activeWarehouse}`;
+      const cached = await getOrderCache(cacheKey);
+      if (cached?.orders?.length) {
+        setOrders(cached.orders);
+        setLoading(false);
+      }
+
       const params = new URLSearchParams({
         limit: '1000'
       });
+      if (cached?.lastSyncAt) {
+        params.set('updatedAfter', cached.lastSyncAt);
+      }
       const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
         headers: {
           'x-v2-auth-token': `Bearer ${token}`,
@@ -226,7 +310,21 @@ export const Orders = () => {
         throw new Error(data?.error || `Failed to fetch orders (status ${response.status})`);
       }
       if (!data.success) throw new Error(data.error || 'Failed to fetch orders');
-      setOrders((data.orders || []) as Order[]);
+      const incoming = (data.orders || []) as Order[];
+      const nextOrders = cached?.orders?.length ? mergeOrdersById(cached.orders, incoming) : incoming;
+      setOrders(nextOrders);
+      const maxMs = Math.max(
+        ...nextOrders.map((o: Order) => getOrderSortMs(o)),
+        data?.maxOrderTime || 0,
+        cached?.lastSyncAt ? new Date(cached.lastSyncAt).getTime() : 0
+      );
+      const lastSyncAt = maxMs > 0 ? new Date(maxMs).toISOString() : new Date().toISOString();
+      await setOrderCache({
+        key: cacheKey,
+        orders: nextOrders,
+        lastSyncAt,
+        updatedAt: new Date().toISOString()
+      });
     } catch (err: any) {
       console.error('Error fetching orders:', err);
       setNotification({ message: err.message || 'Failed to fetch orders', type: 'error' });
