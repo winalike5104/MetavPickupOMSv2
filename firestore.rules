@@ -14,6 +14,10 @@ service cloud.firestore {
       return request.auth.token;
     }
 
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     // 检查是否为系统超级管理员 (硬编码邮箱作为最后防线)
     function isSystemAdmin() {
       let email = getClaims().email;
@@ -31,19 +35,26 @@ service cloud.firestore {
 
     // 检查是否拥有特定权限 (直接查验 Token 里的权限矩阵)
     function hasPermission(perm) {
-      let perms = getClaims().permissions;
+      let tokenPerms = getClaims().permissions;
+      let userPerms = getUserDoc().permissions;
       return isAuthenticated() && 
-             (isSystemAdmin() || (perms is list && perms.hasAny([perm])));
+             (
+               isSystemAdmin() ||
+               (tokenPerms is list && tokenPerms.hasAny([perm])) ||
+               (userPerms is list && userPerms.hasAny([perm]))
+             );
     }
 
     // 仓库访问授权 (信任令牌中的授权数组)
     function hasWarehouseAccess(warehouseId) {
-      let allowed = getClaims().allowedWarehouses;
+      let tokenAllowed = getClaims().allowedWarehouses;
+      let userAllowed = getUserDoc().allowedWarehouses;
       return isAuthenticated() && 
              (
                isSystemAdmin() ||
                warehouseId == null ||
-               (allowed is list && allowed.hasAny(['*', warehouseId]))
+               (tokenAllowed is list && tokenAllowed.hasAny(['*', warehouseId])) ||
+               (userAllowed is list && userAllowed.hasAny(['*', warehouseId]))
              );
     }
 
