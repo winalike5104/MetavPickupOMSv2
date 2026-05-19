@@ -482,6 +482,11 @@ export const OrderDetail: React.FC = () => {
 
   const handleUpdateOrder = async () => {
     if (!id || !profile || !order || !token) return;
+    if (order.status === 'Picked Up' || order.status === 'Reviewed') {
+      alert('Picked Up / Reviewed orders cannot be modified.');
+      setIsEditing(false);
+      return;
+    }
     
     try {
       // Handle payment metadata
@@ -530,6 +535,10 @@ export const OrderDetail: React.FC = () => {
 
   const openPaymentEditor = () => {
     if (!order) return;
+    if (order.status === 'Picked Up' || order.status === 'Reviewed') {
+      alert('Picked Up / Reviewed orders cannot update payment.');
+      return;
+    }
     setPaymentForm({
       paymentStatus: order.paymentStatus || 'Unpaid',
       paymentMethod: (order.paymentMethod as PaymentMethod) || ''
@@ -539,6 +548,11 @@ export const OrderDetail: React.FC = () => {
 
   const handleUpdatePayment = async () => {
     if (!id || !profile || !order || !token) return;
+    if (order.status === 'Picked Up' || order.status === 'Reviewed') {
+      alert('Picked Up / Reviewed orders cannot update payment.');
+      setIsPaymentEditing(false);
+      return;
+    }
 
     const updateData: any = {
       paymentStatus: paymentForm.paymentStatus,
@@ -1074,6 +1088,7 @@ export const OrderDetail: React.FC = () => {
   console.log("OrderDetail - Status:", order.status, "WarehouseStatus:", order.warehouseStatus, "HasPermission:", hasPermission(profile, 'Request Picking', profile?.username || profile?.email));
 
   const store = stores.find(s => s.storeId === order.storeId);
+  const isOrderLocked = order.status === 'Picked Up' || order.status === 'Reviewed';
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
@@ -1098,7 +1113,7 @@ export const OrderDetail: React.FC = () => {
         }
         actions={
           <>
-            {hasPermission(profile, 'Edit Order', profile?.username || profile?.email) && order.status !== 'Cancelled' && (
+            {hasPermission(profile, 'Edit Order', profile?.username || profile?.email) && order.status !== 'Cancelled' && !isOrderLocked && (
               <button
                 onClick={() => setIsEditing(true)}
                 className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
@@ -1108,7 +1123,7 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {(hasPermission(profile, 'Add Payment', profile?.username || profile?.email) || hasPermission(profile, 'Edit Payment', profile?.username || profile?.email)) && order.status !== 'Cancelled' && (
+            {(hasPermission(profile, 'Add Payment', profile?.username || profile?.email) || hasPermission(profile, 'Edit Payment', profile?.username || profile?.email)) && order.status !== 'Cancelled' && !isOrderLocked && (
               <button
                 onClick={openPaymentEditor}
                 className="inline-flex items-center px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all"
