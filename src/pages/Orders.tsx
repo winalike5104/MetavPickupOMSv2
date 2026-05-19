@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { collection, query, getDocs, orderBy, where, writeBatch, doc, limit } from 'firebase/firestore';
+import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Order } from '../types';
 import { useAuth } from '../components/AuthProvider';
-import { logAction, cn, safeSearch, handleFirestoreError, OperationType, formatDate, hasPermission, isAdmin, isSystemAdmin } from '../utils';
+import { logAction, cn, safeSearch, formatDate, hasPermission, isAdmin } from '../utils';
 import { 
   Search, 
   Download, 
@@ -201,91 +201,37 @@ export const Orders = () => {
 
   const fetchOrders = async () => {
     if (!activeWarehouse) return;
-    if (isCnApiMode && !token) return;
+    if (!token) return;
     setLoading(true);
     try {
-      if (isCnApiMode) {
-        const params = new URLSearchParams({
-          limit: '500'
-        });
-        const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
-          headers: {
-            'x-v2-auth-token': `Bearer ${token}`,
-            'x-warehouse-id': activeWarehouse || ''
-          }
-        });
-        const raw = await response.text();
-        let data: any = null;
-        try {
-          data = raw ? JSON.parse(raw) : null;
-        } catch (e) {
-          throw new Error(`Invalid JSON from /api/orders/list (status ${response.status})`);
+      const params = new URLSearchParams({
+        limit: '500'
+      });
+      const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
+        headers: {
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
         }
-        if (!response.ok) {
-          throw new Error(data?.error || `Failed to fetch orders (status ${response.status})`);
-        }
-        if (!data.success) throw new Error(data.error || 'Failed to fetch orders');
-        setOrders((data.orders || []) as Order[]);
-        setLoading(false);
-        return;
-      }
-
-      const ordersRef = collection(db, 'orders');
-      let q: any;
-      const isSuper = isSystemAdmin(profile?.username || profile?.email);
-      const allowedWarehouses = profile?.allowedWarehouses || [];
-
-      // Orders are created without warehouse assignment first; fetch unified pool.
-      if (!isSuper && !allowedWarehouses.includes('*') && allowedWarehouses.length === 0) {
-        setOrders([]);
-        setLoading(false);
-        return;
-      }
-      q = query(ordersRef, orderBy('createdTime', 'desc'), limit(3000));
-      
-      let snap;
+      });
+      const raw = await response.text();
+      let data: any = null;
       try {
-        snap = await getDocs(q);
-      } catch (err: any) {
-        console.error('Error fetching orders:', err);
-        // 如果主查询失败，尝试一个最基础的受限查询作为兜底
-        const fallbackQ = query(ordersRef, where('warehouseId', '==', activeWarehouse), limit(100));
-        snap = await getDocs(fallbackQ);
+        data = raw ? JSON.parse(raw) : null;
+      } catch (_e) {
+        throw new Error(`Invalid JSON from /api/orders/list (status ${response.status})`);
       }
-
-      const allFetched = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Order));
-      console.log(`DEBUG: Fetched ${allFetched.length} orders total from Firestore`);
-      
-      // Sort in memory by createdTime descending
-      allFetched.sort((a, b) => {
-        const timeA = a.createdTime ? new Date(a.createdTime).getTime() : 0;
-        const timeB = b.createdTime ? new Date(b.createdTime).getTime() : 0;
-        return timeB - timeA;
-      });
-      
-      const filteredOrders = allFetched.filter(order => {
-        // Unassigned orders must be visible cross-warehouse until pickup confirms warehouse.
-        if (!order.warehouseId) return true;
-        const orderWarehouse = order.warehouseId;
-        if (isSuper || allowedWarehouses.includes('*')) return true;
-        return allowedWarehouses.includes(orderWarehouse);
-      });
-      
-      console.log(`DEBUG: Found ${filteredOrders.length} orders for user scope ${allowedWarehouses.join(',') || 'none'}`);
-      if (filteredOrders.length > 0) {
-        console.log('DEBUG: First order in list:', filteredOrders[0]);
-      } else {
-        console.log('DEBUG: No orders matched the active warehouse filter.');
+      if (!response.ok) {
+        throw new Error(data?.error || `Failed to fetch orders (status ${response.status})`);
       }
-      setOrders(filteredOrders);
+      if (!data.success) throw new Error(data.error || 'Failed to fetch orders');
+      setOrders((data.orders || []) as Order[]);
     } catch (err: any) {
       console.error('Error fetching orders:', err);
-      handleFirestoreError(err, OperationType.GET, 'orders');
+      setNotification({ message: err.message || 'Failed to fetch orders', type: 'error' });
     } finally {
       setLoading(false);
     }
   };
-
   const getWarehouseStatusLabel = (order: Order) => order.warehouseStatus || 'Not Requested';
 
   const getWarehouseStatusBadgeClass = (order: Order) => {
@@ -1407,4 +1353,5 @@ export const Orders = () => {
   </div>
 );
 };
+
 

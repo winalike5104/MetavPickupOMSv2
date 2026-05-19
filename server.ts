@@ -277,9 +277,10 @@ async function startServer() {
       // Keep payload bounded to avoid oversized-response 500s on Cloud Run.
       const limitValue = Math.min(Math.max(Number(req.query.limit) || 500, 1), 1000);
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
+      const isSales = (req.user.role === 'Sales') || (req.user.roleTemplate === 'Sales');
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
 
-      if (!isSuper && !allowedWarehouses.includes("*") && warehouseId && !allowedWarehouses.includes(warehouseId)) {
+      if (!isSuper && !isSales && !allowedWarehouses.includes("*") && warehouseId && !allowedWarehouses.includes(warehouseId)) {
         return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
       }
 
@@ -326,7 +327,7 @@ async function startServer() {
 
       // Unassigned orders stay cross-warehouse visible until pickup confirms warehouse.
       const needsAklCompatScan = !warehouseId || warehouseId === "AKL";
-      let effectiveWarehouses = isSuper || allowedWarehouses.includes("*")
+      let effectiveWarehouses = isSuper || isSales || allowedWarehouses.includes("*")
         ? null
         : allowedWarehouses;
       // Compatibility fallback: if user's warehouse permissions are empty,
@@ -343,7 +344,7 @@ async function startServer() {
             const wh = o.warehouseId || null;
             if (warehouseId) {
               if (!wh) return true;
-              if (isSuper || allowedWarehouses.includes("*")) return wh === warehouseId;
+              if (isSuper || isSales || allowedWarehouses.includes("*")) return wh === warehouseId;
               return wh === warehouseId && allowedWarehouses.includes(warehouseId);
             }
             if (!wh) return true;
@@ -390,8 +391,9 @@ async function startServer() {
       const order = { id: orderDoc.id, ...orderDoc.data() } as any;
       const orderWarehouse = order.warehouseId || null;
       const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
+      const isSales = (req.user.role === 'Sales') || (req.user.roleTemplate === 'Sales');
       const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
-      if (!isSuper && orderWarehouse && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(orderWarehouse)) {
+      if (!isSuper && !isSales && orderWarehouse && !allowedWarehouses.includes("*") && !allowedWarehouses.includes(orderWarehouse)) {
         return res.status(403).json({ success: false, error: "Forbidden: Access denied to this warehouse" });
       }
 
