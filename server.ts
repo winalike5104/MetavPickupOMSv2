@@ -318,6 +318,27 @@ async function startServer() {
         }
       };
 
+      const fetchRecentUnassigned = async () => {
+        try {
+          const snap = await currentDb.collection("orders")
+            .where("warehouseId", "==", null)
+            .orderBy("updatedAt", "desc")
+            .limit(Math.min(limitValue, 200))
+            .get();
+          return snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+        } catch (_e) {
+          return [];
+        }
+      };
+
+      const mergeOrdersDedup = (primary: any[], extra: any[]) => {
+        const merged = new Map<string, any>();
+        [...primary, ...extra].forEach((o: any) => {
+          if (o?.id) merged.set(o.id, o);
+        });
+        return sortByCreatedDesc(Array.from(merged.values())).slice(0, limitValue);
+      };
+
       const fetchByWarehouseIn = async (warehouseList: string[]) => {
         try {
           const snap = await currentDb.collection("orders")
@@ -361,6 +382,10 @@ async function startServer() {
             if (!effectiveWarehouses) return true;
             return effectiveWarehouses.includes(wh);
           });
+
+        // New orders are unassigned by default (warehouseId=null).
+        // Always merge recent unassigned orders into the list and de-duplicate.
+        orders = mergeOrdersDedup(orders, await fetchRecentUnassigned());
       } else {
         // If no explicit warehouse is provided, aggregate by allowed warehouses.
         if (!warehouseId) {
@@ -378,6 +403,9 @@ async function startServer() {
         } else {
           orders = await fetchByWarehouseEq(warehouseId);
         }
+        // New orders are unassigned by default (warehouseId=null).
+        // Keep them visible in all warehouse contexts until warehouse is assigned in picking flow.
+        orders = mergeOrdersDedup(orders, await fetchRecentUnassigned());
       }
       orders = orders.map(toListOrder);
       return res.json({ success: true, orders });
