@@ -51,11 +51,11 @@ export const Orders = () => {
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const normalizeStatusFilter = (value?: string) => {
-    if (!value) return 'All';
+    if (!value) return 'Active';
     if (value === 'All Orders') return 'All';
     if (value === 'Active Orders') return 'Active';
     const allowed = ['Active', 'All', 'Overdue', 'Created', 'Picked Up', 'Reviewed', 'Cancelled'];
-    return allowed.includes(value) ? value : 'All';
+    return allowed.includes(value) ? value : 'Active';
   };
 
   const [statusFilter, setStatusFilter] = useState(normalizeStatusFilter(location.state?.statusFilter));
@@ -71,6 +71,8 @@ export const Orders = () => {
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
   const menuRef = React.useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -270,7 +272,7 @@ export const Orders = () => {
       
       let matchesStatus = true;
       if (statusFilter === 'Active') {
-        matchesStatus = order.status === 'Created' || order.status === 'Picked Up';
+        matchesStatus = order.status !== 'Cancelled' && order.status !== 'Reviewed';
       } else if (statusFilter === 'Overdue') {
         if (!order.pickupDateScheduled || order.status !== 'Created') {
           matchesStatus = false;
@@ -322,6 +324,23 @@ export const Orders = () => {
       return timeB - timeA;
     });
   }, [orders, debouncedSearchTerm, statusFilter, dateRange, paymentMethodFilter, storeFilter, overdueThreshold]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm, statusFilter, dateRange.start, dateRange.end, paymentMethodFilter, storeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredOrders.slice(start, start + PAGE_SIZE);
+  }, [filteredOrders, currentPage]);
 
   const eligibleOrders = useMemo(() => {
     return filteredOrders.filter(o => o.status !== 'Cancelled');
@@ -1080,7 +1099,7 @@ export const Orders = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {filteredOrders.map((order) => (
+                    {paginatedOrders.map((order) => (
                       <tr 
                         key={order.id} 
                         className={cn(
@@ -1235,7 +1254,7 @@ export const Orders = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredOrders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <div
                   key={order.id}
                   onClick={() => navigate(getOrderDetailPath(order.id))}
@@ -1349,6 +1368,34 @@ export const Orders = () => {
           )
         )
       }
+      {!loading && filteredOrders.length > 0 && (
+        <div className="mt-4 flex items-center justify-between bg-white border border-slate-100 rounded-xl px-4 py-3">
+          <p className="text-sm text-slate-500">
+            {isCnApiMode
+              ? `显示 ${(currentPage - 1) * PAGE_SIZE + 1}-${Math.min(currentPage * PAGE_SIZE, filteredOrders.length)} / 共 ${filteredOrders.length} 条`
+              : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}-${Math.min(currentPage * PAGE_SIZE, filteredOrders.length)} of ${filteredOrders.length}`}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+            >
+              {isCnApiMode ? '上一页' : 'Prev'}
+            </button>
+            <span className="text-sm text-slate-600">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+            >
+              {isCnApiMode ? '下一页' : 'Next'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   </div>
 );
