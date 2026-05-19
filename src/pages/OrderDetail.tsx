@@ -312,8 +312,8 @@ export const OrderDetail: React.FC = () => {
     if (!id) return;
     try {
       setLoading(true);
-      // Use API for both main and CN routes to keep visibility/permission behavior consistent.
-      if (token) {
+      if (isCnApiMode) {
+        if (!token) return;
         const response = await fetch(`${API_BASE_URL}/api/orders/detail/${id}`, {
           headers: {
             'x-v2-auth-token': `Bearer ${token}`,
@@ -329,8 +329,6 @@ export const OrderDetail: React.FC = () => {
         setEditForm(orderData);
         return;
       }
-
-      // Fallback path (legacy): if token is temporarily unavailable, read Firestore directly.
       const docRef = doc(db, 'orders', id);
       const docSnap = await getDoc(docRef);
       
