@@ -29,6 +29,29 @@ import { useRef } from 'react';
 import { API_BASE_URL, CN_API_ONLY } from '../constants';
 import { useLocation } from 'react-router-dom';
 
+const CN_OVERDUE_CACHE_PREFIX = 'cn_overdue_orders_cache_v1';
+
+const getOrderSortMs = (order: any): number => {
+  const updated = order?.updatedAt;
+  if (updated && typeof updated === 'object' && typeof updated._seconds === 'number') {
+    return updated._seconds * 1000;
+  }
+  if (typeof updated === 'string') {
+    const t = new Date(updated).getTime();
+    if (Number.isFinite(t) && t > 0) return t;
+  }
+  const created = order?.createdTime ? new Date(order.createdTime).getTime() : 0;
+  return Number.isFinite(created) ? created : 0;
+};
+
+const mergeOrdersById = (base: Order[], incoming: Order[]): Order[] => {
+  const map = new Map<string, Order>();
+  [...base, ...incoming].forEach((o: Order) => {
+    if (o?.id) map.set(o.id, o);
+  });
+  return Array.from(map.values()).sort((a: Order, b: Order) => getOrderSortMs(b) - getOrderSortMs(a));
+};
+
 export const OverdueOrders = () => {
   const { profile, user, activeWarehouse, token } = useAuth();
   const location = useLocation();
@@ -85,11 +108,31 @@ export const OverdueOrders = () => {
     try {
       if (isCnApiMode) {
         if (!token) return;
-        const params = new URLSearchParams({ limit: '500' });
+        const warehouse = activeWarehouse || '';
+        const cacheKey = `${CN_OVERDUE_CACHE_PREFIX}:${user?.uid || 'anon'}:${warehouse}`;
+        const cachedRaw = localStorage.getItem(cacheKey);
+        let cachedOrders: Order[] = [];
+        let lastSyncAt = '';
+        if (cachedRaw) {
+          try {
+            const parsed = JSON.parse(cachedRaw);
+            cachedOrders = parsed?.orders || [];
+            lastSyncAt = parsed?.lastSyncAt || '';
+            if (cachedOrders.length) {
+              setOrders(cachedOrders);
+              setLoading(false);
+            }
+          } catch {
+            // ignore broken cache
+          }
+        }
+
+        const params = new URLSearchParams({ limit: '1000' });
+        if (lastSyncAt) params.set('updatedAfter', lastSyncAt);
         const response = await fetch(`${API_BASE_URL}/api/orders/list?${params.toString()}`, {
           headers: {
             'x-v2-auth-token': `Bearer ${token}`,
-            'x-warehouse-id': activeWarehouse || ''
+            'x-warehouse-id': warehouse
           }
         });
         const raw = await response.text();
@@ -97,8 +140,18 @@ export const OverdueOrders = () => {
         if (!response.ok || !data?.success) {
           throw new Error(data?.error || `Failed to fetch overdue orders (status ${response.status})`);
         }
-        const fetchedOrders = ((data.orders || []) as Order[]).filter((o) => o.paymentStatus === 'Paid' && o.status === 'Created');
-        setOrders(fetchedOrders);
+        const incoming = ((data.orders || []) as Order[]).filter((o) => o.paymentStatus === 'Paid' && o.status === 'Created');
+        const merged = mergeOrdersById(cachedOrders, incoming);
+        setOrders(merged);
+        const maxMs = Math.max(
+          ...merged.map((o: Order) => getOrderSortMs(o)),
+          lastSyncAt ? new Date(lastSyncAt).getTime() : 0
+        );
+        localStorage.setItem(cacheKey, JSON.stringify({
+          orders: merged,
+          lastSyncAt: maxMs > 0 ? new Date(maxMs).toISOString() : new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }));
         setLoading(false);
         return;
       }

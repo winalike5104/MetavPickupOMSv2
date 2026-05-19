@@ -167,6 +167,7 @@ export default function App() {
               <Route path="/cn" element={<ProtectedCnRoute><CnPortalHome /></ProtectedCnRoute>} />
               <Route path="/cn/orders" element={<ProtectedCnRoute><Orders /></ProtectedCnRoute>} />
               <Route path="/cn/orders/create" element={<ProtectedCnRoute><OrderCreate /></ProtectedCnRoute>} />
+              <Route path="/cn/orders/bulk-import" element={<ProtectedCnRoute><BulkOrderUpload /></ProtectedCnRoute>} />
               <Route path="/cn/orders/:id" element={<ProtectedCnRoute><OrderDetail /></ProtectedCnRoute>} />
               <Route path="/cn/overdue" element={<ProtectedCnRoute><OverdueOrders /></ProtectedCnRoute>} />
               <Route path="/cn/users" element={<ProtectedCnRoute><UserManagement /></ProtectedCnRoute>} />

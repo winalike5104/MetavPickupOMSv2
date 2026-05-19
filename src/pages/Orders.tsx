@@ -280,7 +280,8 @@ export const Orders = () => {
     if (!token) return;
     setLoading(true);
     try {
-      const cacheKey = `orders:${user?.uid || 'anon'}:${activeWarehouse}`;
+      const cacheScope = isCnApiMode ? 'cn' : 'nz';
+      const cacheKey = `orders:${cacheScope}:${user?.uid || 'anon'}:${activeWarehouse}`;
       const cached = await getOrderCache(cacheKey);
       if (cached?.orders?.length) {
         setOrders(cached.orders);

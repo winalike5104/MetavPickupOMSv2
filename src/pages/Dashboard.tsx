@@ -39,9 +39,33 @@ import {
 } from 'recharts';
 import { PageHeader } from '../components/PageHeader';
 import { AnnouncementModal } from '../components/AnnouncementModal';
+import { API_BASE_URL } from '../constants';
+
+const DASHBOARD_CACHE_PREFIX = 'dashboard_orders_cache_v1';
+
+const getOrderSortMs = (order: any): number => {
+  const updated = order?.updatedAt;
+  if (updated && typeof updated === 'object' && typeof updated._seconds === 'number') {
+    return updated._seconds * 1000;
+  }
+  if (typeof updated === 'string') {
+    const t = new Date(updated).getTime();
+    if (Number.isFinite(t) && t > 0) return t;
+  }
+  const created = order?.createdTime ? new Date(order.createdTime).getTime() : 0;
+  return Number.isFinite(created) ? created : 0;
+};
+
+const mergeOrdersById = (base: Order[], incoming: Order[]): Order[] => {
+  const map = new Map<string, Order>();
+  [...base, ...incoming].forEach((o: Order) => {
+    if (o?.id) map.set(o.id, o);
+  });
+  return Array.from(map.values()).sort((a: Order, b: Order) => getOrderSortMs(b) - getOrderSortMs(a));
+};
 
 export const Dashboard = () => {
-  const { profile, user, activeWarehouse } = useAuth();
+  const { profile, user, activeWarehouse, token } = useAuth();
   console.log("Dashboard - User:", user?.uid, "Email:", profile?.email, "IsAdmin:", isSystemAdmin(profile?.username || profile?.email));
   console.log("Dashboard - Profile Loaded:", !!profile, "Warehouse:", activeWarehouse);
   
