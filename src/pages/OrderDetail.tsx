@@ -114,6 +114,7 @@ export const OrderDetail: React.FC = () => {
   const [isProjecting, setIsProjecting] = useState(false);
   const [receivedRemoteSignature, setReceivedRemoteSignature] = useState<string | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [requestPickingLoading, setRequestPickingLoading] = useState(false);
   
   // Scroll state for collapsible header
   const [isScrolled, setIsScrolled] = useState(false);
@@ -619,10 +620,19 @@ export const OrderDetail: React.FC = () => {
   };
 
   const handleRequestPicking = async () => {
-    if (!id || !profile || !order || !token) return;
+    if (!id || !profile || !order) return;
+    if (!token) {
+      alert('Session expired. Please log in again.');
+      return;
+    }
+    if (!activeWarehouse) {
+      alert('Please select a warehouse before requesting picking.');
+      return;
+    }
 
     try {
-      const response = await fetch('/api/orders/update', {
+      setRequestPickingLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/orders/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -648,6 +658,8 @@ export const OrderDetail: React.FC = () => {
     } catch (err: any) {
       console.error('Error requesting picking:', err);
       alert(err.message || 'Failed to request picking');
+    } finally {
+      setRequestPickingLoading(false);
     }
   };
 
@@ -1088,13 +1100,14 @@ export const OrderDetail: React.FC = () => {
               </button>
             )}
 
-            {hasPermission(profile, 'Request Picking', profile?.username || profile?.email) && !order.warehouseStatus && order.status === 'Created' && (
+            {hasPermission(profile, 'Request Picking', profile?.username || profile?.email) && (!order.warehouseStatus || String(order.warehouseStatus) === 'Not Requested') && order.status === 'Created' && (
               <button
                 onClick={handleRequestPicking}
-                className="inline-flex items-center px-3 py-1.5 bg-indigo-600 rounded-xl text-xs font-bold text-white hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                disabled={requestPickingLoading}
+                className="inline-flex items-center px-3 py-1.5 bg-indigo-600 rounded-xl text-xs font-bold text-white hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
-                {cnText.requestPicking}
+                {requestPickingLoading ? 'Requesting...' : cnText.requestPicking}
               </button>
             )}
 
