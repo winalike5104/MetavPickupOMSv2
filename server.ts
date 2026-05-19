@@ -369,27 +369,16 @@ async function startServer() {
           orders = await fetchByWarehouseEq(warehouseId);
         }
       }
-      const statusFixPromises: Promise<any>[] = [];
       orders = orders.map(toListOrder).map((o: any) => {
         if (o?.warehouseStatus) return o;
         const requestedAt = o?.pickingLog?.requestedAt;
         const startedAt = o?.pickingLog?.startedAt;
         const finishedAt = o?.pickingLog?.finishedAt;
-        if (finishedAt) {
-          if (o?.id) statusFixPromises.push(currentDb.collection("orders").doc(o.id).update({ warehouseStatus: 'Picked', updatedAt: admin.firestore.FieldValue.serverTimestamp() }).catch(() => null));
-          return { ...o, warehouseStatus: 'Picked' };
-        }
-        if (startedAt) {
-          if (o?.id) statusFixPromises.push(currentDb.collection("orders").doc(o.id).update({ warehouseStatus: 'Picking', updatedAt: admin.firestore.FieldValue.serverTimestamp() }).catch(() => null));
-          return { ...o, warehouseStatus: 'Picking' };
-        }
-        if (requestedAt) {
-          if (o?.id) statusFixPromises.push(currentDb.collection("orders").doc(o.id).update({ warehouseStatus: 'Pending', updatedAt: admin.firestore.FieldValue.serverTimestamp() }).catch(() => null));
-          return { ...o, warehouseStatus: 'Pending' };
-        }
+        if (finishedAt) return { ...o, warehouseStatus: 'Picked' };
+        if (startedAt) return { ...o, warehouseStatus: 'Picking' };
+        if (requestedAt) return { ...o, warehouseStatus: 'Pending' };
         return o;
       });
-      if (statusFixPromises.length > 0) await Promise.allSettled(statusFixPromises);
       return res.json({ success: true, orders });
     } catch (error: any) {
       console.error("Orders List Error:", error);
@@ -418,17 +407,9 @@ async function startServer() {
       }
 
       if (!order.warehouseStatus) {
-        let healedStatus: 'Pending' | 'Picking' | 'Picked' | null = null;
-        if (order?.pickingLog?.finishedAt) healedStatus = 'Picked';
-        else if (order?.pickingLog?.startedAt) healedStatus = 'Picking';
-        else if (order?.pickingLog?.requestedAt) healedStatus = 'Pending';
-        if (healedStatus) {
-          order.warehouseStatus = healedStatus;
-          await currentDb.collection("orders").doc(orderDoc.id).update({
-            warehouseStatus: healedStatus,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-        }
+        if (order?.pickingLog?.finishedAt) order.warehouseStatus = 'Picked';
+        else if (order?.pickingLog?.startedAt) order.warehouseStatus = 'Picking';
+        else if (order?.pickingLog?.requestedAt) order.warehouseStatus = 'Pending';
       }
       return res.json({ success: true, order });
     } catch (error: any) {

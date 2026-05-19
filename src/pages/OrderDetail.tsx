@@ -631,7 +631,6 @@ export const OrderDetail: React.FC = () => {
     }
 
     try {
-      console.log('[RequestPicking] start', { orderId: id, activeWarehouse, currentWarehouseStatus: order.warehouseStatus });
       setRequestPickingLoading(true);
       const response = await fetch('/api/orders/update', {
         method: 'POST',
@@ -650,7 +649,6 @@ export const OrderDetail: React.FC = () => {
       });
 
       const data = await response.json();
-      console.log('[RequestPicking] response', { ok: response.ok, status: response.status, data });
       if (!response.ok) {
         throw new Error(data.error || `Failed to request picking (status ${response.status})`);
       }
@@ -674,7 +672,6 @@ export const OrderDetail: React.FC = () => {
       }
       fetchOrder();
       fetchLogs(id);
-      alert('Picking requested successfully.');
     } catch (err: any) {
       console.error('Error requesting picking:', err);
       alert(err.message || 'Failed to request picking');
