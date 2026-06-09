@@ -4,17 +4,21 @@ import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CN_API_ONLY } from '../constants';
+import { CounterPickup } from '../types';
 
 const NOTIFICATION_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 const ALERT_AUDIO_VOLUME = 1.0;
 
 export const usePickingNotifications = () => {
-  const { user, profile, activeWarehouse } = useAuth();
+  const { user, profile, activeWarehouse, token } = useAuth();
   const location = useLocation();
   const isCnRoute = location.pathname.startsWith('/cn');
+  const routePrefix = isCnRoute ? '/cn' : '';
   const [isInitialized, setIsInitialized] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const knownOrderIds = useRef(new Set<string>());
+  const counterInitializedRef = useRef(false);
+  const knownCounterPickupStates = useRef(new Map<string, string>());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const navigate = useNavigate();
@@ -92,8 +96,19 @@ export const usePickingNotifications = () => {
     });
   };
 
-  const triggerNotification = (orderData: any, orderId: string) => {
-    const storageKey = `notified_order_${orderId}`;
+  const triggerNotification = ({
+    storageKey,
+    tag,
+    title,
+    body,
+    onClick
+  }: {
+    storageKey: string;
+    tag: string;
+    title: string;
+    body: string;
+    onClick?: () => void;
+  }) => {
     const lastNotified = localStorage.getItem(storageKey);
     const now = Date.now();
 
@@ -122,16 +137,16 @@ export const usePickingNotifications = () => {
     }
 
     if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
-      const notification = new window.Notification('New Picking Task', {
-        body: `Order ${orderData.bookingNumber} is ready for picking.`,
+      const notification = new window.Notification(title, {
+        body,
         icon: '/pwa-192x192.png',
-        tag: orderId,
+        tag,
         requireInteraction: true
       });
 
       notification.onclick = () => {
         window.focus();
-        navigate(`/orders/${orderId}`);
+        onClick?.();
         notification.close();
       };
     }
@@ -165,7 +180,13 @@ export const usePickingNotifications = () => {
 
         if (change.type === 'added') {
           if (!knownOrderIds.current.has(orderId)) {
-            triggerNotification(orderData, orderId);
+            triggerNotification({
+              storageKey: `notified_order_${orderId}`,
+              tag: orderId,
+              title: 'New Picking Task',
+              body: `Order ${orderData.bookingNumber} is ready for picking.`,
+              onClick: () => navigate(`${routePrefix}/orders/${orderId}`)
+            });
             knownOrderIds.current.add(orderId);
           }
         } else if (change.type === 'removed') {
@@ -182,7 +203,95 @@ export const usePickingNotifications = () => {
     return () => {
       unsubscribe();
     };
-  }, [user?.uid, activeWarehouse, hasPickingPermission, isInitialized, isCnRoute]);
+  }, [user?.uid, activeWarehouse, hasPickingPermission, isInitialized, isCnRoute, navigate, routePrefix]);
+
+  useEffect(() => {
+    if (!user || !token || !activeWarehouse || !hasPickingPermission) {
+      counterInitializedRef.current = false;
+      knownCounterPickupStates.current.clear();
+      return;
+    }
+
+    let stopped = false;
+
+    const notifyCounterPickupChange = (pickup: CounterPickup, prevState?: string | null) => {
+      const nextState = `${pickup.status}:${pickup.queueStatus}`;
+      const isNewPending = !prevState && pickup.status === 'PendingPick' && pickup.queueStatus === 'Pending';
+      const becameReady = prevState !== nextState && pickup.status === 'Picked' && pickup.queueStatus === 'Picked';
+      const becamePutbackPending = prevState !== nextState && pickup.status === 'PendingPutback';
+
+      if (!isNewPending && !becameReady && !becamePutbackPending) {
+        return;
+      }
+
+      const title = isNewPending
+        ? 'Counter Pickup Priority'
+        : becameReady
+          ? 'Counter Pickup Ready'
+          : 'Counter Pickup Putback Pending';
+      const body = isNewPending
+        ? `${pickup.id} (${pickup.sku}) is waiting in picking queue.`
+        : becameReady
+          ? `${pickup.id} (${pickup.sku}) is ready at the counter.`
+          : `${pickup.id} (${pickup.sku}) is waiting for putback confirmation.`;
+
+      triggerNotification({
+        storageKey: `notified_counter_pickup_${pickup.id}_${nextState}`,
+        tag: `counter-pickup-${pickup.id}-${nextState}`,
+        title,
+        body,
+        onClick: () => navigate(`${routePrefix}/picking-queue`)
+      });
+    };
+
+    const loadCounterPickups = async () => {
+      try {
+        const response = await fetch('/api/counter-pickups/list?view=active&limit=200', {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse
+          }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to load counter pickups for notifications');
+        }
+        if (stopped) return;
+
+        const rows = ((data.requests || []) as CounterPickup[]).filter((item) =>
+          item.status === 'PendingPick' || item.status === 'Picked' || item.status === 'PendingPutback'
+        );
+        const nextStates = new Map<string, string>();
+
+        rows.forEach((pickup) => {
+          const nextState = `${pickup.status}:${pickup.queueStatus}`;
+          nextStates.set(pickup.id, nextState);
+
+          if (!counterInitializedRef.current) {
+            return;
+          }
+
+          const prevState = knownCounterPickupStates.current.get(pickup.id) || null;
+          if (prevState !== nextState) {
+            notifyCounterPickupChange(pickup, prevState);
+          }
+        });
+
+        knownCounterPickupStates.current = nextStates;
+        counterInitializedRef.current = true;
+      } catch (error) {
+        console.error('Counter pickup notification polling failed:', error);
+      }
+    };
+
+    loadCounterPickups();
+    const timer = window.setInterval(loadCounterPickups, 15000);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [user?.uid, token, activeWarehouse, hasPickingPermission, navigate, routePrefix]);
 
   return {
     audioEnabled,

@@ -2,14 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { usePickingNotifications } from '../hooks/usePickingNotifications';
 import { Bell, Volume2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CN_API_ONLY } from '../constants';
 import { useLocation } from 'react-router-dom';
 
 export const NotificationManager: React.FC = () => {
   const location = useLocation();
-  const isCnRoute = location.pathname.startsWith('/cn');
   const { audioEnabled, enableAudio, hasPickingPermission } = usePickingNotifications();
-  if (CN_API_ONLY || isCnRoute) return null;
   const [showBanner, setShowBanner] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<any>(
     typeof window !== 'undefined' && 'Notification' in window 
@@ -77,7 +74,7 @@ export const NotificationManager: React.FC = () => {
                   <p className="text-sm text-slate-500 leading-tight mt-1">
                     {isIOS && !isStandalone 
                       ? "For best results on iOS, tap 'Share' and 'Add to Home Screen'. Then enable alerts here."
-                      : "Get real-time notifications and sound alerts when new orders enter the picking queue."}
+                      : "Get real-time notifications and sound alerts when new picking tasks or counter pickup updates enter the queue."}
                   </p>
                 </div>
               </div>

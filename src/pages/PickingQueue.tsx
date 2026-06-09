@@ -20,7 +20,6 @@ import {
   Clock, 
   AlertTriangle,
   Play,
-  ArrowRight,
   Search,
   Filter,
   ArrowUpDown,
@@ -134,7 +133,9 @@ export const PickingQueue: React.FC = () => {
           throw new Error(data.error || 'Failed to load counter pickups');
         }
         if (stopped) return;
-        const activeQueueItems = ((data.requests || []) as CounterPickup[]).filter((item) => item.status === 'PendingPick');
+        const activeQueueItems = ((data.requests || []) as CounterPickup[]).filter((item) =>
+          item.status === 'PendingPick' || item.status === 'Picked' || item.status === 'PendingPutback'
+        );
         setCounterPickups(activeQueueItems);
       } catch (err) {
         console.error('Error loading counter pickups for queue:', err);
@@ -406,7 +407,9 @@ export const PickingQueue: React.FC = () => {
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to mark picked');
       }
-      setCounterPickups(prev => prev.filter((item) => item.id !== requestId));
+      setCounterPickups(prev => prev.map((item) =>
+        item.id === requestId ? { ...item, status: 'Picked', queueStatus: 'Picked' } : item
+      ));
     } catch (err: any) {
       alert(err.message || 'Failed to mark picked');
     } finally {
@@ -498,10 +501,19 @@ export const PickingQueue: React.FC = () => {
                         <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">Counter Pickup</span>
                         <span className={cn(
                           "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                          item.queueStatus === 'Pending' ? "bg-slate-100 text-slate-700" : "bg-indigo-100 text-indigo-700"
+                          item.queueStatus === 'Pending'
+                            ? "bg-slate-100 text-slate-700"
+                            : item.queueStatus === 'Picking'
+                              ? "bg-indigo-100 text-indigo-700"
+                              : "bg-emerald-100 text-emerald-700"
                         )}>
-                          {item.queueStatus}
+                          {item.queueStatus === 'Picked' ? 'Ready' : item.queueStatus}
                         </span>
+                        {item.status === 'PendingPutback' && (
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold uppercase">
+                            Putback Pending
+                          </span>
+                        )}
                         <span className="text-[10px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -538,18 +550,20 @@ export const PickingQueue: React.FC = () => {
                           )}
                         </button>
                       )}
-                      <button
-                        onClick={() => handleCounterMarkPicked(item.id)}
-                        disabled={updatingIds.includes(item.id)}
-                        className="flex items-center justify-center bg-emerald-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50"
-                        title="Mark Picked"
-                      >
-                        {updatingIds.includes(item.id) ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <ArrowRight className="w-6 h-6" />
-                        )}
-                      </button>
+                      {item.queueStatus === 'Picking' && (
+                        <button
+                          onClick={() => handleCounterMarkPicked(item.id)}
+                          disabled={updatingIds.includes(item.id)}
+                          className="flex items-center justify-center bg-emerald-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50"
+                          title="Complete Picking"
+                        >
+                          {updatingIds.includes(item.id) ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-6 h-6" />
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -641,7 +655,7 @@ export const PickingQueue: React.FC = () => {
                                 {task.orders.some(o => updatingIds.includes(`${o.id}-${task.sku}`)) ? (
                                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                 ) : (
-                                  <ArrowRight className="w-6 h-6" />
+                                  <CheckCircle2 className="w-6 h-6" />
                                 )}
                               </button>
                             )}
@@ -708,7 +722,7 @@ export const PickingQueue: React.FC = () => {
                                         {updatingIds.includes(`${order.id}-${task.sku}`) ? (
                                           <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                                         ) : (
-                                          <ArrowRight className="w-5 h-5" />
+                                          <CheckCircle2 className="w-5 h-5" />
                                         )}
                                       </button>
                                     )}
@@ -809,7 +823,7 @@ export const PickingQueue: React.FC = () => {
                             {updatingIds.includes(task.id) ? (
                               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <ArrowRight className="w-6 h-6" />
+                              <CheckCircle2 className="w-6 h-6" />
                             )}
                           </button>
                         )}
@@ -885,7 +899,7 @@ export const PickingQueue: React.FC = () => {
                                             {updatingIds.includes(`${task.id}-${item.sku}`) ? (
                                               <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                                             ) : (
-                                              <ArrowRight className="w-5 h-5" />
+                                              <CheckCircle2 className="w-5 h-5" />
                                             )}
                                           </button>
                                         </>

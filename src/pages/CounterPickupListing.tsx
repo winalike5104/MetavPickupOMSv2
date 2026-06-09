@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
   AlertTriangle,
   Archive,
+  Calendar,
   CheckCircle2,
   ClipboardList,
   Clock,
@@ -59,6 +60,7 @@ const CN_TEXT = {
   searchPlaceholder: '搜索申请号、SKU、产品名、库位、创建人...',
   statusFilter: '状态筛选',
   queueFilter: '队列筛选',
+  dateFilter: '日期筛选',
   loading: '正在加载申请提货数据...',
   empty: '当前视图下没有符合条件的申请提货记录。',
   counterPickup: '申请提货',
@@ -129,6 +131,7 @@ const EN_TEXT = {
   searchPlaceholder: 'Search request no., SKU, product, location, creator...',
   statusFilter: 'Status Filter',
   queueFilter: 'Queue Filter',
+  dateFilter: 'Date Filter',
   loading: 'Loading counter pickup requests...',
   empty: 'No counter pickup requests match the current view.',
   counterPickup: 'Counter Pickup',
@@ -203,6 +206,7 @@ export const CounterPickupListing: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('All');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(true);
 
@@ -241,7 +245,7 @@ export const CounterPickupListing: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, queueFilter, view]);
+  }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view]);
 
   const resetCreateForm = () => {
     setSkuQuery('');
@@ -477,9 +481,13 @@ export const CounterPickupListing: React.FC = () => {
       const matchesSearch = haystack.includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       const matchesQueue = queueFilter === 'All' || item.queueStatus === queueFilter;
-      return matchesSearch && matchesStatus && matchesQueue;
+      const itemDate = item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '';
+      const matchesDate =
+        (!dateRange.start || itemDate >= dateRange.start) &&
+        (!dateRange.end || itemDate <= dateRange.end);
+      return matchesSearch && matchesStatus && matchesQueue && matchesDate;
     });
-  }, [requests, searchTerm, statusFilter, queueFilter]);
+  }, [requests, searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
   const paginatedRequests = useMemo(() => {
@@ -644,7 +652,7 @@ export const CounterPickupListing: React.FC = () => {
 
           <section className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-              <div className="lg:col-span-6 relative">
+              <div className="lg:col-span-4 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
                   value={searchTerm}
@@ -681,6 +689,23 @@ export const CounterPickupListing: React.FC = () => {
                 </select>
               </div>
 
+              <div className="lg:col-span-2 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                <Calendar className="w-5 h-5 text-slate-400" />
+                <input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))}
+                  className="bg-transparent outline-none text-xs flex-1 min-w-0"
+                />
+                <span className="text-slate-400">-</span>
+                <input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))}
+                  className="bg-transparent outline-none text-xs flex-1 min-w-0"
+                />
+              </div>
+
               <div className="lg:col-span-2 flex items-center justify-start lg:justify-end">
                 <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                   <button
@@ -712,76 +737,85 @@ export const CounterPickupListing: React.FC = () => {
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+              <div className="overflow-x-auto md:overflow-x-visible">
+                <table className="w-full table-fixed text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase">
                     <tr>
-                      <th className="px-6 py-4">{text.requestNo}</th>
-                      <th className="px-6 py-4">SKU</th>
-                      <th className="px-6 py-4">{text.productName}</th>
-                      <th className="px-6 py-4">{text.location}</th>
-                      <th className="px-6 py-4 text-right">{text.qty}</th>
-                      <th className="px-6 py-4">{text.warehouse}</th>
-                      <th className="px-6 py-4">{text.createdBy}</th>
-                      <th className="px-6 py-4">{text.createdAt}</th>
-                      <th className="px-6 py-4">{text.statusFilter}</th>
-                      <th className="px-6 py-4">{text.queueFilter}</th>
-                      <th className="px-6 py-4">{text.destination}</th>
-                      <th className="px-6 py-4 text-right">{text.actions}</th>
+                      <th className="px-3 py-3 w-[13%]">{text.requestNo}</th>
+                      <th className="px-3 py-3 w-[9%]">SKU</th>
+                      <th className="px-3 py-3 w-[18%]">{text.productName}</th>
+                      <th className="px-3 py-3 w-[7%]">{text.location}</th>
+                      <th className="px-3 py-3 w-[5%] text-right">{text.qty}</th>
+                      <th className="px-3 py-3 w-[12%]">{text.warehouse} / {text.createdBy}</th>
+                      <th className="px-3 py-3 w-[9%]">{text.createdAt}</th>
+                      <th className="px-3 py-3 w-[8%]">{text.statusFilter}</th>
+                      <th className="px-3 py-3 w-[7%]">{text.queueFilter}</th>
+                      <th className="px-3 py-3 w-[8%]">{text.referenceNo}</th>
+                      <th className="px-3 py-3 w-[7%]">{text.destination}</th>
+                      <th className="px-3 py-3 w-[13%] text-right">{text.actions}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {paginatedRequests.map((item) => (
                       <tr key={item.id} className={cn('hover:bg-slate-50 transition-colors', item.status === 'Picked' && 'bg-red-50/40', item.status === 'PendingPutback' && 'bg-amber-50/40')}>
-                        <td className="px-6 py-4 font-bold text-slate-900">
-                          <div className="flex items-center gap-2">
-                            <span>{item.id}</span>
-                            <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
+                        <td className="px-3 py-3 font-bold text-slate-900 align-top">
+                          <div className="space-y-1">
+                            <span className="block truncate">{item.id}</span>
+                            <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-semibold text-slate-700">{item.sku}</td>
-                        <td className="px-6 py-4 text-slate-700">
+                        <td className="px-3 py-3 font-semibold text-slate-700 align-top break-all text-sm">{item.sku}</td>
+                        <td className="px-3 py-3 text-slate-700 align-top">
                           <div className="space-y-1">
-                            <p className="font-medium">{item.productName}</p>
+                            <p className="font-medium text-sm truncate" title={item.productName}>{item.productName}</p>
                             {item.status === 'Picked' && (
-                              <div className="flex items-center gap-1 text-xs text-red-600 font-semibold">
-                                <AlertTriangle className="w-3.5 h-3.5" />
+                              <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
+                                <AlertTriangle className="w-3 h-3" />
                                 {text.pickedAlert}
                               </div>
                             )}
                             {item.status === 'PendingPutback' && (
-                              <div className="flex items-center gap-1 text-xs text-amber-700 font-semibold">
-                                <RotateCcw className="w-3.5 h-3.5" />
+                              <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
+                                <RotateCcw className="w-3 h-3" />
                                 {text.putbackAlert}
                               </div>
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-slate-500">{item.location}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-slate-900">{item.qty}</td>
-                        <td className="px-6 py-4 text-slate-500">{item.warehouseId || text.noWarehouse}</td>
-                        <td className="px-6 py-4 text-slate-500">{item.createdBy}</td>
-                        <td className="px-6 py-4 text-slate-500">{formatDate(item.createdAt, 'yyyy-MM-dd HH:mm')}</td>
-                        <td className="px-6 py-4">
-                          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold', getStatusBadgeClass(item.status))}>
+                        <td className="px-3 py-3 text-slate-500 align-top text-sm break-all">{item.location}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{item.qty}</td>
+                        <td className="px-3 py-3 text-slate-500 align-top">
+                          <div className="space-y-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-700 truncate" title={item.warehouseId || text.noWarehouse}>
+                              {item.warehouseId || text.noWarehouse}
+                            </p>
+                            <p className="text-[11px] truncate" title={item.createdBy}>
+                              {item.createdBy}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-slate-500 align-top text-sm whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd HH:mm')}</td>
+                        <td className="px-3 py-3 align-top">
+                          <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
                             {statusLabel(item.status)}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold', getQueueBadgeClass(item.queueStatus))}>
+                        <td className="px-3 py-3 align-top">
+                          <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus))}>
                             {queueLabel(item.queueStatus)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-slate-500">{item.destination || '-'}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-end gap-2 flex-wrap">
+                        <td className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.referenceNo || '-'}</td>
+                        <td className="px-3 py-3 text-slate-500 align-top text-sm">{item.destination || '-'}</td>
+                        <td className="px-3 py-3 align-top">
+                          <div className="flex justify-end gap-1.5 flex-wrap">
                             {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus === 'Pending' && (
                               <button
                                 onClick={() => handleStartPicking(item.id)}
                                 disabled={submitting}
-                                className="inline-flex items-center gap-1 px-3 py-2 bg-sky-600 text-white rounded-lg text-xs font-semibold hover:bg-sky-700 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 text-white rounded-lg text-[11px] font-semibold hover:bg-sky-700 disabled:opacity-50"
                               >
-                                <ShoppingBag className="w-3.5 h-3.5" />
+                                <ShoppingBag className="w-3 h-3" />
                                 {text.startPicking}
                               </button>
                             )}
@@ -789,9 +823,9 @@ export const CounterPickupListing: React.FC = () => {
                               <button
                                 onClick={() => handleMarkPicked(item.id)}
                                 disabled={submitting}
-                                className="inline-flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-[11px] font-semibold hover:bg-emerald-700 disabled:opacity-50"
                               >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <CheckCircle2 className="w-3 h-3" />
                                 {text.markPicked}
                               </button>
                             )}
@@ -802,9 +836,9 @@ export const CounterPickupListing: React.FC = () => {
                                   setFinalizeForm(emptyFinalizeForm);
                                 }}
                                 disabled={submitting}
-                                className="inline-flex items-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50"
                               >
-                                <Send className="w-3.5 h-3.5" />
+                                <Send className="w-3 h-3" />
                                 {text.finalize}
                               </button>
                             )}
@@ -812,9 +846,9 @@ export const CounterPickupListing: React.FC = () => {
                               <button
                                 onClick={() => handleCompletePutback(item.id)}
                                 disabled={submitting}
-                                className="inline-flex items-center gap-1 px-3 py-2 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 text-white rounded-lg text-[11px] font-semibold hover:bg-amber-700 disabled:opacity-50"
                               >
-                                <Archive className="w-3.5 h-3.5" />
+                                <Archive className="w-3 h-3" />
                                 {text.completePutback}
                               </button>
                             )}
@@ -883,7 +917,7 @@ export const CounterPickupListing: React.FC = () => {
                   <label className="text-sm font-medium text-slate-700">{text.referenceNo}</label>
                   <input
                     value={finalizeForm.referenceNo}
-                    onChange={(e) => setFinalizeForm((prev) => ({ ...prev, referenceNo: e.target.value }))}
+                    onChange={(e) => setFinalizeForm((prev) => ({ ...prev, referenceNo: e.target.value.toUpperCase() }))}
                     className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
