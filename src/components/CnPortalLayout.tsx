@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ClipboardList, Clock, Users, Mail, LogOut, Warehouse, Home } from 'lucide-react';
+import { ClipboardList, Clock, LogOut, Mail, Users, Warehouse, Home } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { APP_VERSION } from '../constants';
 import { hasPermission, isAdmin } from '../utils';
@@ -18,6 +18,7 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
   const navItems = [
     { name: '门户首页', path: '/cn', icon: Home, visible: true },
     { name: '订单列表', path: '/cn/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) },
+    { name: '申请提货', path: '/cn/counter-pickups', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) || hasPermission(profile, 'View Picking Queue', profile?.email) },
     { name: '超期订单', path: '/cn/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', profile?.email) || hasPermission(profile, 'View Orders', profile?.email) },
     { name: '账号管理', path: '/cn/users', icon: Users, visible: isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage Users', profile?.email) },
     { name: '邮件中心', path: '/cn/orders', icon: Mail, visible: hasPermission(profile, 'View Orders', profile?.email) }
@@ -51,7 +52,7 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
       <div className="flex flex-1 w-full overflow-hidden">
         <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 flex-shrink-0">
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            {navItems.filter(i => i.visible).map((item) => {
+            {navItems.filter((item) => item.visible).map((item) => {
               const isActive = location.pathname === item.path;
               return (
                 <Link
@@ -76,4 +77,3 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
     </div>
   );
 };
-

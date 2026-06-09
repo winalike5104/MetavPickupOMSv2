@@ -18,6 +18,15 @@ interface OrderReportData {
   Last_Updated: string;
 }
 
+interface CounterPickupExpiredSummary {
+  id: string;
+  sku: string;
+  qty: number;
+  warehouseId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export async function generateAndSendDailyReport(db: admin.firestore.Firestore) {
   console.log("[ReportService] Starting daily report generation...");
   
@@ -52,6 +61,17 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
       .get();
 
     const overdueOrders = overdueSnap.docs;
+    const expiredCounterSnap = await db.collection("counter_pickups")
+      .where("expiredBySystem", "==", true)
+      .get();
+    const expiredCounterPickups = expiredCounterSnap.docs.map((doc) => ({
+      id: doc.id,
+      sku: doc.data().sku || "N/A",
+      qty: doc.data().qty || 0,
+      warehouseId: doc.data().warehouseId || "N/A",
+      createdAt: doc.data().createdAt || "",
+      updatedAt: doc.data().updatedAt || ""
+    })).filter((item) => item.updatedAt >= todayStart) as CounterPickupExpiredSummary[];
 
     // Fetch Report Configuration from Firestore
     const configDoc = await db.collection("settings").doc("report_config").get();
@@ -119,6 +139,20 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
       });
     });
 
+    expiredCounterPickups.forEach((item) => {
+      reportData.push({
+        Report_Type: "COUNTER_PICKUP_EXPIRED",
+        Order_ID: item.id,
+        Customer_Name: "N/A",
+        Warehouse_ID: item.warehouseId,
+        Current_Status: "Finalized (System Expired)",
+        Payment_Status: "N/A",
+        Items_Summary: `[${item.sku}] x ${item.qty}`,
+        Created_At: item.createdAt,
+        Last_Updated: item.updatedAt
+      });
+    });
+
     // Generate CSV
     let csv = "";
     if (reportData.length > 0) {
@@ -130,7 +164,8 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
     const stats = {
       newPU: newOrdersSnap.size,
       confirmed: confirmedPickups.length,
-      overdue: overdueOrders.length
+      overdue: overdueOrders.length,
+      expiredCounterPickups: expiredCounterPickups.length
     };
 
     const toEmails = (config.toEmails || "").split(",").map((e: string) => e.trim()).filter((e: string) => e);
@@ -143,6 +178,22 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
 
     const senderName = config.senderName || "Acapickup WMS";
     const reportDateStr = now.toFormat("LLLL dd, yyyy");
+    const expiredCounterHtml = expiredCounterPickups.length > 0
+      ? `
+    <div style="margin-top: 20px; padding: 15px; background-color: #fff5f5; border-left: 4px solid #e74c3c; font-size: 13px; color: #7f1d1d;">
+      <strong>Counter Pickup Auto-Expired Summary:</strong><br>
+      ${expiredCounterPickups.slice(0, 10).map((item) => {
+        return `• ${item.id} | SKU ${item.sku} | Qty ${item.qty} | WH ${item.warehouseId} | Created ${item.createdAt}`;
+      }).join("<br>")}
+      ${expiredCounterPickups.length > 10 ? `<br>• Plus ${expiredCounterPickups.length - 10} more auto-expired counter pickups.` : ""}
+    </div>
+      `
+      : `
+    <div style="margin-top: 20px; padding: 15px; background-color: #f0fdf4; border-left: 4px solid #22c55e; font-size: 13px; color: #166534;">
+      <strong>Counter Pickup Auto-Expired Summary:</strong><br>
+      No counter pickup requests were auto-expired today.
+    </div>
+      `;
 
     // Send Email
     const { data, error } = await resend.emails.send({
@@ -184,6 +235,10 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
           <td style="padding: 12px; border: 1px solid #eeeeee; color: #e74c3c;">14-Day Overdue Orders (Attention Required)</td>
           <td style="padding: 12px; border: 1px solid #eeeeee; text-align: center; font-weight: bold; font-size: 16px; color: #e74c3c;">${stats.overdue}</td>
         </tr>
+        <tr style="background-color: #fff7ed;">
+          <td style="padding: 12px; border: 1px solid #eeeeee; color: #c2410c;">Counter Pickup Auto-Expired Today</td>
+          <td style="padding: 12px; border: 1px solid #eeeeee; text-align: center; font-weight: bold; font-size: 16px; color: #c2410c;">${stats.expiredCounterPickups}</td>
+        </tr>
       </tbody>
     </table>
 
@@ -191,6 +246,7 @@ export async function generateAndSendDailyReport(db: admin.firestore.Firestore) 
       <strong>Data Backup Info:</strong><br>
       A detailed list of all relevant orders is attached as a <strong>CSV file</strong>. This includes Order IDs, Customer Names, and Status timestamps for your records and system backup.
     </div>
+    ${expiredCounterHtml}
   </div>
 
   <div style="background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #e0e0e0;">

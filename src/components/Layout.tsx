@@ -54,6 +54,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       items: [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: hasPermission(profile, 'View Orders', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
         { name: 'Order List', path: '/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
+        { name: 'Counter Pickup', path: '/counter-pickups', icon: AlertCircle, visible: (hasPermission(profile, 'View Orders', profile?.email) && profile?.roleTemplate !== 'Warehouse') || hasPermission(profile, 'View Picking Queue', profile?.email) },
         { name: 'Overdue Audit', path: '/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
         { name: 'SKU Database', path: '/skus', icon: Database, visible: hasPermission(profile, 'View SKU', profile?.email) && profile?.roleTemplate !== 'Warehouse' },
       ]
@@ -63,6 +64,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       icon: ShoppingCart,
       items: [
         { name: 'Picking Queue', path: '/picking-queue', icon: ShoppingCart, visible: hasPermission(profile, 'View Picking Queue', profile?.email) },
+        { name: 'Putback Tasks', path: '/putback-tasks', icon: AlertCircle, visible: hasPermission(profile, 'View Picking Queue', profile?.email) || hasPermission(profile, 'Manage Picking', profile?.email) },
       ]
     },
     {

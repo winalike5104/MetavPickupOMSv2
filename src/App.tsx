@@ -20,6 +20,8 @@ import { WarehouseSelection } from './pages/WarehouseSelection';
 import { GuestDisplay } from './pages/GuestDisplay';
 import { PickingQueue } from './pages/PickingQueue';
 import { OverdueOrders } from './pages/OverdueOrders';
+import { CounterPickupListing } from './pages/CounterPickupListing';
+import { PutbackTasks } from './pages/PutbackTasks';
 import { TaskProvider } from './components/TaskProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationManager } from './components/NotificationManager';
@@ -155,6 +157,8 @@ export default function App() {
               <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
               <Route path="/overdue" element={<ProtectedRoute><OverdueOrders /></ProtectedRoute>} />
               <Route path="/picking-queue" element={<ProtectedRoute><PickingQueue /></ProtectedRoute>} />
+              <Route path="/counter-pickups" element={<ProtectedRoute><CounterPickupListing /></ProtectedRoute>} />
+              <Route path="/putback-tasks" element={<ProtectedRoute><PutbackTasks /></ProtectedRoute>} />
               <Route path="/skus" element={<ProtectedRoute><SKUDatabase /></ProtectedRoute>} />
               <Route path="/skus/logs" element={<ProtectedRoute><SKULogs /></ProtectedRoute>} />
               <Route path="/history" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
@@ -170,6 +174,7 @@ export default function App() {
               <Route path="/cn/orders/bulk-import" element={<ProtectedCnRoute><BulkOrderUpload /></ProtectedCnRoute>} />
               <Route path="/cn/orders/:id" element={<ProtectedCnRoute><OrderDetail /></ProtectedCnRoute>} />
               <Route path="/cn/overdue" element={<ProtectedCnRoute><OverdueOrders /></ProtectedCnRoute>} />
+              <Route path="/cn/counter-pickups" element={<ProtectedCnRoute><CounterPickupListing /></ProtectedCnRoute>} />
               <Route path="/cn/users" element={<ProtectedCnRoute><UserManagement /></ProtectedCnRoute>} />
               <Route path="*" element={<Navigate to={CN_API_ONLY ? "/cn" : "/"} />} />
             </Routes>

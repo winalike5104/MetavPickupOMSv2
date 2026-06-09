@@ -14,6 +14,7 @@ import { authenticate, loginUser } from './src/lib/auth';
 import { SUPER_ADMINS, isSuperAdmin } from './src/lib/auth-shared';
 import cron from "node-cron";
 import { generateAndSendDailyReport } from "./src/services/reportService";
+import { DateTime } from "luxon";
 
 // Helper to write to debug log
 const writeDebugLog = (message: string) => {
@@ -122,6 +123,131 @@ const logAction = async (user: any, action: string, details: string, orderId?: s
   }
 };
 
+const AUCKLAND_TIMEZONE = "Pacific/Auckland";
+
+const nowAucklandIso = () => DateTime.now().setZone(AUCKLAND_TIMEZONE).toISO();
+
+const isFrontDeskRole = (user: any) => {
+  const role = user?.roleTemplate || user?.role || "";
+  return ["Sales", "Reception", "Admin"].includes(role);
+};
+
+const isWarehouseRole = (user: any) => {
+  const role = user?.roleTemplate || user?.role || "";
+  return role === "Warehouse" || role === "Admin";
+};
+
+const writeCounterPickupLog = async (
+  currentDb: admin.firestore.Firestore,
+  counterPickupId: string,
+  operator: string,
+  action: string,
+  detail: string,
+  user?: any
+) => {
+  const timestamp = nowAucklandIso();
+  await currentDb.collection("counter_pickups").doc(counterPickupId).collection("logs").add({
+    timestamp,
+    operator,
+    action,
+    detail
+  });
+  await currentDb.collection("logs").add({
+    timestamp,
+    userId: user?.uid || "system",
+    userName: operator,
+    action,
+    details: detail,
+    orderId: counterPickupId,
+    category: "Counter Pickup"
+  });
+};
+
+const buildCounterPickupDetail = (pickup: any) => {
+  return {
+    id: pickup.id,
+    sku: pickup.sku,
+    productName: pickup.productName,
+    location: pickup.location,
+    qty: pickup.qty,
+    status: pickup.status,
+    queueStatus: pickup.queueStatus,
+    destination: pickup.destination || null,
+    referenceNo: pickup.referenceNo || null,
+    otherNotes: pickup.otherNotes || null,
+    warehouseId: pickup.warehouseId || null,
+    createdBy: pickup.createdBy,
+    createdByUid: pickup.createdByUid || null,
+    pickedBy: pickup.pickedBy || null,
+    pickedAt: pickup.pickedAt || null,
+    finalizedBy: pickup.finalizedBy || null,
+    finalizedAt: pickup.finalizedAt || null,
+    expiredBySystem: !!pickup.expiredBySystem,
+    expiredReason: pickup.expiredReason || null,
+    completedAt: pickup.completedAt || null,
+    completedBy: pickup.completedBy || null,
+    createdAt: pickup.createdAt,
+    updatedAt: pickup.updatedAt
+  };
+};
+
+const getNextCounterPickupId = async (currentDb: admin.firestore.Firestore) => {
+  const today = DateTime.now().setZone(AUCKLAND_TIMEZONE).toFormat("yyyyMMdd");
+  const counterRef = currentDb.collection("system_counters").doc(`counter_pickups_${today}`);
+  const sequence = await currentDb.runTransaction(async (tx) => {
+    const snap = await tx.get(counterRef);
+    const current = snap.exists ? Number(snap.data()?.seq || 0) : 0;
+    const next = current + 1;
+    tx.set(counterRef, {
+      seq: next,
+      updatedAt: nowAucklandIso()
+    }, { merge: true });
+    return next;
+  });
+  return `CP-${today}-${String(sequence).padStart(3, "0")}`;
+};
+
+const expireStaleCounterPickups = async (currentDb: admin.firestore.Firestore) => {
+  const now = DateTime.now().setZone(AUCKLAND_TIMEZONE);
+  const expiredBeforeMs = now.minus({ hours: 12 }).toMillis();
+  const snap = await currentDb.collection("counter_pickups")
+    .where("status", "in", ["PendingPick", "Picked"])
+    .get();
+
+  const expiredSummaries: any[] = [];
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data() as any;
+    const createdMs = data?.createdAt ? DateTime.fromISO(data.createdAt, { zone: AUCKLAND_TIMEZONE }).toMillis() : 0;
+    if (!createdMs || createdMs > expiredBeforeMs) continue;
+
+    const detail = `System expired counter pickup ${data.id} after 12+ hours without closure.`;
+    await docSnap.ref.set({
+      status: "Finalized",
+      queueStatus: "Picked",
+      destination: data.destination || "Other",
+      otherNotes: data.otherNotes || "System expired after 12 hours without completion.",
+      expiredBySystem: true,
+      expiredReason: "System expired after 12 hours without completion.",
+      finalizedAt: nowAucklandIso(),
+      finalizedBy: "System",
+      completedAt: nowAucklandIso(),
+      completedBy: "System",
+      updatedAt: nowAucklandIso()
+    }, { merge: true });
+
+    await writeCounterPickupLog(currentDb, docSnap.id, "System", "CP_SYSTEM_EXPIRED", detail);
+    expiredSummaries.push({
+      id: data.id || docSnap.id,
+      sku: data.sku || "N/A",
+      qty: data.qty || 0,
+      warehouseId: data.warehouseId || "N/A",
+      createdAt: data.createdAt || null
+    });
+  }
+
+  return expiredSummaries;
+};
+
 const toListOrder = (o: any) => {
   // Avoid large payload fields (e.g. base64 signatures) in list endpoint.
   const {
@@ -195,6 +321,8 @@ async function startServer() {
     try {
       const currentDb = await initDb();
       if (currentDb) {
+        const expiredCounterPickups = await expireStaleCounterPickups(currentDb);
+        console.log(`[Cron] Auto-expired counter pickups: ${expiredCounterPickups.length}`);
         await generateAndSendDailyReport(currentDb);
         console.log("[Cron] Daily report completed successfully.");
       }
@@ -269,6 +397,7 @@ async function startServer() {
       const currentDb = await initDb();
       if (!currentDb) throw new Error("Database not initialized");
       
+      await expireStaleCounterPickups(currentDb);
       const result = await generateAndSendDailyReport(currentDb);
       res.json(result);
     } catch (error: any) {
@@ -531,6 +660,324 @@ async function startServer() {
       return res.json({ success: true, skus });
     } catch (error: any) {
       console.error("SKU Search Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/counter-pickups/list", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      const view = (req.query.view as string) === "history" ? "history" : "active";
+      const requestedWh = (req.headers["x-warehouse-id"] as string) || "";
+      const limitValue = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+      const isSuper = SUPER_ADMINS.includes((req.user.username || "").toLowerCase());
+      const allowedWarehouses: string[] = req.user.allowedWarehouses || [];
+
+      let warehouseIds: string[] = [];
+      if (requestedWh) {
+        warehouseIds = [requestedWh];
+      } else if (isSuper || allowedWarehouses.includes("*")) {
+        const allSnap = await currentDb.collection("counter_pickups").limit(limitValue).get();
+        let allRows = allSnap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
+        allRows = allRows.filter((row: any) => view === "history" ? row.status === "Finalized" : row.status !== "Finalized");
+        allRows.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+        return res.json({ success: true, requests: allRows.slice(0, limitValue) });
+      } else {
+        warehouseIds = allowedWarehouses.filter(Boolean).slice(0, 10);
+      }
+
+      if (!isSuper && !allowedWarehouses.includes("*") && warehouseIds.some((wh) => !allowedWarehouses.includes(wh))) {
+        return res.status(403).json({ success: false, error: "Forbidden: You do not have access to this warehouse" });
+      }
+
+      let rows: any[] = [];
+      if (warehouseIds.length === 1) {
+        const snap = await currentDb.collection("counter_pickups").where("warehouseId", "==", warehouseIds[0]).limit(limitValue).get();
+        rows = snap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
+      } else if (warehouseIds.length > 1) {
+        const snap = await currentDb.collection("counter_pickups").where("warehouseId", "in", warehouseIds).limit(limitValue).get();
+        rows = snap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
+      }
+
+      rows = rows.filter((row: any) => view === "history" ? row.status === "Finalized" : row.status !== "Finalized");
+      rows.sort((a: any, b: any) => {
+        const sortA = view === "history" ? a.updatedAt : a.createdAt;
+        const sortB = view === "history" ? b.updatedAt : b.createdAt;
+        return new Date(sortB).getTime() - new Date(sortA).getTime();
+      });
+      return res.json({ success: true, requests: rows.slice(0, limitValue) });
+    } catch (error: any) {
+      console.error("Counter Pickup List Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/counter-pickups/create", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      if (!isFrontDeskRole(req.user)) {
+        return res.status(403).json({ success: false, error: "Forbidden: Front desk access required" });
+      }
+
+      const rawSku = String(req.body?.sku || "").trim().toUpperCase();
+      const qty = Number(req.body?.qty || 0);
+      const requestedWh = (req.headers["x-warehouse-id"] as string) || "";
+      const warehouseId = requestedWh || (req.user.allowedWarehouses || [])[0] || "";
+
+      if (!rawSku) return res.status(400).json({ success: false, error: "SKU is required" });
+      if (!warehouseId) return res.status(400).json({ success: false, error: "Warehouse is required" });
+      if (!Number.isInteger(qty) || qty <= 0) return res.status(400).json({ success: false, error: "Quantity must be a positive integer" });
+
+      const skuSnap = await currentDb.collection("skus").where("sku", "==", rawSku).limit(1).get();
+      if (skuSnap.empty) {
+        return res.status(404).json({ success: false, error: "SKU not found" });
+      }
+
+      const skuData = skuSnap.docs[0].data() as any;
+      const counterPickupId = await getNextCounterPickupId(currentDb);
+      const timestamp = nowAucklandIso();
+      const payload = {
+        id: counterPickupId,
+        sku: rawSku,
+        productName: skuData.productName || rawSku,
+        location: skuData.location || "NOT_ASSIGNED",
+        qty,
+        warehouseId,
+        status: "PendingPick",
+        queueStatus: "Pending",
+        destination: null,
+        referenceNo: null,
+        otherNotes: null,
+        createdBy: req.user.name || req.user.username,
+        createdByUid: req.user.uid,
+        pickedBy: null,
+        pickedAt: null,
+        finalizedBy: null,
+        finalizedAt: null,
+        expiredBySystem: false,
+        expiredReason: null,
+        completedAt: null,
+        completedBy: null,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+
+      await currentDb.collection("counter_pickups").doc(counterPickupId).set(payload);
+      await writeCounterPickupLog(
+        currentDb,
+        counterPickupId,
+        req.user.name || req.user.username,
+        "CP_CREATED",
+        `Counter pickup created for SKU ${rawSku}, qty ${qty}, warehouse ${warehouseId}.`,
+        req.user
+      );
+
+      return res.json({ success: true, request: payload });
+    } catch (error: any) {
+      console.error("Counter Pickup Create Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/counter-pickups/:id/start-picking", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      if (!isWarehouseRole(req.user) && !hasPermission(req.user, "Manage Picking")) {
+        return res.status(403).json({ success: false, error: "Forbidden: Warehouse access required" });
+      }
+
+      const docRef = currentDb.collection("counter_pickups").doc(req.params.id);
+      const snap = await docRef.get();
+      if (!snap.exists) return res.status(404).json({ success: false, error: "Counter pickup not found" });
+
+      const data = snap.data() as any;
+      if (data.status !== "PendingPick" || data.queueStatus !== "Pending") {
+        return res.status(409).json({ success: false, error: "Counter pickup is not in Pending queue state" });
+      }
+
+      const timestamp = nowAucklandIso();
+      await docRef.set({
+        queueStatus: "Picking",
+        pickedBy: req.user.name || req.user.username,
+        updatedAt: timestamp
+      }, { merge: true });
+
+      await writeCounterPickupLog(
+        currentDb,
+        req.params.id,
+        req.user.name || req.user.username,
+        "CP_PICKING_STARTED",
+        `Warehouse started picking counter pickup ${req.params.id}.`,
+        req.user
+      );
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Counter Pickup Start Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/counter-pickups/:id/mark-picked", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      if (!isWarehouseRole(req.user) && !hasPermission(req.user, "Manage Picking")) {
+        return res.status(403).json({ success: false, error: "Forbidden: Warehouse access required" });
+      }
+
+      const docRef = currentDb.collection("counter_pickups").doc(req.params.id);
+      const snap = await docRef.get();
+      if (!snap.exists) return res.status(404).json({ success: false, error: "Counter pickup not found" });
+
+      const data = snap.data() as any;
+      if (data.status !== "PendingPick") {
+        return res.status(409).json({ success: false, error: "Only PendingPick requests can be marked as picked" });
+      }
+
+      const timestamp = nowAucklandIso();
+      await docRef.set({
+        status: "Picked",
+        queueStatus: "Picked",
+        pickedAt: timestamp,
+        pickedBy: req.user.name || req.user.username,
+        updatedAt: timestamp
+      }, { merge: true });
+
+      await writeCounterPickupLog(
+        currentDb,
+        req.params.id,
+        req.user.name || req.user.username,
+        "CP_PICKED",
+        `Warehouse delivered SKU ${data.sku} to front desk.`,
+        req.user
+      );
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Counter Pickup Mark Picked Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/counter-pickups/:id/finalize", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      if (!isFrontDeskRole(req.user)) {
+        return res.status(403).json({ success: false, error: "Forbidden: Front desk access required" });
+      }
+
+      const destination = String(req.body?.destination || "").trim() as any;
+      const referenceNo = String(req.body?.referenceNo || "").trim();
+      const otherNotes = String(req.body?.otherNotes || "").trim();
+      const docRef = currentDb.collection("counter_pickups").doc(req.params.id);
+      const snap = await docRef.get();
+      if (!snap.exists) return res.status(404).json({ success: false, error: "Counter pickup not found" });
+
+      const data = snap.data() as any;
+      if (data.status !== "Picked") {
+        return res.status(409).json({ success: false, error: "Only Picked requests can be finalized by front desk" });
+      }
+
+      const timestamp = nowAucklandIso();
+      const updatePayload: any = {
+        destination,
+        updatedAt: timestamp
+      };
+      let action = "";
+      let detail = "";
+
+      if (destination === "Returned") {
+        updatePayload.status = "PendingPutback";
+        action = "CP_RETURN_INIT";
+        detail = `Front desk requested putback for SKU ${data.sku}, qty ${data.qty}.`;
+      } else if (destination === "Sold") {
+        if (!referenceNo) {
+          return res.status(400).json({ success: false, error: "Reference number is required when destination is Sold" });
+        }
+        updatePayload.status = "Finalized";
+        updatePayload.referenceNo = referenceNo;
+        updatePayload.finalizedAt = timestamp;
+        updatePayload.finalizedBy = req.user.name || req.user.username;
+        updatePayload.completedAt = timestamp;
+        updatePayload.completedBy = req.user.name || req.user.username;
+        action = "CP_FINALIZE_SOLD";
+        detail = `Front desk finalized counter pickup as Sold. Reference: ${referenceNo}.`;
+      } else if (destination === "Other") {
+        if (otherNotes.length < 5) {
+          return res.status(400).json({ success: false, error: "Other notes must be at least 5 characters" });
+        }
+        updatePayload.status = "Finalized";
+        updatePayload.otherNotes = otherNotes;
+        updatePayload.finalizedAt = timestamp;
+        updatePayload.finalizedBy = req.user.name || req.user.username;
+        updatePayload.completedAt = timestamp;
+        updatePayload.completedBy = req.user.name || req.user.username;
+        action = "CP_FINALIZE_OTHER";
+        detail = `Front desk finalized counter pickup as Other. Notes: ${otherNotes}.`;
+      } else {
+        return res.status(400).json({ success: false, error: "Invalid destination" });
+      }
+
+      await docRef.set(updatePayload, { merge: true });
+      await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, action, detail, req.user);
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Counter Pickup Finalize Error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/counter-pickups/:id/complete-putback", authenticate, async (req: any, res) => {
+    const currentDb = await initDb();
+    if (!currentDb) return res.status(503).json({ success: false, error: "Database not initialized" });
+
+    try {
+      if (!isWarehouseRole(req.user) && !hasPermission(req.user, "Manage Picking")) {
+        return res.status(403).json({ success: false, error: "Forbidden: Warehouse access required" });
+      }
+
+      const docRef = currentDb.collection("counter_pickups").doc(req.params.id);
+      const snap = await docRef.get();
+      if (!snap.exists) return res.status(404).json({ success: false, error: "Counter pickup not found" });
+
+      const data = snap.data() as any;
+      if (data.status !== "PendingPutback") {
+        return res.status(409).json({ success: false, error: "Only PendingPutback requests can be completed" });
+      }
+
+      const timestamp = nowAucklandIso();
+      await docRef.set({
+        status: "Finalized",
+        finalizedAt: timestamp,
+        finalizedBy: req.user.name || req.user.username,
+        completedAt: timestamp,
+        completedBy: req.user.name || req.user.username,
+        updatedAt: timestamp
+      }, { merge: true });
+
+      await writeCounterPickupLog(
+        currentDb,
+        req.params.id,
+        req.user.name || req.user.username,
+        "CP_PUTBACK_COMPLETED",
+        `Warehouse completed putback for SKU ${data.sku}, qty ${data.qty}, location ${data.location}.`,
+        req.user
+      );
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Counter Pickup Putback Error:", error);
       return res.status(500).json({ success: false, error: error.message });
     }
   });

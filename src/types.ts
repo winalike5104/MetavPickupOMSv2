@@ -4,6 +4,9 @@ export type PickupExceptionStatus = 'PartialPendingSales' | 'PendingFinalize';
 export type PaymentStatus = 'Paid' | 'Unpaid';
 export type PaymentMethod = 'Cash' | 'EFTPOS' | 'Bank Transfer' | 'Online Payment';
 export type UserStatus = 'Active' | 'Disabled';
+export type CounterPickupStatus = 'PendingPick' | 'Picked' | 'PendingPutback' | 'Finalized';
+export type CounterPickupQueueStatus = 'Pending' | 'Picking' | 'Picked';
+export type CounterPickupDestination = 'Returned' | 'Sold' | 'Other';
 
 export interface SKU {
   id?: string;
@@ -194,9 +197,43 @@ export interface OperationLog {
   userId: string;
   userName: string;
   action: string;
-  category?: 'Audit' | 'Picking' | 'System' | 'Order' | 'User' | 'SKU' | 'Store' | 'Payment';
+  category?: 'Audit' | 'Picking' | 'System' | 'Order' | 'User' | 'SKU' | 'Store' | 'Payment' | 'Counter Pickup';
   details: string;
   orderId?: string | null;
+}
+
+export interface CounterPickupLog {
+  id?: string;
+  timestamp: string;
+  operator: string;
+  action: string;
+  detail: string;
+}
+
+export interface CounterPickup {
+  id: string;
+  sku: string;
+  productName: string;
+  location: string;
+  qty: number;
+  warehouseId: string;
+  status: CounterPickupStatus;
+  queueStatus: CounterPickupQueueStatus;
+  destination?: CounterPickupDestination | null;
+  referenceNo?: string | null;
+  otherNotes?: string | null;
+  createdBy: string;
+  createdByUid?: string;
+  pickedBy?: string | null;
+  pickedAt?: string | null;
+  finalizedBy?: string | null;
+  finalizedAt?: string | null;
+  expiredBySystem?: boolean;
+  expiredReason?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const PERMISSIONS = [

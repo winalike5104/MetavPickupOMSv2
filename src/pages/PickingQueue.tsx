@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
-import { Order, OrderItem, WarehouseStatus, PickingLog } from '../types';
+import { CounterPickup, Order, OrderItem, WarehouseStatus, PickingLog } from '../types';
 import { 
   ShoppingCart, 
   Package, 
@@ -52,6 +52,7 @@ import { PageHeader } from '../components/PageHeader';
 export const PickingQueue: React.FC = () => {
   const { profile, activeWarehouse, token } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [counterPickups, setCounterPickups] = useState<CounterPickup[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -115,6 +116,38 @@ export const PickingQueue: React.FC = () => {
 
     return () => unsubscribe();
   }, [activeWarehouse]);
+
+  useEffect(() => {
+    if (!activeWarehouse || !token) return;
+
+    let stopped = false;
+    const loadCounterPickups = async () => {
+      try {
+        const response = await fetch('/api/counter-pickups/list?view=active&limit=200', {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse
+          }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to load counter pickups');
+        }
+        if (stopped) return;
+        const activeQueueItems = ((data.requests || []) as CounterPickup[]).filter((item) => item.status === 'PendingPick');
+        setCounterPickups(activeQueueItems);
+      } catch (err) {
+        console.error('Error loading counter pickups for queue:', err);
+      }
+    };
+
+    loadCounterPickups();
+    const timer = window.setInterval(loadCounterPickups, 15000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [activeWarehouse, token]);
 
   const locationTasks = useMemo(() => {
     const taskMap = new Map<string, PickingTask>();
@@ -335,6 +368,52 @@ export const PickingQueue: React.FC = () => {
     );
   }
 
+  const handleCounterStartPicking = async (requestId: string) => {
+    if (!token) return;
+    setUpdatingIds(prev => [...prev, requestId]);
+    try {
+      const response = await fetch(`/api/counter-pickups/${requestId}/start-picking`, {
+        method: 'POST',
+        headers: {
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to start picking');
+      }
+      setCounterPickups(prev => prev.map((item) => item.id === requestId ? { ...item, queueStatus: 'Picking' } : item));
+    } catch (err: any) {
+      alert(err.message || 'Failed to start picking');
+    } finally {
+      setUpdatingIds(prev => prev.filter(id => id !== requestId));
+    }
+  };
+
+  const handleCounterMarkPicked = async (requestId: string) => {
+    if (!token) return;
+    setUpdatingIds(prev => [...prev, requestId]);
+    try {
+      const response = await fetch(`/api/counter-pickups/${requestId}/mark-picked`, {
+        method: 'POST',
+        headers: {
+          'x-v2-auth-token': `Bearer ${token}`,
+          'x-warehouse-id': activeWarehouse || ''
+        }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to mark picked');
+      }
+      setCounterPickups(prev => prev.filter((item) => item.id !== requestId));
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark picked');
+    } finally {
+      setUpdatingIds(prev => prev.filter(id => id !== requestId));
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
@@ -404,6 +483,79 @@ export const PickingQueue: React.FC = () => {
               <option value="Picked">Ready</option>
             </select>
           </div>
+
+          {counterPickups.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm font-black text-amber-900 uppercase tracking-wider">Counter Pickup Priority</h3>
+              </div>
+              <div className="space-y-3">
+                {counterPickups.map((item) => (
+                  <div key={item.id} className="bg-white border border-amber-100 rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">Counter Pickup</span>
+                        <span className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                          item.queueStatus === 'Pending' ? "bg-slate-100 text-slate-700" : "bg-indigo-100 text-indigo-700"
+                        )}>
+                          {item.queueStatus}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400">Request</p>
+                          <p className="text-sm font-bold text-slate-900">{item.id}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400">SKU</p>
+                          <p className="text-sm font-bold text-slate-900">{item.sku}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400">Location</p>
+                          <p className="text-sm font-bold text-slate-900">{item.location}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400">Qty</p>
+                          <p className="text-sm font-bold text-slate-900">{item.qty}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {item.queueStatus === 'Pending' && (
+                        <button
+                          onClick={() => handleCounterStartPicking(item.id)}
+                          disabled={updatingIds.includes(item.id)}
+                          className="flex items-center justify-center bg-indigo-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md disabled:opacity-50"
+                          title="Start Picking"
+                        >
+                          {updatingIds.includes(item.id) ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Play className="w-6 h-6 fill-current" />
+                          )}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleCounterMarkPicked(item.id)}
+                        disabled={updatingIds.includes(item.id)}
+                        className="flex items-center justify-center bg-emerald-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50"
+                        title="Mark Picked"
+                      >
+                        {updatingIds.includes(item.id) ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <ArrowRight className="w-6 h-6" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {activeTab === 'location' ? (
             filteredLocationTasks.length === 0 ? (
