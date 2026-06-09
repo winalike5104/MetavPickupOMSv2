@@ -117,6 +117,121 @@ export const BulkOrderUpload = () => {
   const [progress, setProgress] = useState(0);
   const [activeTab, setActiveTab] = useState<'all' | 'valid' | 'invalid' | 'duplicate'>('all');
   const [availableStoreIds, setAvailableStoreIds] = useState<string[]>([]);
+  const text = isCnRoute ? {
+    title: '批量导入订单',
+    subtitle: '通过 CSV 批量导入订单（事务安全）',
+    downloadTemplate: '下载模板',
+    clear: '清空',
+    startImport: '开始导入',
+    ordersUnit: '个订单',
+    dataHealth: '数据概览',
+    totalRows: '总行数',
+    groupedOrders: '合并订单数',
+    readyOrders: '可导入订单',
+    duplicates: '重复数据',
+    invalidRows: '无效数据',
+    successImported: '成功导入',
+    dragDrop: '拖拽 CSV 文件到此处',
+    browse: '或点击选择文件',
+    importRules: '导入规则',
+    fixedFields: '固定字段：',
+    storeRule: 'store_id：必须与系统内店铺 ID 一致',
+    paymentStateRule: 'payment_state：仅支持 Paid 或 Unpaid',
+    paymentMethodRule: 'payment_method：',
+    paymentPaidRule: '若为 Paid：Cash、EFTPOS、Bank Transfer、Online Payment',
+    paymentUnpaidRule: '若为 Unpaid：可留空，系统默认 Pending',
+    warehouseRule: 'warehouse_id：仅支持 AKL、CHC',
+    note: '说明：CSV 导入时大小写不敏感，系统会自动标准化。',
+    dataPreview: '数据预览',
+    checkingDuplicates: '正在检查重复数据...',
+    noData: '尚未加载数据，请先上传 CSV 文件。',
+    booking: '预订号',
+    customer: '客户',
+    ref: '参考号',
+    email: '邮箱',
+    status: '状态',
+    success: '成功',
+    duplicate: '重复',
+    error: '错误',
+    ready: '就绪',
+    processLogs: '处理日志',
+    waitingActivity: '等待操作中...',
+    adminOnlyLogs: '仅管理员可查看实时处理日志。',
+    templateGuide: '模板说明',
+    orderInfoArea: '订单信息区（蓝色）',
+    productArea: '商品信息区（黄色）',
+    bookingRule: 'booking_number 每一行都必须填写，其他订单字段只需在首行填写。',
+    productRule: 'sku、quantity、unit_price 每一行都必须填写。',
+    loadedStores: '已加载',
+    loadedStoresSuffix: '个店铺配置用于校验',
+    failedStores: '加载店铺配置失败',
+    templateDownloaded: 'CSV 模板已下载',
+    noValidRows: '没有可导入的有效数据行',
+    fileSelected: '已选择文件',
+    parsedRows: 'CSV 解析完成，共',
+    parsedRowsSuffix: '行',
+    fetchingSkus: '正在拉取 SKU 定义，共',
+    fetchingSkusSuffix: '个唯一 SKU...',
+    fetchedSkus: 'SKU 自动带出完成，共匹配',
+    fetchedSkusSuffix: '个 SKU'
+  } : {
+    title: 'Bulk Order Upload',
+    subtitle: 'Import orders using CSV with atomic transaction safety',
+    downloadTemplate: 'Download Template',
+    clear: 'Clear',
+    startImport: 'Start Import',
+    ordersUnit: 'Orders',
+    dataHealth: 'Data Health',
+    totalRows: 'Total Rows',
+    groupedOrders: 'Grouped Orders',
+    readyOrders: 'Ready Orders',
+    duplicates: 'Duplicates',
+    invalidRows: 'Invalid Rows',
+    successImported: 'Successfully Imported',
+    dragDrop: 'Drag & drop CSV here',
+    browse: 'or click to browse files',
+    importRules: 'Import Rules',
+    fixedFields: 'Fixed Fields:',
+    storeRule: 'store_id: Must match Store ID in system',
+    paymentStateRule: 'payment_state: Paid, Unpaid',
+    paymentMethodRule: 'payment_method:',
+    paymentPaidRule: 'If Paid: Cash, EFTPOS, Bank Transfer, Online Payment',
+    paymentUnpaidRule: 'If Unpaid: Can be empty (defaults to "Pending")',
+    warehouseRule: 'warehouse_id: AKL, CHC',
+    note: 'Note: Values are case-insensitive during CSV import but will be normalized.',
+    dataPreview: 'Data Preview',
+    checkingDuplicates: 'Checking duplicates...',
+    noData: 'No data loaded. Upload a CSV to begin.',
+    booking: 'Booking #',
+    customer: 'Customer',
+    ref: 'Ref #',
+    email: 'Email',
+    status: 'Status',
+    success: 'Success',
+    duplicate: 'Duplicate',
+    error: 'Error',
+    ready: 'Ready',
+    processLogs: 'Process Logs',
+    waitingActivity: 'Waiting for activity...',
+    adminOnlyLogs: 'Only administrators can view real-time process logs.',
+    templateGuide: 'Template Guide',
+    orderInfoArea: 'Order Info Area (Blue)',
+    productArea: 'Product Details Area (Amber)',
+    bookingRule: 'booking_number must be on EVERY row. Other fields only on the 1st row.',
+    productRule: 'sku, quantity, unit_price MUST be filled on every row.',
+    loadedStores: 'Loaded',
+    loadedStoresSuffix: 'store configurations for validation',
+    failedStores: 'Failed to load store configurations',
+    templateDownloaded: 'CSV template downloaded',
+    noValidRows: 'No valid rows to import',
+    fileSelected: 'File selected',
+    parsedRows: 'Parsed',
+    parsedRowsSuffix: 'rows from CSV',
+    fetchingSkus: 'Fetching definitions for',
+    fetchingSkusSuffix: 'unique SKUs...',
+    fetchedSkus: 'Auto-fill data retrieved for',
+    fetchedSkusSuffix: 'SKUs'
+  };
 
   // Scroll state for collapsible header
   const [isScrolled, setIsScrolled] = useState(false);
@@ -155,10 +270,10 @@ export const BulkOrderUpload = () => {
         const querySnapshot = await getDocs(collection(db, 'stores'));
         const ids = querySnapshot.docs.map(doc => doc.id);
         setAvailableStoreIds(ids);
-        addLog(`Loaded ${ids.length} store configurations for validation`, 'info');
+        addLog(isCnRoute ? `${text.loadedStores} ${ids.length} ${text.loadedStoresSuffix}` : `${text.loadedStores} ${ids.length} ${text.loadedStoresSuffix}`, 'info');
       } catch (err) {
         console.error("Error fetching stores:", err);
-        addLog(isCnRoute ? "加载店铺配置失败" : "Failed to load store configurations", 'warning');
+        addLog(text.failedStores, 'warning');
       }
     };
 
@@ -212,21 +327,21 @@ export const BulkOrderUpload = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    addLog(isCnRoute ? 'CSV 模板已下载' : 'CSV template downloaded', 'info');
+    addLog(text.templateDownloaded, 'info');
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
 
-    addLog(`File selected: ${file.name}`, 'info');
+    addLog(isCnRoute ? `${text.fileSelected}：${file.name}` : `${text.fileSelected}: ${file.name}`, 'info');
     
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       comments: "#",
       complete: async (results) => {
-        addLog(`Parsed ${results.data.length} rows from CSV`, 'success');
+        addLog(isCnRoute ? `${text.parsedRows} ${results.data.length} ${text.parsedRowsSuffix}` : `${text.parsedRows} ${results.data.length} ${text.parsedRowsSuffix}`, 'success');
         
         // 1. Extract unique SKUs from CSV to fetch on-demand (Quota optimization)
         const uniqueSkusInCsv = Array.from(new Set(
@@ -235,7 +350,7 @@ export const BulkOrderUpload = () => {
             .filter((sku: string) => !!sku)
         )) as string[];
 
-        addLog(`Fetching definitions for ${uniqueSkusInCsv.length} unique SKUs...`, 'info');
+        addLog(isCnRoute ? `${text.fetchingSkus} ${uniqueSkusInCsv.length} ${text.fetchingSkusSuffix}` : `${text.fetchingSkus} ${uniqueSkusInCsv.length} ${text.fetchingSkusSuffix}`, 'info');
         
         const fetchedSkusMap = new Map<string, SKU>();
         
@@ -255,7 +370,7 @@ export const BulkOrderUpload = () => {
           }
         }
         
-        addLog(`Auto-fill data retrieved for ${fetchedSkusMap.size} SKUs`, 'success');
+        addLog(isCnRoute ? `${text.fetchedSkus} ${fetchedSkusMap.size} ${text.fetchedSkusSuffix}` : `${text.fetchedSkus} ${fetchedSkusMap.size} ${text.fetchedSkusSuffix}`, 'success');
 
         // 2. Track order metadata for inheritance
         const orderMetadataMap = new Map<string, any>();
@@ -382,7 +497,7 @@ export const BulkOrderUpload = () => {
   const handleImport = async () => {
     const readyRows = rows.filter(r => r.status === 'ready');
     if (readyRows.length === 0) {
-      addLog(isCnRoute ? '没有可导入的有效数据行' : 'No valid rows to import', 'warning');
+      addLog(text.noValidRows, 'warning');
       return;
     }
 
@@ -597,8 +712,8 @@ export const BulkOrderUpload = () => {
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
       <PageHeader
-        title={isCnRoute ? "批量导入订单" : "Bulk Order Upload"}
-        subtitle={isCnRoute ? "通过 CSV 批量导入订单（事务安全）" : "Import orders using CSV with atomic transaction safety"}
+        title={text.title}
+        subtitle={text.subtitle}
         icon={Upload}
         isScrolled={isScrolled}
         backButton={
@@ -613,14 +728,14 @@ export const BulkOrderUpload = () => {
               className="px-3 py-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all flex items-center gap-2 text-sm font-bold"
             >
               <Download className="w-4 h-4" />
-              Download Template
+              {text.downloadTemplate}
             </button>
             <button
               onClick={() => setRows([])}
               className="px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-xl transition-all flex items-center gap-2 text-sm"
             >
               <Trash2 className="w-4 h-4" />
-              Clear
+              {text.clear}
             </button>
             <button
               onClick={handleImport}
@@ -628,7 +743,7 @@ export const BulkOrderUpload = () => {
               className="px-5 py-1.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg shadow-indigo-200 text-sm"
             >
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Start Import ({stats.readyOrders} Orders)
+              {text.startImport} ({stats.readyOrders} {text.ordersUnit})
             </button>
           </>
         }
@@ -648,7 +763,7 @@ export const BulkOrderUpload = () => {
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6">
               <h2 className="font-bold text-slate-900 flex items-center gap-2">
                 <Database className="w-5 h-5 text-indigo-600" />
-                Data Health
+                {text.dataHealth}
               </h2>
 
               <div className="space-y-3">
@@ -661,13 +776,13 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <FileText className="w-4 h-4" />
-                    Total Rows
+                    {text.totalRows}
                   </span>
                   <span className="font-bold">{stats.total}</span>
                 </button>
 
                 <div className="px-3 py-1 flex items-center justify-between text-[10px] text-slate-400 font-medium uppercase tracking-wider">
-                  <span>Grouped Orders</span>
+                  <span>{text.groupedOrders}</span>
                   <span>{stats.totalOrders}</span>
                 </div>
 
@@ -680,7 +795,7 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
-                    Ready Orders
+                    {text.readyOrders}
                   </span>
                   <span className="font-bold">{stats.readyOrders}</span>
                 </button>
@@ -694,7 +809,7 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4" />
-                    Duplicates
+                    {text.duplicates}
                   </span>
                   <span className="font-bold">{stats.duplicates}</span>
                 </button>
@@ -708,7 +823,7 @@ export const BulkOrderUpload = () => {
                 >
                   <span className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
-                    Invalid Rows
+                    {text.invalidRows}
                   </span>
                   <span className="font-bold">{stats.invalid}</span>
                 </button>
@@ -717,7 +832,7 @@ export const BulkOrderUpload = () => {
               {stats.success > 0 && (
                 <div className="pt-4 border-t border-slate-100">
                   <div className="flex items-center justify-between text-emerald-600 font-bold">
-                    <span>Successfully Imported</span>
+                    <span>{text.successImported}</span>
                     <span>{stats.success}</span>
                   </div>
                 </div>
@@ -734,32 +849,32 @@ export const BulkOrderUpload = () => {
             >
               <input {...getInputProps()} />
               <Upload className="w-10 h-10 text-slate-400 mx-auto mb-4" />
-              <p className="text-slate-600 font-medium">Drag & drop CSV here</p>
-              <p className="text-slate-400 text-sm mt-1">or click to browse files</p>
+              <p className="text-slate-600 font-medium">{text.dragDrop}</p>
+              <p className="text-slate-400 text-sm mt-1">{text.browse}</p>
             </div>
 
             {/* Import Rules Info */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
               <h3 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
                 <Info className="w-4 h-4 text-indigo-600" />
-                Import Rules
+                {text.importRules}
               </h3>
               <div className="space-y-3 text-xs text-slate-600">
                 <div className="p-3 bg-slate-50 rounded-xl space-y-2">
-                  <p className="font-bold text-slate-900">Fixed Fields:</p>
+                  <p className="font-bold text-slate-900">{text.fixedFields}</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li><span className="font-semibold">store_id:</span> Must match Store ID in system</li>
-                    <li><span className="font-semibold">payment_state:</span> Paid, Unpaid</li>
-                    <li><span className="font-semibold">payment_method:</span>
+                    <li>{text.storeRule}</li>
+                    <li>{text.paymentStateRule}</li>
+                    <li><span className="font-semibold">{text.paymentMethodRule}</span>
                       <ul className="pl-4 mt-1 list-circle space-y-1">
-                        <li>If <span className="text-emerald-600">Paid</span>: Cash, EFTPOS, Bank Transfer, Online Payment</li>
-                        <li>If <span className="text-amber-600">Unpaid</span>: Can be empty (defaults to "Pending")</li>
+                        <li>{text.paymentPaidRule}</li>
+                        <li>{text.paymentUnpaidRule}</li>
                       </ul>
                     </li>
-                    <li><span className="font-semibold">warehouse_id:</span> AKL, CHC</li>
+                    <li>{text.warehouseRule}</li>
                   </ul>
                 </div>
-                <p className="italic text-[10px]">Note: Values are case-insensitive during CSV import but will be normalized.</p>
+                <p className="italic text-[10px]">{text.note}</p>
               </div>
             </div>
           </div>
@@ -768,11 +883,11 @@ export const BulkOrderUpload = () => {
           <div className="lg:col-span-6 space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
               <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                <h3 className="font-bold text-slate-900">Data Preview</h3>
+                <h3 className="font-bold text-slate-900">{text.dataPreview}</h3>
                 {isChecking && (
                   <div className="flex items-center gap-2 text-indigo-600 text-sm font-medium animate-pulse">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Checking duplicates...
+                    {text.checkingDuplicates}
                   </div>
                 )}
               </div>
@@ -781,18 +896,18 @@ export const BulkOrderUpload = () => {
                 {rows.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-400 p-12">
                     <FileText className="w-16 h-16 mb-4 opacity-20" />
-                    <p>{isCnRoute ? '尚未加载数据，请先上传 CSV 文件。' : 'No data loaded. Upload a CSV to begin.'}</p>
+                    <p>{text.noData}</p>
                   </div>
                 ) : (
                   <table className="w-full text-left border-collapse">
                     <thead className="sticky top-0 bg-white shadow-sm z-10">
                       <tr className="text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
                         <th className="px-4 py-3 w-12">#</th>
-                        <th className="px-4 py-3">Booking #</th>
-                        <th className="px-4 py-3">Customer</th>
-                        <th className="px-4 py-3">Ref #</th>
-                        <th className="px-4 py-3">Email</th>
-                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">{text.booking}</th>
+                        <th className="px-4 py-3">{text.customer}</th>
+                        <th className="px-4 py-3">{text.ref}</th>
+                        <th className="px-4 py-3">{text.email}</th>
+                        <th className="px-4 py-3">{text.status}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -847,18 +962,18 @@ export const BulkOrderUpload = () => {
                             {row.status === 'success' ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase">
                                 <CheckCircle2 className="w-3 h-3" />
-                                Success
+                                {text.success}
                               </span>
                             ) : row.isDuplicate ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold uppercase">
                                 <AlertTriangle className="w-3 h-3" />
-                                Duplicate
+                                {text.duplicate}
                               </span>
                             ) : row.errors.length > 0 ? (
                               <div className="group relative">
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-bold uppercase cursor-help">
                                   <AlertCircle className="w-3 h-3" />
-                                  Error
+                                  {text.error}
                                 </span>
                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
                                   {row.errors.join(', ')}
@@ -866,7 +981,7 @@ export const BulkOrderUpload = () => {
                               </div>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase">
-                                Ready
+                                {text.ready}
                               </span>
                             )}
                           </td>
@@ -897,19 +1012,19 @@ export const BulkOrderUpload = () => {
                 <div className="px-6 py-4 border-b border-slate-800 bg-slate-800/50 flex items-center justify-between">
                   <h3 className="font-bold text-white flex items-center gap-2">
                     <History className="w-5 h-5 text-indigo-400" />
-                    Process Logs
+                    {text.processLogs}
                   </h3>
                   <button 
                     onClick={() => setLogs([])}
                     className="text-slate-400 hover:text-white text-xs"
                   >
-                    Clear
+                    {text.clear}
                   </button>
                 </div>
 
                 <div className="flex-1 overflow-auto p-4 font-mono text-xs space-y-2">
                   {logs.length === 0 ? (
-                    <div className="text-slate-600 italic">Waiting for activity...</div>
+                    <div className="text-slate-600 italic">{text.waitingActivity}</div>
                   ) : (
                     <AnimatePresence initial={false}>
                       {logs.map((log, i) => (
@@ -935,8 +1050,8 @@ export const BulkOrderUpload = () => {
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center h-[600px] flex flex-col items-center justify-center">
                 <History className="w-12 h-12 text-slate-200 mb-4" />
-                <h3 className="font-bold text-slate-900 mb-2">Process Logs</h3>
-                <p className="text-slate-500 text-sm">Only administrators can view real-time process logs.</p>
+                <h3 className="font-bold text-slate-900 mb-2">{text.processLogs}</h3>
+                <p className="text-slate-500 text-sm">{text.adminOnlyLogs}</p>
               </div>
             )}
 
@@ -946,21 +1061,21 @@ export const BulkOrderUpload = () => {
                 <div className="p-2 bg-indigo-50 rounded-lg">
                   <Info className="w-5 h-5 text-indigo-600" />
                 </div>
-                <h3 className="font-bold text-slate-900">Template Guide</h3>
+                <h3 className="font-bold text-slate-900">{text.templateGuide}</h3>
               </div>
               
               <div className="space-y-6">
                 <div className="flex gap-4">
                   <div className="w-1.5 h-auto bg-blue-500 rounded-full shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1.5">Order Info Area (Blue)</p>
+                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1.5">{text.orderInfoArea}</p>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {['booking_number', 'customer_name', 'email', 'ref', 'store_id'].map(f => (
                         <span key={f} className="text-[10px] font-mono bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-blue-600">{f}</span>
                       ))}
                     </div>
                     <p className="text-[11px] text-slate-500 leading-relaxed">
-                      <span className="font-bold text-slate-700">booking_number</span> must be on <span className="font-bold text-slate-700">EVERY row</span>. Other fields only on the 1st row.
+                      {text.bookingRule}
                     </p>
                   </div>
                 </div>
@@ -968,14 +1083,14 @@ export const BulkOrderUpload = () => {
                 <div className="flex gap-4">
                   <div className="w-1.5 h-auto bg-amber-500 rounded-full shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1.5">Product Details Area (Amber)</p>
+                    <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1.5">{text.productArea}</p>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {['sku', 'quantity', 'unit_price'].map(f => (
                         <span key={f} className="text-[10px] font-mono bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 text-amber-600">{f}</span>
                       ))}
                     </div>
                     <p className="text-[11px] text-slate-500 leading-relaxed">
-                      <span className="font-bold text-slate-700">MUST be filled on every row</span> to record line items.
+                      {text.productRule}
                     </p>
                   </div>
                 </div>

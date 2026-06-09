@@ -1,17 +1,35 @@
-import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Archive, CheckCircle2, Clock, ClipboardList, Package, Plus, RotateCcw, Search, Send, ShoppingBag } from 'lucide-react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import {
+  AlertTriangle,
+  Archive,
+  CheckCircle2,
+  ClipboardList,
+  Clock,
+  Loader2,
+  Package,
+  Plus,
+  RotateCcw,
+  Search,
+  Send,
+  ShoppingBag
+} from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../components/AuthProvider';
-import { CounterPickup } from '../types';
+import { useClickOutside } from '../hooks/useClickOutside';
+import { CounterPickup, CounterPickupQueueStatus, CounterPickupStatus, SKU } from '../types';
 import { cn, formatDate, hasPermission } from '../utils';
 
 type ListingView = 'active' | 'history';
+type StatusFilter = 'All' | CounterPickupStatus;
+type QueueFilter = 'All' | CounterPickupQueueStatus;
 type FinalizeFormState = {
   destination: '' | 'Returned' | 'Sold' | 'Other';
   referenceNo: string;
   otherNotes: string;
 };
+
+const PAGE_SIZE = 50;
 
 const emptyFinalizeForm: FinalizeFormState = {
   destination: '',
@@ -19,83 +37,238 @@ const emptyFinalizeForm: FinalizeFormState = {
   otherNotes: ''
 };
 
+const CN_TEXT = {
+  pageTitle: '申请提货列表',
+  pageSubtitle: '前台临时提货、仓库送达与后续结案处理。',
+  active: '待处理',
+  history: '历史记录',
+  createRequest: '新建申请',
+  createHint: '像创建订单一样搜索 SKU，自动带出产品和库位。特殊 SKU 也可以手动填写。',
+  showCreate: '展开申请表单',
+  hideCreate: '收起申请表单',
+  skuLabel: 'SKU / 产品搜索',
+  skuPlaceholder: '搜索 SKU 或产品名称...',
+  skuHelp: '系统会自动带出产品名称和主库位。若为特殊 SKU，可手动补充产品信息。',
+  qty: '数量',
+  submit: '提交申请',
+  productName: '产品名称',
+  productNamePlaceholder: '请输入特殊 SKU 的产品名称',
+  location: '库位',
+  locationPlaceholder: '请输入库位，或保留 NOT_ASSIGNED',
+  manualSku: '使用自定义 SKU',
+  searchPlaceholder: '搜索申请号、SKU、产品名、库位、创建人...',
+  statusFilter: '状态筛选',
+  queueFilter: '队列筛选',
+  loading: '正在加载申请提货数据...',
+  empty: '当前视图下没有符合条件的申请提货记录。',
+  counterPickup: '申请提货',
+  requestNo: '申请单号',
+  warehouse: '仓库',
+  createdBy: '创建人',
+  createdAt: '创建时间',
+  destination: '去向',
+  referenceNo: '关联单号',
+  otherNotes: '备注说明',
+  startPicking: '开始拣货',
+  markPicked: '确认送达',
+  finalize: '完成结案',
+  completePutback: '确认回库',
+  finalizeTitle: '完成结案',
+  selectOne: '请选择',
+  returned: '回库',
+  sold: '已售出',
+  other: '其他',
+  cancel: '取消',
+  productNameRequired: '特殊 SKU 或未匹配 SKU 必须填写产品名称。',
+  loadError: '加载申请提货失败',
+  searchSkuError: 'SKU 查询失败',
+  createError: '创建申请提货失败',
+  startPickingError: '开始拣货失败',
+  markPickedError: '确认送达失败',
+  finalizeError: '结案失败',
+  completePutbackError: '确认回库失败',
+  noWarehouse: '未分配',
+  allStatuses: '全部状态',
+  allQueues: '全部队列',
+  pendingPick: '待拣货',
+  picked: '已送达前台',
+  pendingPutback: '等待回库',
+  finalized: '已结案',
+  queuePending: '待领取',
+  queuePicking: '拣货中',
+  queuePicked: '已完成拣货',
+  pickedAlert: '已送达前台，等待补充去向',
+  putbackAlert: '等待仓库回库确认',
+  noResults: '没有匹配结果，可直接使用自定义 SKU。',
+  showing: '显示',
+  of: '/',
+  prev: '上一页',
+  next: '下一页',
+  actions: '操作'
+} as const;
+
+const EN_TEXT = {
+  pageTitle: 'Counter Pickup Listing',
+  pageSubtitle: 'Front desk urgent pickup requests, warehouse delivery, and closure workflow.',
+  active: 'Active',
+  history: 'History',
+  createRequest: 'Create Request',
+  createHint: 'Search SKU like Order Create, auto-fill product and location, or enter a special SKU manually.',
+  showCreate: 'Show Request Form',
+  hideCreate: 'Hide Request Form',
+  skuLabel: 'SKU / Product Search',
+  skuPlaceholder: 'Search SKU or product name...',
+  skuHelp: 'The system will auto-fill product name and primary location. If this is a special SKU, you can enter product details manually.',
+  qty: 'Qty',
+  submit: 'Submit',
+  productName: 'Product Name',
+  productNamePlaceholder: 'Enter product name for special SKU',
+  location: 'Location',
+  locationPlaceholder: 'Enter location or keep NOT_ASSIGNED',
+  manualSku: 'Use Custom SKU',
+  searchPlaceholder: 'Search request no., SKU, product, location, creator...',
+  statusFilter: 'Status Filter',
+  queueFilter: 'Queue Filter',
+  loading: 'Loading counter pickup requests...',
+  empty: 'No counter pickup requests match the current view.',
+  counterPickup: 'Counter Pickup',
+  requestNo: 'Request No.',
+  warehouse: 'Warehouse',
+  createdBy: 'Created By',
+  createdAt: 'Created At',
+  destination: 'Destination',
+  referenceNo: 'Reference No.',
+  otherNotes: 'Other Notes',
+  startPicking: 'Start Picking',
+  markPicked: 'Mark Picked',
+  finalize: 'Finalize',
+  completePutback: 'Complete Putback',
+  finalizeTitle: 'Finalize',
+  selectOne: 'Select one',
+  returned: 'Returned',
+  sold: 'Sold',
+  other: 'Other',
+  cancel: 'Cancel',
+  productNameRequired: 'Product name is required for unmatched or special SKU.',
+  loadError: 'Failed to load counter pickup requests',
+  searchSkuError: 'Failed to search SKU',
+  createError: 'Failed to create counter pickup',
+  startPickingError: 'Failed to start picking',
+  markPickedError: 'Failed to mark picked',
+  finalizeError: 'Failed to finalize counter pickup',
+  completePutbackError: 'Failed to complete putback',
+  noWarehouse: 'Unassigned',
+  allStatuses: 'All Statuses',
+  allQueues: 'All Queues',
+  pendingPick: 'Pending Pick',
+  picked: 'Picked',
+  pendingPutback: 'Pending Putback',
+  finalized: 'Finalized',
+  queuePending: 'Pending',
+  queuePicking: 'Picking',
+  queuePicked: 'Picked',
+  pickedAlert: 'Picked to front desk, waiting for closure',
+  putbackAlert: 'Waiting for warehouse putback confirmation',
+  noResults: 'No matching results. You can use a custom SKU.',
+  showing: 'Showing',
+  of: 'of',
+  prev: 'Prev',
+  next: 'Next',
+  actions: 'Actions'
+} as const;
+
+const getStatusBadgeClass = (status: CounterPickupStatus) => {
+  if (status === 'PendingPick') return 'bg-amber-100 text-amber-700';
+  if (status === 'Picked') return 'bg-red-100 text-red-700';
+  if (status === 'PendingPutback') return 'bg-orange-100 text-orange-700';
+  return 'bg-emerald-100 text-emerald-700';
+};
+
+const getQueueBadgeClass = (status: CounterPickupQueueStatus) => {
+  if (status === 'Pending') return 'bg-slate-100 text-slate-700';
+  if (status === 'Picking') return 'bg-sky-100 text-sky-700';
+  return 'bg-emerald-100 text-emerald-700';
+};
+
 export const CounterPickupListing: React.FC = () => {
   const { token, activeWarehouse, profile } = useAuth();
   const location = useLocation();
   const isCnRoute = location.pathname.startsWith('/cn');
+  const text = isCnRoute ? CN_TEXT : EN_TEXT;
+
   const [view, setView] = useState<ListingView>('active');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [requests, setRequests] = useState<CounterPickup[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showCreateForm, setShowCreateForm] = useState(true);
+
+  const [skuQuery, setSkuQuery] = useState('');
   const [sku, setSku] = useState('');
   const [qty, setQty] = useState(1);
-  const [skuMeta, setSkuMeta] = useState<{ productName: string; location: string } | null>(null);
+  const [skuResults, setSkuResults] = useState<SKU[]>([]);
+  const [showSkuResults, setShowSkuResults] = useState(false);
   const [skuMetaLoading, setSkuMetaLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [skuMeta, setSkuMeta] = useState<{ productName: string; location: string } | null>(null);
+  const [skuLookupMiss, setSkuLookupMiss] = useState(false);
+  const [manualProductName, setManualProductName] = useState('');
+  const [manualLocation, setManualLocation] = useState('NOT_ASSIGNED');
+
   const [finalizeTarget, setFinalizeTarget] = useState<CounterPickup | null>(null);
   const [finalizeForm, setFinalizeForm] = useState<FinalizeFormState>(emptyFinalizeForm);
   const [isScrolled, setIsScrolled] = useState(false);
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
+
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const skuRef = useRef<HTMLDivElement>(null);
+  useClickOutside(skuRef, () => setShowSkuResults(false));
 
   const canCreate = profile?.roleTemplate !== 'Warehouse';
-  const canManageWarehouse = profile?.roleTemplate === 'Warehouse' || profile?.roleTemplate === 'Admin' || hasPermission(profile, 'Manage Picking', profile?.username || profile?.email);
-
-  const text = {
-    title: isCnRoute ? '申请提货 Listing' : 'Counter Pickup Listing',
-    subtitle: isCnRoute ? '前台临时提货申请、仓库送达与结案闭环。' : 'Front desk urgent pickup requests, warehouse delivery, and closure workflow.',
-    create: isCnRoute ? '提交申请' : 'Create Request',
-    active: isCnRoute ? '待办单据' : 'Active',
-    history: isCnRoute ? '历史归档' : 'History',
-    pickedAlert: isCnRoute ? '已到前台，等待补充动向' : 'Picked to front desk, waiting for closure',
-    pendingPutback: isCnRoute ? '待回库确认' : 'Pending putback',
-    noData: isCnRoute ? '当前没有符合条件的申请提货单。' : 'No counter pickup requests match the current view.',
-    requestNo: isCnRoute ? '申请号' : 'Request No.',
-    warehouse: isCnRoute ? '仓库' : 'Warehouse',
-    qty: isCnRoute ? '数量' : 'Qty',
-    location: isCnRoute ? '库位' : 'Location',
-    status: isCnRoute ? '状态' : 'Status',
-    destination: isCnRoute ? '去向' : 'Destination',
-    markPicked: isCnRoute ? '确认送达前台' : 'Mark Picked',
-    startPicking: isCnRoute ? '开始拣货' : 'Start Picking',
-    finalize: isCnRoute ? '补充动向' : 'Finalize',
-    completePutback: isCnRoute ? '确认回库完成' : 'Complete Putback',
-    productName: isCnRoute ? '产品名称' : 'Product Name',
-    scanSku: isCnRoute ? '输入或扫码 SKU' : 'Enter or scan SKU',
-    lookupHint: isCnRoute ? '系统会自动带出产品名称与主库位。' : 'The system will auto-fill product name and primary location.',
-    referenceNo: isCnRoute ? '关联单号' : 'Reference No.',
-    otherNotes: isCnRoute ? '其他说明' : 'Other Notes',
-    submit: isCnRoute ? '提交' : 'Submit',
-    cancel: isCnRoute ? '取消' : 'Cancel'
-  };
+  const canManageWarehouse =
+    profile?.roleTemplate === 'Warehouse' ||
+    profile?.roleTemplate === 'Admin' ||
+    hasPermission(profile, 'Manage Picking', profile?.username || profile?.email);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => setIsScrolled(!entry.isIntersecting),
-      { threshold: 0 }
-    );
+    const observer = new IntersectionObserver(([entry]) => setIsScrolled(!entry.isIntersecting), { threshold: 0 });
     if (sentinelRef.current) observer.observe(sentinelRef.current);
     return () => {
       if (sentinelRef.current) observer.unobserve(sentinelRef.current);
     };
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, queueFilter, view]);
+
+  const resetCreateForm = () => {
+    setSkuQuery('');
+    setSku('');
+    setQty(1);
+    setSkuResults([]);
+    setShowSkuResults(false);
+    setSkuMeta(null);
+    setSkuLookupMiss(false);
+    setManualProductName('');
+    setManualLocation('NOT_ASSIGNED');
+  };
   const loadRequests = async (nextView = view) => {
     if (!token) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/counter-pickups/list?view=${nextView}&limit=300`, {
+      const response = await fetch(`/api/counter-pickups/list?view=${nextView}&limit=500`, {
         headers: {
           'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         }
       });
       const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to load counter pickup requests');
-      }
+      if (!response.ok || !data.success) throw new Error(data.error || text.loadError);
       setRequests((data.requests || []) as CounterPickup[]);
     } catch (err: any) {
-      alert(err.message || 'Failed to load counter pickup requests');
+      alert(err.message || text.loadError);
     } finally {
       setLoading(false);
     }
@@ -105,43 +278,83 @@ export const CounterPickupListing: React.FC = () => {
     loadRequests(view);
   }, [token, activeWarehouse, view]);
 
-  const lookupSku = async () => {
-    if (!token || sku.trim().length < 2) {
-      setSkuMeta(null);
+  useEffect(() => {
+    if (!token || skuQuery.trim().length < 2) {
+      setSkuResults([]);
+      setShowSkuResults(false);
       return;
     }
-    setSkuMetaLoading(true);
-    try {
-      const params = new URLSearchParams({ q: sku.trim().toUpperCase(), limit: '10' });
-      const response = await fetch(`/api/skus/search?${params.toString()}`, {
-        headers: {
-          'x-v2-auth-token': `Bearer ${token}`,
-          'x-warehouse-id': activeWarehouse || ''
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setSkuMetaLoading(true);
+      try {
+        const params = new URLSearchParams({ q: skuQuery.trim().toUpperCase(), limit: '20' });
+        const response = await fetch(`/api/skus/search?${params.toString()}`, {
+          headers: {
+            'x-v2-auth-token': `Bearer ${token}`,
+            'x-warehouse-id': activeWarehouse || ''
+          }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || text.searchSkuError);
+        if (!cancelled) {
+          setSkuResults((data.skus || []) as SKU[]);
+          setShowSkuResults(true);
+          setSkuLookupMiss((data.skus || []).length === 0);
         }
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to search SKU');
+      } catch {
+        if (!cancelled) {
+          setSkuResults([]);
+          setShowSkuResults(true);
+          setSkuLookupMiss(true);
+        }
+      } finally {
+        if (!cancelled) setSkuMetaLoading(false);
       }
-      const exact = (data.skus || []).find((item: any) => item.sku === sku.trim().toUpperCase()) || data.skus?.[0];
-      if (!exact) {
-        setSkuMeta(null);
-        return;
-      }
-      setSkuMeta({
-        productName: exact.productName || sku.trim().toUpperCase(),
-        location: exact.location || 'NOT_ASSIGNED'
-      });
-    } catch (err: any) {
-      setSkuMeta(null);
-      alert(err.message || 'Failed to search SKU');
-    } finally {
-      setSkuMetaLoading(false);
-    }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [skuQuery, token, activeWarehouse, text.searchSkuError]);
+
+  const applySelectedSku = (selected: SKU) => {
+    setSku(selected.sku);
+    setSkuQuery(selected.sku);
+    setSkuMeta({
+      productName: selected.productName || selected.sku,
+      location: selected.location || 'NOT_ASSIGNED'
+    });
+    setManualProductName(selected.productName || '');
+    setManualLocation(selected.location || 'NOT_ASSIGNED');
+    setSkuLookupMiss(false);
+    setShowSkuResults(false);
+  };
+
+  const useCustomSku = () => {
+    const normalized = skuQuery.trim().toUpperCase();
+    setSku(normalized);
+    setSkuQuery(normalized);
+    setSkuMeta(null);
+    setSkuLookupMiss(true);
+    setManualLocation((prev) => prev || 'NOT_ASSIGNED');
+    setShowSkuResults(false);
   };
 
   const handleCreate = async () => {
-    if (!token || !skuMeta || !sku.trim()) return;
+    if (!token || !(sku || skuQuery).trim()) return;
+
+    const finalSku = (sku || skuQuery).trim().toUpperCase();
+    const resolvedProductName = (skuMeta?.productName || manualProductName).trim();
+    const resolvedLocation = (skuMeta?.location || manualLocation || 'NOT_ASSIGNED').trim().toUpperCase();
+
+    if (!resolvedProductName) {
+      alert(text.productNameRequired);
+      return;
+    }
+
     setSubmitting(true);
     try {
       const response = await fetch('/api/counter-pickups/create', {
@@ -152,21 +365,19 @@ export const CounterPickupListing: React.FC = () => {
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
-          sku: sku.trim().toUpperCase(),
-          qty
+          sku: finalSku,
+          qty,
+          productName: resolvedProductName,
+          location: resolvedLocation || 'NOT_ASSIGNED'
         })
       });
       const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create counter pickup');
-      }
-      setSku('');
-      setQty(1);
-      setSkuMeta(null);
+      if (!response.ok || !data.success) throw new Error(data.error || text.createError);
       setView('active');
+      resetCreateForm();
       await loadRequests('active');
     } catch (err: any) {
-      alert(err.message || 'Failed to create counter pickup');
+      alert(err.message || text.createError);
     } finally {
       setSubmitting(false);
     }
@@ -184,10 +395,10 @@ export const CounterPickupListing: React.FC = () => {
         }
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to start picking');
+      if (!response.ok || !data.success) throw new Error(data.error || text.startPickingError);
       await loadRequests(view);
     } catch (err: any) {
-      alert(err.message || 'Failed to start picking');
+      alert(err.message || text.startPickingError);
     } finally {
       setSubmitting(false);
     }
@@ -205,10 +416,10 @@ export const CounterPickupListing: React.FC = () => {
         }
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to mark picked');
+      if (!response.ok || !data.success) throw new Error(data.error || text.markPickedError);
       await loadRequests(view);
     } catch (err: any) {
-      alert(err.message || 'Failed to mark picked');
+      alert(err.message || text.markPickedError);
     } finally {
       setSubmitting(false);
     }
@@ -228,12 +439,12 @@ export const CounterPickupListing: React.FC = () => {
         body: JSON.stringify(finalizeForm)
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to finalize counter pickup');
+      if (!response.ok || !data.success) throw new Error(data.error || text.finalizeError);
       setFinalizeTarget(null);
       setFinalizeForm(emptyFinalizeForm);
       await loadRequests(view);
     } catch (err: any) {
-      alert(err.message || 'Failed to finalize counter pickup');
+      alert(err.message || text.finalizeError);
     } finally {
       setSubmitting(false);
     }
@@ -251,287 +462,395 @@ export const CounterPickupListing: React.FC = () => {
         }
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to complete putback');
+      if (!response.ok || !data.success) throw new Error(data.error || text.completePutbackError);
       await loadRequests(view);
     } catch (err: any) {
-      alert(err.message || 'Failed to complete putback');
+      alert(err.message || text.completePutbackError);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const filteredRequests = requests.filter((item) => {
-    const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy}`.toLowerCase();
-    return haystack.includes(searchTerm.toLowerCase());
-  });
+  const filteredRequests = useMemo(() => {
+    return requests.filter((item) => {
+      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''}`.toLowerCase();
+      const matchesSearch = haystack.includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
+      const matchesQueue = queueFilter === 'All' || item.queueStatus === queueFilter;
+      return matchesSearch && matchesStatus && matchesQueue;
+    });
+  }, [requests, searchTerm, statusFilter, queueFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
+  const paginatedRequests = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRequests.slice(start, start + PAGE_SIZE);
+  }, [filteredRequests, currentPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const statusLabel = (status: CounterPickupStatus) => {
+    if (status === 'PendingPick') return text.pendingPick;
+    if (status === 'Picked') return text.picked;
+    if (status === 'PendingPutback') return text.pendingPutback;
+    return text.finalized;
+  };
+
+  const queueLabel = (status: CounterPickupQueueStatus) => {
+    if (status === 'Pending') return text.queuePending;
+    if (status === 'Picking') return text.queuePicking;
+    return text.queuePicked;
+  };
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
-        title={text.title}
-        subtitle={text.subtitle}
+        title={text.pageTitle}
+        subtitle={text.pageSubtitle}
         icon={ClipboardList}
         isScrolled={isScrolled}
         actions={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setView('active')}
-                className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all", view === 'active' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
-              >
-                {text.active}
-              </button>
-              <button
-                onClick={() => setView('history')}
-                className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all", view === 'history' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
-              >
-                {text.history}
-              </button>
-            </div>
-          </div>
+          canCreate ? (
+            <button
+              onClick={() => setShowCreateForm((prev) => !prev)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              {showCreateForm ? text.hideCreate : text.showCreate}
+            </button>
+          ) : undefined
         }
       />
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
-        <div className="max-w-6xl mx-auto space-y-6">
-          {canCreate && (
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 space-y-4">
-              <div className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-indigo-600" />
-                <h2 className="text-lg font-bold text-slate-900">{text.create}</h2>
+        <div className="max-w-7xl mx-auto space-y-6">
+          {canCreate && showCreateForm && (
+            <section className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">{text.createRequest}</h2>
+                <p className="text-sm text-slate-500 mt-1">{text.createHint}</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-slate-700">{text.scanSku}</label>
-                  <div className="mt-2 flex gap-2">
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <div className="lg:col-span-6" ref={skuRef}>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.skuLabel}</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <input
-                      value={sku}
-                      onChange={(e) => setSku(e.target.value.toUpperCase())}
-                      onBlur={lookupSku}
-                      placeholder="SKU"
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      value={skuQuery}
+                      onChange={(e) => {
+                        const next = e.target.value.toUpperCase();
+                        setSkuQuery(next);
+                        setSku(next);
+                        setSkuMeta(null);
+                        setSkuLookupMiss(false);
+                      }}
+                      className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder={text.skuPlaceholder}
                     />
-                    <button
-                      onClick={lookupSku}
-                      disabled={skuMetaLoading}
-                      className="px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-semibold"
-                    >
-                      <Search className="w-4 h-4" />
-                    </button>
+                    {skuMetaLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">{text.lookupHint}</p>
+
+                  {showSkuResults && (
+                    <div className="mt-2 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-auto">
+                      {skuResults.map((result) => (
+                        <button
+                          key={result.id || result.sku}
+                          type="button"
+                          onClick={() => applySelectedSku(result)}
+                          className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b border-slate-100 last:border-b-0"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-slate-900">{result.sku}</p>
+                              <p className="text-sm text-slate-500">{result.productName}</p>
+                            </div>
+                            <span className="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-bold">
+                              {result.location || 'NOT_ASSIGNED'}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={useCustomSku}
+                        className="w-full px-4 py-3 text-left hover:bg-indigo-50 text-indigo-600 font-semibold"
+                      >
+                        {text.manualSku}: {skuQuery || 'SKU'}
+                      </button>
+                      {skuResults.length === 0 && (
+                        <div className="px-4 py-3 text-sm text-slate-500 border-t border-slate-100">{text.noResults}</div>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="mt-2 text-xs text-slate-500">{text.skuHelp}</p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700">{text.qty}</label>
+
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.qty}</label>
                   <input
                     type="number"
                     min={1}
                     value={qty}
                     onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-                    className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
-                <div className="flex items-end">
-                  <button
-                    onClick={handleCreate}
-                    disabled={submitting || !skuMeta || !sku.trim()}
-                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50"
-                  >
-                    <Send className="w-4 h-4" />
-                    {text.submit}
-                  </button>
+
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.productName}</label>
+                  <input
+                    value={skuMeta?.productName || manualProductName}
+                    onChange={(e) => {
+                      setSkuMeta(null);
+                      setSkuLookupMiss(true);
+                      setManualProductName(e.target.value);
+                    }}
+                    placeholder={text.productNamePlaceholder}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.location}</label>
+                  <input
+                    value={skuMeta?.location || manualLocation}
+                    onChange={(e) => {
+                      setSkuMeta(null);
+                      setSkuLookupMiss(true);
+                      setManualLocation(e.target.value.toUpperCase());
+                    }}
+                    placeholder={text.locationPlaceholder}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
                 </div>
               </div>
 
-              {skuMeta && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-slate-400">{text.productName}</p>
-                    <p className="text-sm font-semibold text-slate-900 mt-1">{skuMeta.productName}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-slate-400">{text.location}</p>
-                    <p className="text-sm font-semibold text-slate-900 mt-1">{skuMeta.location}</p>
-                  </div>
-                </div>
-              )}
-            </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleCreate}
+                  disabled={submitting || !(sku || skuQuery).trim()}
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4" />
+                  {text.submit}
+                </button>
+              </div>
+            </section>
           )}
 
-          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={isCnRoute ? '搜索申请号、SKU、产品名、库位...' : 'Search request no., SKU, product, location...'}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+          <section className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <div className="lg:col-span-6 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder={text.searchPlaceholder}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="lg:col-span-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="All">{text.statusFilter}: {text.allStatuses}</option>
+                  <option value="PendingPick">{text.pendingPick}</option>
+                  <option value="Picked">{text.picked}</option>
+                  <option value="PendingPutback">{text.pendingPutback}</option>
+                  <option value="Finalized">{text.finalized}</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <select
+                  value={queueFilter}
+                  onChange={(e) => setQueueFilter(e.target.value as QueueFilter)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="All">{text.queueFilter}: {text.allQueues}</option>
+                  <option value="Pending">{text.queuePending}</option>
+                  <option value="Picking">{text.queuePicking}</option>
+                  <option value="Picked">{text.queuePicked}</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-2 flex items-center justify-start lg:justify-end">
+                <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    onClick={() => setView('active')}
+                    className={cn('px-3 py-1.5 rounded-lg text-xs font-bold transition-all', view === 'active' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500')}
+                  >
+                    {text.active}
+                  </button>
+                  <button
+                    onClick={() => setView('history')}
+                    className={cn('px-3 py-1.5 rounded-lg text-xs font-bold transition-all', view === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500')}
+                  >
+                    {text.history}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
 
           {loading ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
               <Clock className="w-10 h-10 text-slate-300 mx-auto mb-4 animate-pulse" />
-              <p className="text-slate-500">{isCnRoute ? '正在加载申请提货单...' : 'Loading counter pickup requests...'}</p>
+              <p className="text-slate-500">{text.loading}</p>
             </div>
           ) : filteredRequests.length === 0 ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
               <Package className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">{text.noData}</p>
+              <p className="text-slate-500">{text.empty}</p>
             </div>
           ) : (
-            filteredRequests.map((item) => (
-              <div
-                key={item.id}
-                className={cn(
-                  "bg-white border rounded-2xl shadow-sm p-5",
-                  item.status === 'Picked' ? "border-red-300 ring-2 ring-red-100" : "border-slate-100",
-                  item.status === 'PendingPutback' ? "border-amber-200 bg-amber-50/40" : ""
-                )}
-              >
-                <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                  <div className="flex-1 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-lg bg-yellow-100 text-yellow-800 text-xs font-bold uppercase">Counter Pickup</span>
-                      <span className={cn(
-                        "px-2.5 py-1 rounded-lg text-xs font-bold uppercase",
-                        item.status === 'PendingPick' ? "bg-slate-100 text-slate-700" :
-                        item.status === 'Picked' ? "bg-red-100 text-red-700" :
-                        item.status === 'PendingPutback' ? "bg-amber-100 text-amber-700" :
-                        "bg-emerald-100 text-emerald-700"
-                      )}>
-                        {item.status}
-                      </span>
-                      <span className={cn(
-                        "px-2.5 py-1 rounded-lg text-xs font-bold uppercase",
-                        item.queueStatus === 'Pending' ? "bg-slate-100 text-slate-700" :
-                        item.queueStatus === 'Picking' ? "bg-indigo-100 text-indigo-700" :
-                        "bg-emerald-100 text-emerald-700"
-                      )}>
-                        {item.queueStatus}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">{text.requestNo}</p>
-                        <p className="text-sm font-bold text-slate-900 mt-1">{item.id}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">SKU</p>
-                        <p className="text-sm font-bold text-slate-900 mt-1">{item.sku}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">{text.productName}</p>
-                        <p className="text-sm font-semibold text-slate-900 mt-1">{item.productName}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">{text.location}</p>
-                        <p className="text-sm font-semibold text-slate-900 mt-1">{item.location}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">{text.qty}</p>
-                        <p className="text-sm font-semibold text-slate-900 mt-1">{item.qty}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">{text.warehouse}</p>
-                        <p className="text-sm font-semibold text-slate-900 mt-1">{item.warehouseId}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">{isCnRoute ? '创建人' : 'Created By'}</p>
-                        <p className="text-sm font-semibold text-slate-900 mt-1">{item.createdBy}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-400">{isCnRoute ? '创建时间' : 'Created At'}</p>
-                        <p className="text-sm font-semibold text-slate-900 mt-1">{formatDate(item.createdAt, 'PPp')}</p>
-                      </div>
-                    </div>
-
-                    {item.status === 'Picked' && (
-                      <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 p-3">
-                        <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5" />
-                        <p className="text-sm font-semibold text-red-700">{text.pickedAlert}</p>
-                      </div>
-                    )}
-
-                    {item.status === 'PendingPutback' && (
-                      <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-100 p-3">
-                        <RotateCcw className="w-4 h-4 text-amber-600 mt-0.5" />
-                        <p className="text-sm font-semibold text-amber-700">{text.pendingPutback}</p>
-                      </div>
-                    )}
-
-                    {(item.destination || item.referenceNo || item.otherNotes) && (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-wider text-slate-400">{text.destination}</p>
-                          <p className="text-sm font-semibold text-slate-900 mt-1">{item.destination || '-'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase tracking-wider text-slate-400">{text.referenceNo}</p>
-                          <p className="text-sm font-semibold text-slate-900 mt-1">{item.referenceNo || '-'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase tracking-wider text-slate-400">{text.otherNotes}</p>
-                          <p className="text-sm font-semibold text-slate-900 mt-1">{item.otherNotes || '-'}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-row lg:flex-col gap-2 lg:min-w-[180px]">
-                    {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus === 'Pending' && (
-                      <button
-                        onClick={() => handleStartPicking(item.id)}
-                        disabled={submitting}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50"
-                      >
-                        <ShoppingBag className="w-4 h-4" />
-                        {text.startPicking}
-                      </button>
-                    )}
-
-                    {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus !== 'Picked' && (
-                      <button
-                        onClick={() => handleMarkPicked(item.id)}
-                        disabled={submitting}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all disabled:opacity-50"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        {text.markPicked}
-                      </button>
-                    )}
-
-                    {canCreate && item.status === 'Picked' && (
-                      <button
-                        onClick={() => {
-                          setFinalizeTarget(item);
-                          setFinalizeForm(emptyFinalizeForm);
-                        }}
-                        disabled={submitting}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all disabled:opacity-50"
-                      >
-                        <Send className="w-4 h-4" />
-                        {text.finalize}
-                      </button>
-                    )}
-
-                    {canManageWarehouse && item.status === 'PendingPutback' && (
-                      <button
-                        onClick={() => handleCompletePutback(item.id)}
-                        disabled={submitting}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 text-white rounded-xl font-semibold hover:bg-amber-700 transition-all disabled:opacity-50"
-                      >
-                        <Archive className="w-4 h-4" />
-                        {text.completePutback}
-                      </button>
-                    )}
-                  </div>
-                </div>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-6 py-4">{text.requestNo}</th>
+                      <th className="px-6 py-4">SKU</th>
+                      <th className="px-6 py-4">{text.productName}</th>
+                      <th className="px-6 py-4">{text.location}</th>
+                      <th className="px-6 py-4 text-right">{text.qty}</th>
+                      <th className="px-6 py-4">{text.warehouse}</th>
+                      <th className="px-6 py-4">{text.createdBy}</th>
+                      <th className="px-6 py-4">{text.createdAt}</th>
+                      <th className="px-6 py-4">{text.statusFilter}</th>
+                      <th className="px-6 py-4">{text.queueFilter}</th>
+                      <th className="px-6 py-4">{text.destination}</th>
+                      <th className="px-6 py-4 text-right">{text.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {paginatedRequests.map((item) => (
+                      <tr key={item.id} className={cn('hover:bg-slate-50 transition-colors', item.status === 'Picked' && 'bg-red-50/40', item.status === 'PendingPutback' && 'bg-amber-50/40')}>
+                        <td className="px-6 py-4 font-bold text-slate-900">
+                          <div className="flex items-center gap-2">
+                            <span>{item.id}</span>
+                            <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-slate-700">{item.sku}</td>
+                        <td className="px-6 py-4 text-slate-700">
+                          <div className="space-y-1">
+                            <p className="font-medium">{item.productName}</p>
+                            {item.status === 'Picked' && (
+                              <div className="flex items-center gap-1 text-xs text-red-600 font-semibold">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                {text.pickedAlert}
+                              </div>
+                            )}
+                            {item.status === 'PendingPutback' && (
+                              <div className="flex items-center gap-1 text-xs text-amber-700 font-semibold">
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                {text.putbackAlert}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">{item.location}</td>
+                        <td className="px-6 py-4 text-right font-semibold text-slate-900">{item.qty}</td>
+                        <td className="px-6 py-4 text-slate-500">{item.warehouseId || text.noWarehouse}</td>
+                        <td className="px-6 py-4 text-slate-500">{item.createdBy}</td>
+                        <td className="px-6 py-4 text-slate-500">{formatDate(item.createdAt, 'yyyy-MM-dd HH:mm')}</td>
+                        <td className="px-6 py-4">
+                          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold', getStatusBadgeClass(item.status))}>
+                            {statusLabel(item.status)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold', getQueueBadgeClass(item.queueStatus))}>
+                            {queueLabel(item.queueStatus)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">{item.destination || '-'}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex justify-end gap-2 flex-wrap">
+                            {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus === 'Pending' && (
+                              <button
+                                onClick={() => handleStartPicking(item.id)}
+                                disabled={submitting}
+                                className="inline-flex items-center gap-1 px-3 py-2 bg-sky-600 text-white rounded-lg text-xs font-semibold hover:bg-sky-700 disabled:opacity-50"
+                              >
+                                <ShoppingBag className="w-3.5 h-3.5" />
+                                {text.startPicking}
+                              </button>
+                            )}
+                            {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus !== 'Picked' && (
+                              <button
+                                onClick={() => handleMarkPicked(item.id)}
+                                disabled={submitting}
+                                className="inline-flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                {text.markPicked}
+                              </button>
+                            )}
+                            {canCreate && item.status === 'Picked' && (
+                              <button
+                                onClick={() => {
+                                  setFinalizeTarget(item);
+                                  setFinalizeForm(emptyFinalizeForm);
+                                }}
+                                disabled={submitting}
+                                className="inline-flex items-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                {text.finalize}
+                              </button>
+                            )}
+                            {canManageWarehouse && item.status === 'PendingPutback' && (
+                              <button
+                                onClick={() => handleCompletePutback(item.id)}
+                                disabled={submitting}
+                                className="inline-flex items-center gap-1 px-3 py-2 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 disabled:opacity-50"
+                              >
+                                <Archive className="w-3.5 h-3.5" />
+                                {text.completePutback}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))
+            </div>
+          )}
+
+          {!loading && filteredRequests.length > 0 && (
+            <div className="flex items-center justify-between bg-white border border-slate-100 rounded-xl px-4 py-3">
+              <p className="text-sm text-slate-500">
+                {text.showing} {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} {text.of} {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                  {text.prev}
+                </button>
+                <span className="text-sm text-slate-600">{currentPage} / {totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                  {text.next}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -540,7 +859,7 @@ export const CounterPickupListing: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
             <div>
-              <h2 className="text-xl font-bold text-slate-900">{text.finalize}</h2>
+              <h2 className="text-xl font-bold text-slate-900">{text.finalizeTitle}</h2>
               <p className="text-sm text-slate-500 mt-1">{finalizeTarget.id} | {finalizeTarget.sku}</p>
             </div>
 
@@ -552,10 +871,10 @@ export const CounterPickupListing: React.FC = () => {
                   onChange={(e) => setFinalizeForm((prev) => ({ ...prev, destination: e.target.value as FinalizeFormState['destination'] }))}
                   className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
-                  <option value="">{isCnRoute ? '请选择' : 'Select one'}</option>
-                  <option value="Returned">Returned</option>
-                  <option value="Sold">Sold</option>
-                  <option value="Other">Other</option>
+                  <option value="">{text.selectOne}</option>
+                  <option value="Returned">{text.returned}</option>
+                  <option value="Sold">{text.sold}</option>
+                  <option value="Other">{text.other}</option>
                 </select>
               </div>
 
@@ -606,4 +925,3 @@ export const CounterPickupListing: React.FC = () => {
     </div>
   );
 };
-

@@ -725,6 +725,8 @@ async function startServer() {
 
       const rawSku = String(req.body?.sku || "").trim().toUpperCase();
       const qty = Number(req.body?.qty || 0);
+      const manualProductName = String(req.body?.productName || "").trim();
+      const manualLocation = String(req.body?.location || "").trim().toUpperCase();
       const requestedWh = (req.headers["x-warehouse-id"] as string) || "";
       const warehouseId = requestedWh || (req.user.allowedWarehouses || [])[0] || "";
 
@@ -733,18 +735,21 @@ async function startServer() {
       if (!Number.isInteger(qty) || qty <= 0) return res.status(400).json({ success: false, error: "Quantity must be a positive integer" });
 
       const skuSnap = await currentDb.collection("skus").where("sku", "==", rawSku).limit(1).get();
-      if (skuSnap.empty) {
-        return res.status(404).json({ success: false, error: "SKU not found" });
+      const skuData = skuSnap.empty ? null : skuSnap.docs[0].data() as any;
+      const resolvedProductName = skuData?.productName || manualProductName || rawSku;
+      const resolvedLocation = skuData?.location || manualLocation || "NOT_ASSIGNED";
+
+      if (!resolvedProductName) {
+        return res.status(400).json({ success: false, error: "Product name is required for unmatched or special SKU" });
       }
 
-      const skuData = skuSnap.docs[0].data() as any;
       const counterPickupId = await getNextCounterPickupId(currentDb);
       const timestamp = nowAucklandIso();
       const payload = {
         id: counterPickupId,
         sku: rawSku,
-        productName: skuData.productName || rawSku,
-        location: skuData.location || "NOT_ASSIGNED",
+        productName: resolvedProductName,
+        location: resolvedLocation,
         qty,
         warehouseId,
         status: "PendingPick",
@@ -772,7 +777,7 @@ async function startServer() {
         counterPickupId,
         req.user.name || req.user.username,
         "CP_CREATED",
-        `Counter pickup created for SKU ${rawSku}, qty ${qty}, warehouse ${warehouseId}.`,
+        `Counter pickup created for SKU ${rawSku}, qty ${qty}, warehouse ${warehouseId}${skuSnap.empty ? " (manual special SKU entry)" : ""}.`,
         req.user
       );
 
