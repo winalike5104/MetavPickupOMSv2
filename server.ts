@@ -129,7 +129,7 @@ const nowAucklandIso = () => DateTime.now().setZone(AUCKLAND_TIMEZONE).toISO();
 
 const isFrontDeskRole = (user: any) => {
   const role = user?.roleTemplate || user?.role || "";
-  return ["Sales", "Reception", "Admin"].includes(role);
+  return ["Reception", "Admin"].includes(role);
 };
 
 const isWarehouseRole = (user: any) => {
@@ -720,7 +720,7 @@ async function startServer() {
 
     try {
       if (!isFrontDeskRole(req.user)) {
-        return res.status(403).json({ success: false, error: "Forbidden: Front desk access required" });
+        return res.status(403).json({ success: false, error: "Forbidden: Reception access required" });
       }
 
       const rawSku = String(req.body?.sku || "").trim().toUpperCase();
@@ -861,7 +861,7 @@ async function startServer() {
         req.params.id,
         req.user.name || req.user.username,
         "CP_PICKED",
-        `Warehouse delivered SKU ${data.sku} to front desk.`,
+        `Warehouse delivered SKU ${data.sku} to reception.`,
         req.user
       );
 
@@ -878,7 +878,7 @@ async function startServer() {
 
     try {
       if (!isFrontDeskRole(req.user)) {
-        return res.status(403).json({ success: false, error: "Forbidden: Front desk access required" });
+        return res.status(403).json({ success: false, error: "Forbidden: Reception access required" });
       }
 
       const destination = String(req.body?.destination || "").trim() as any;
@@ -890,7 +890,7 @@ async function startServer() {
 
       const data = snap.data() as any;
       if (data.status !== "Picked") {
-        return res.status(409).json({ success: false, error: "Only Picked requests can be finalized by front desk" });
+        return res.status(409).json({ success: false, error: "Only Picked requests can be finalized by reception" });
       }
 
       const timestamp = nowAucklandIso();
@@ -904,7 +904,7 @@ async function startServer() {
       if (destination === "Returned") {
         updatePayload.status = "PendingPutback";
         action = "CP_RETURN_INIT";
-        detail = `Front desk requested putback for SKU ${data.sku}, qty ${data.qty}.`;
+        detail = `Reception requested putback for SKU ${data.sku}, qty ${data.qty}.`;
       } else if (destination === "Sold") {
         if (!referenceNo) {
           return res.status(400).json({ success: false, error: "Reference number is required when destination is Sold" });
@@ -916,7 +916,7 @@ async function startServer() {
         updatePayload.completedAt = timestamp;
         updatePayload.completedBy = req.user.name || req.user.username;
         action = "CP_FINALIZE_SOLD";
-        detail = `Front desk finalized counter pickup as Sold. Reference: ${referenceNo}.`;
+        detail = `Reception finalized counter pickup as Sold. Reference: ${referenceNo}.`;
       } else if (destination === "Other") {
         if (otherNotes.length < 5) {
           return res.status(400).json({ success: false, error: "Other notes must be at least 5 characters" });
@@ -928,7 +928,7 @@ async function startServer() {
         updatePayload.completedAt = timestamp;
         updatePayload.completedBy = req.user.name || req.user.username;
         action = "CP_FINALIZE_OTHER";
-        detail = `Front desk finalized counter pickup as Other. Notes: ${otherNotes}.`;
+        detail = `Reception finalized counter pickup as Other. Notes: ${otherNotes}.`;
       } else {
         return res.status(400).json({ success: false, error: "Invalid destination" });
       }
@@ -1896,7 +1896,7 @@ async function startServer() {
         return res.status(409).json({ success: false, error: "Only orders in Created status can be confirmed for pickup" });
       }
       if (order?.warehouseStatus !== 'Picked') {
-        return res.status(409).json({ success: false, error: "Warehouse must mark this order as Picked before front desk confirmation" });
+        return res.status(409).json({ success: false, error: "Warehouse must mark this order as Picked before reception confirmation" });
       }
 
       const pickedIndexes = Array.isArray(pickedItemIndexes)
@@ -1950,7 +1950,7 @@ async function startServer() {
         updatePayload.partialPickupInfo = {
           confirmedAt: timestamp,
           confirmedBy: req.user.name || req.user.username,
-          reason: typeof partialReason === 'string' && partialReason.trim() ? partialReason.trim() : 'Partial pickup confirmed by front desk',
+          reason: typeof partialReason === 'string' && partialReason.trim() ? partialReason.trim() : 'Partial pickup confirmed by reception',
           pickedItemIndexes: pickedIndexes,
           pickedItems,
           unpickedItems

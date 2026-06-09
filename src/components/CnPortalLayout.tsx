@@ -18,7 +18,7 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
   const navItems = [
     { name: '门户首页', path: '/cn', icon: Home, visible: true },
     { name: '订单列表', path: '/cn/orders', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) },
-    { name: '申请提货', path: '/cn/counter-pickups', icon: ClipboardList, visible: hasPermission(profile, 'View Orders', profile?.email) || hasPermission(profile, 'View Picking Queue', profile?.email) },
+    { name: '申请提货', path: '/cn/counter-pickups', icon: ClipboardList, visible: profile?.roleTemplate === 'Reception' || profile?.roleTemplate === 'Admin' },
     { name: '超期订单', path: '/cn/overdue', icon: Clock, visible: hasPermission(profile, 'Audit Overdue Orders', profile?.email) || hasPermission(profile, 'View Orders', profile?.email) },
     { name: '账号管理', path: '/cn/users', icon: Users, visible: isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage Users', profile?.email) },
     { name: '邮件中心', path: '/cn/orders', icon: Mail, visible: hasPermission(profile, 'View Orders', profile?.email) }
@@ -44,8 +44,7 @@ export const CnPortalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
             className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />
-            退出登录
-          </button>
+            退出登�?          </button>
         </div>
       </header>
 

@@ -1251,7 +1251,7 @@ export const OrderDetail: React.FC = () => {
                   order.pickupExceptionStatus === 'PartialPendingSales' ? "text-red-700" : "text-orange-700"
                 )}>
                   {order.pickupExceptionStatus === 'PartialPendingSales'
-                    ? 'Front desk has completed a partial pickup. Sales should update the order and submit it for finalization.'
+                    ? 'Reception has completed a partial pickup. Sales should update the order and submit it for finalization.'
                     : 'Order updates are complete. A user with Finalize Partial Pickup permission should finalize it to Picked Up.'}
                 </p>
                 {order.partialPickupInfo?.reason && (

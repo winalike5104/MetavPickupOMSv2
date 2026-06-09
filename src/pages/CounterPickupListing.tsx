@@ -111,7 +111,7 @@ const CN_TEXT = {
 
 const EN_TEXT = {
   pageTitle: 'Counter Pickup Listing',
-  pageSubtitle: 'Front desk urgent pickup requests, warehouse delivery, and closure workflow.',
+  pageSubtitle: 'Reception urgent pickup requests, warehouse delivery, and closure workflow.',
   active: 'Active',
   history: 'History',
   createRequest: 'Create Request',
@@ -148,7 +148,7 @@ const EN_TEXT = {
   completePutback: 'Complete Putback',
   finalizeTitle: 'Finalize',
   selectOne: 'Select one',
-  returned: 'Returned',
+  returned: 'Returned to warehouse',
   sold: 'Sold',
   other: 'Other',
   cancel: 'Cancel',
@@ -170,7 +170,7 @@ const EN_TEXT = {
   queuePending: 'Pending',
   queuePicking: 'Picking',
   queuePicked: 'Picked',
-  pickedAlert: 'Picked to front desk, waiting for closure',
+  pickedAlert: 'Picked to reception, waiting for closure',
   putbackAlert: 'Waiting for warehouse putback confirmation',
   noResults: 'No matching results. You can use a custom SKU.',
   showing: 'Showing',
@@ -229,11 +229,12 @@ export const CounterPickupListing: React.FC = () => {
   const skuRef = useRef<HTMLDivElement>(null);
   useClickOutside(skuRef, () => setShowSkuResults(false));
 
-  const canCreate = profile?.roleTemplate !== 'Warehouse';
+  const canCreate = profile?.roleTemplate === 'Reception' || profile?.roleTemplate === 'Admin';
   const canManageWarehouse =
     profile?.roleTemplate === 'Warehouse' ||
     profile?.roleTemplate === 'Admin' ||
     hasPermission(profile, 'Manage Picking', profile?.username || profile?.email);
+  const canViewPage = canCreate || canManageWarehouse;
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => setIsScrolled(!entry.isIntersecting), { threshold: 0 });
@@ -511,6 +512,14 @@ export const CounterPickupListing: React.FC = () => {
     if (status === 'Picking') return text.queuePicking;
     return text.queuePicked;
   };
+
+  const destinationLabel = (destination?: string | null) => {
+    if (!destination) return '-';
+    if (destination === 'Returned') return text.returned;
+    if (destination === 'Sold') return text.sold;
+    if (destination === 'Other') return text.other;
+    return destination;
+  };
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
@@ -534,7 +543,12 @@ export const CounterPickupListing: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-7xl mx-auto space-y-6">
-          {canCreate && showCreateForm && (
+          {!canViewPage ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+              <ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-500">You do not have access to Counter Pickup.</p>
+            </div>
+          ) : canCreate && showCreateForm && (
             <section className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">{text.createRequest}</h2>
@@ -650,6 +664,7 @@ export const CounterPickupListing: React.FC = () => {
             </section>
           )}
 
+          {canViewPage && (
           <section className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
               <div className="lg:col-span-4 relative">
@@ -724,8 +739,9 @@ export const CounterPickupListing: React.FC = () => {
               </div>
             </div>
           </section>
+          )}
 
-          {loading ? (
+          {canViewPage && (loading ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
               <Clock className="w-10 h-10 text-slate-300 mx-auto mb-4 animate-pulse" />
               <p className="text-slate-500">{text.loading}</p>
@@ -741,13 +757,13 @@ export const CounterPickupListing: React.FC = () => {
                 <table className="w-full table-fixed text-left">
                   <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase">
                     <tr>
-                      <th className="px-3 py-3 w-[13%]">{text.requestNo}</th>
-                      <th className="px-3 py-3 w-[9%]">SKU</th>
+                      <th className="px-3 py-3 w-[14%]">{text.requestNo}</th>
+                      <th className="px-3 py-3 w-[10%]">SKU</th>
                       <th className="px-3 py-3 w-[18%]">{text.productName}</th>
                       <th className="px-3 py-3 w-[7%]">{text.location}</th>
                       <th className="px-3 py-3 w-[5%] text-right">{text.qty}</th>
                       <th className="px-3 py-3 w-[12%]">{text.warehouse} / {text.createdBy}</th>
-                      <th className="px-3 py-3 w-[9%]">{text.createdAt}</th>
+                      <th className="px-3 py-3 w-[10%]">{text.createdAt}</th>
                       <th className="px-3 py-3 w-[8%]">{text.statusFilter}</th>
                       <th className="px-3 py-3 w-[7%]">{text.queueFilter}</th>
                       <th className="px-3 py-3 w-[8%]">{text.referenceNo}</th>
@@ -760,11 +776,11 @@ export const CounterPickupListing: React.FC = () => {
                       <tr key={item.id} className={cn('hover:bg-slate-50 transition-colors', item.status === 'Picked' && 'bg-red-50/40', item.status === 'PendingPutback' && 'bg-amber-50/40')}>
                         <td className="px-3 py-3 font-bold text-slate-900 align-top">
                           <div className="space-y-1">
-                            <span className="block truncate">{item.id}</span>
+                            <span className="block text-sm break-words" title={item.id}>{item.id}</span>
                             <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-3 font-semibold text-slate-700 align-top break-all text-sm">{item.sku}</td>
+                        <td className="px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm" title={item.sku}>{item.sku}</td>
                         <td className="px-3 py-3 text-slate-700 align-top">
                           <div className="space-y-1">
                             <p className="font-medium text-sm truncate" title={item.productName}>{item.productName}</p>
@@ -794,7 +810,12 @@ export const CounterPickupListing: React.FC = () => {
                             </p>
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-slate-500 align-top text-sm whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd HH:mm')}</td>
+                        <td className="px-3 py-3 text-slate-500 align-top text-sm">
+                          <div className="leading-tight">
+                            <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
+                            <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
+                          </div>
+                        </td>
                         <td className="px-3 py-3 align-top">
                           <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
                             {statusLabel(item.status)}
@@ -806,7 +827,7 @@ export const CounterPickupListing: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.referenceNo || '-'}</td>
-                        <td className="px-3 py-3 text-slate-500 align-top text-sm">{item.destination || '-'}</td>
+                        <td className="px-3 py-3 text-slate-500 align-top text-sm">{destinationLabel(item.destination)}</td>
                         <td className="px-3 py-3 align-top">
                           <div className="flex justify-end gap-1.5 flex-wrap">
                             {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus === 'Pending' && (
@@ -860,9 +881,9 @@ export const CounterPickupListing: React.FC = () => {
                 </table>
               </div>
             </div>
-          )}
+          ))}
 
-          {!loading && filteredRequests.length > 0 && (
+          {canViewPage && !loading && filteredRequests.length > 0 && (
             <div className="flex items-center justify-between bg-white border border-slate-100 rounded-xl px-4 py-3">
               <p className="text-sm text-slate-500">
                 {text.showing} {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} {text.of} {filteredRequests.length}

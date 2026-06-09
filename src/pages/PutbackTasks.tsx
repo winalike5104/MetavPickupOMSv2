@@ -6,7 +6,7 @@ import { CounterPickup } from '../types';
 import { cn, formatDate } from '../utils';
 
 export const PutbackTasks: React.FC = () => {
-  const { token, activeWarehouse } = useAuth();
+  const { token, activeWarehouse, profile } = useAuth();
   const [tasks, setTasks] = useState<CounterPickup[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -82,6 +82,8 @@ export const PutbackTasks: React.FC = () => {
     return haystack.includes(searchTerm.toLowerCase());
   });
 
+  const canAccessPutback = profile?.roleTemplate === 'Warehouse' || profile?.roleTemplate === 'Admin';
+
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
@@ -94,6 +96,13 @@ export const PutbackTasks: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-5xl mx-auto space-y-6">
+          {!canAccessPutback ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+              <Archive className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-500">You do not have access to Putback Tasks.</p>
+            </div>
+          ) : (
+          <>
           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -210,6 +219,8 @@ export const PutbackTasks: React.FC = () => {
             <div className="text-xs text-slate-400 font-medium text-right">
               Showing {filteredTasks.length} pending putback tasks
             </div>
+          )}
+          </>
           )}
         </div>
       </div>
