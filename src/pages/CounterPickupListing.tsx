@@ -863,16 +863,6 @@ export const CounterPickupListing: React.FC = () => {
                                 {text.finalize}
                               </button>
                             )}
-                            {canManageWarehouse && item.status === 'PendingPutback' && (
-                              <button
-                                onClick={() => handleCompletePutback(item.id)}
-                                disabled={submitting}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 text-white rounded-lg text-[11px] font-semibold hover:bg-amber-700 disabled:opacity-50"
-                              >
-                                <Archive className="w-3 h-3" />
-                                {text.completePutback}
-                              </button>
-                            )}
                           </div>
                         </td>
                       </tr>
