@@ -247,6 +247,18 @@ export const PickingQueue: React.FC = () => {
     };
   }, [counterPickups]);
 
+  const getQueueDisplayItems = (item: CounterPickup) => {
+    const sourceItems = item.items?.length
+      ? item.items
+      : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty, destination: item.destination }];
+
+    if (item.status === 'PendingPutback') {
+      return sourceItems.filter((entry: any) => (entry.destination || item.destination) === 'Returned');
+    }
+
+    return sourceItems;
+  };
+
   const handleUpdateItemStatus = async (orderId: string, sku: string, status: 'Pending' | 'Picked') => {
     if (!profile) return;
     const updateKey = `${orderId}-${sku}`;
@@ -526,11 +538,16 @@ export const PickingQueue: React.FC = () => {
               </div>
               <div className="space-y-3">
                 {counterPickups.map((item) => (
+                  (() => {
+                    const displayItems = getQueueDisplayItems(item);
+                    if (item.status === 'PendingPutback' && displayItems.length === 0) return null;
+                    const isPutbackTask = item.status === 'PendingPutback';
+                    return (
                   <div
                     key={item.id}
                     className={cn(
                       "rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-4 border shadow-sm transition-all",
-                      item.queueStatus === 'Picked'
+                      item.queueStatus === 'Picked' || isPutbackTask
                         ? "bg-emerald-50 border-emerald-300 ring-1 ring-emerald-200"
                         : "bg-white border-amber-100"
                     )}
@@ -574,7 +591,7 @@ export const PickingQueue: React.FC = () => {
                         </div>
                       </div>
                       <div className="mt-3 space-y-2">
-                        {(item.items?.length ? item.items : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
+                        {displayItems.map((entry, idx) => (
                           <div key={`${item.id}-${entry.sku}-${idx}`} className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white px-4 py-3 shadow-sm">
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center gap-2">
@@ -635,6 +652,8 @@ export const PickingQueue: React.FC = () => {
                       )}
                     </div>
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             </div>
