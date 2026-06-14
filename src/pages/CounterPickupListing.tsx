@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   Archive,
   Calendar,
-  CheckCircle2,
   ClipboardList,
   Clock,
   Loader2,
@@ -13,7 +12,6 @@ import {
   RotateCcw,
   Search,
   Send,
-  ShoppingBag
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../components/AuthProvider';
@@ -22,9 +20,16 @@ import { CounterPickup, CounterPickupQueueStatus, CounterPickupStatus, SKU } fro
 import { cn, formatDate, hasPermission } from '../utils';
 
 type ListingView = 'active' | 'history';
+type CounterListTab = 'All' | 'My Pending' | 'My Created';
 type StatusFilter = 'All' | CounterPickupStatus;
 type QueueFilter = 'All' | CounterPickupQueueStatus;
 type FinalizeFormState = {
+  destination: '' | 'Returned' | 'Sold' | 'Other';
+  referenceNo: string;
+  otherNotes: string;
+};
+
+type FinalizeItemAction = {
   destination: '' | 'Returned' | 'Sold' | 'Other';
   referenceNo: string;
   otherNotes: string;
@@ -60,6 +65,12 @@ const emptyFinalizeForm: FinalizeFormState = {
   otherNotes: ''
 };
 
+const createDefaultItemAction = (): FinalizeItemAction => ({
+  destination: '',
+  referenceNo: '',
+  otherNotes: ''
+});
+
 const createEmptyDraft = (): CounterPickupItemDraft => ({
   skuQuery: '',
   sku: '',
@@ -80,6 +91,9 @@ const CN_TEXT = {
   pageSubtitle: '前台临时提货、仓库送达与后续结案处理。',
   active: '待处理',
   history: '历史记录',
+  all: '全部',
+  myPending: '我的待处理',
+  myCreated: '我的创建',
   createRequest: '新建申请',
   createHint: '像创建订单一样搜索 SKU，自动带出产品和库位。特殊 SKU 也可以手动填写。',
   showCreate: '展开申请表单',
@@ -143,7 +157,6 @@ const CN_TEXT = {
   of: '/',
   prev: '上一页',
   next: '下一页',
-  actions: '操作'
 } as const;
 
 const EN_TEXT = {
@@ -151,6 +164,9 @@ const EN_TEXT = {
   pageSubtitle: 'Reception urgent pickup requests, warehouse delivery, and closure workflow.',
   active: 'Active',
   history: 'History',
+  all: 'All',
+  myPending: 'My Pending',
+  myCreated: 'My Created',
   createRequest: 'Create Request',
   createHint: 'Search SKU like Order Create, auto-fill product and location, or enter a special SKU manually.',
   showCreate: 'Show Request Form',
@@ -214,7 +230,6 @@ const EN_TEXT = {
   of: 'of',
   prev: 'Prev',
   next: 'Next',
-  actions: 'Actions'
 } as const;
 
 const getStatusBadgeClass = (status: CounterPickupStatus) => {
@@ -243,18 +258,20 @@ export const CounterPickupListing: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('All');
+  const [counterTab, setCounterTab] = useState<CounterListTab>('All');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(true);
-  const [showMyPending, setShowMyPending] = useState(false);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<CounterPickupItemDraft>(createEmptyDraft);
   const [itemsDraft, setItemsDraft] = useState<CounterPickupItem[]>([]);
   const [comment, setComment] = useState('');
+  const [pickupNote, setPickupNote] = useState('');
   const suppressSkuSearchRef = useRef(false);
 
   const [finalizeTarget, setFinalizeTarget] = useState<CounterPickup | null>(null);
   const [finalizeForm, setFinalizeForm] = useState<FinalizeFormState>(emptyFinalizeForm);
+  const [itemFinalizeActions, setItemFinalizeActions] = useState<FinalizeItemAction[]>([]);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -278,7 +295,7 @@ export const CounterPickupListing: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view, showMyPending]);
+  }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view, counterTab]);
 
   const resetCreateForm = () => {
     setDraft(createEmptyDraft());
@@ -417,7 +434,12 @@ export const CounterPickupListing: React.FC = () => {
     }
     if (!Number.isInteger(item.qty) || item.qty <= 0) return;
     setItemsDraft((prev) => {
-      const idx = prev.findIndex((draftItem) => draftItem.sku === item.sku && draftItem.location === item.location);
+      const idx = prev.findIndex(
+        (draftItem) =>
+          draftItem.sku === item.sku &&
+          draftItem.productName === item.productName &&
+          draftItem.location === item.location
+      );
       if (idx >= 0) {
         return prev.map((draftItem, i) => i === idx ? { ...draftItem, qty: draftItem.qty + item.qty } : draftItem);
       }
@@ -446,10 +468,11 @@ export const CounterPickupListing: React.FC = () => {
           'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
-        body: JSON.stringify({
-          items: combinedItems,
-          comment
-        })
+      body: JSON.stringify({
+        items: combinedItems,
+        comment,
+        pickupNote
+      })
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || text.createError);
@@ -463,50 +486,24 @@ export const CounterPickupListing: React.FC = () => {
     }
   };
 
-  const handleStartPicking = async (requestId: string) => {
-    if (!token) return;
-    setSubmitting(true);
-    try {
-      const response = await fetch(`/api/counter-pickups/${requestId}/start-picking`, {
-        method: 'POST',
-        headers: {
-          'x-v2-auth-token': `Bearer ${token}`,
-          'x-warehouse-id': activeWarehouse || ''
-        }
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || text.startPickingError);
-      await loadRequests(view);
-    } catch (err: any) {
-      alert(err.message || text.startPickingError);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleMarkPicked = async (requestId: string) => {
-    if (!token) return;
-    setSubmitting(true);
-    try {
-      const response = await fetch(`/api/counter-pickups/${requestId}/mark-picked`, {
-        method: 'POST',
-        headers: {
-          'x-v2-auth-token': `Bearer ${token}`,
-          'x-warehouse-id': activeWarehouse || ''
-        }
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || text.markPickedError);
-      await loadRequests(view);
-    } catch (err: any) {
-      alert(err.message || text.markPickedError);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleFinalize = async () => {
     if (!token || !finalizeTarget) return;
+    const targetItems = finalizeTarget.items?.length ? finalizeTarget.items : [{
+      sku: finalizeTarget.sku,
+      productName: finalizeTarget.productName,
+      location: finalizeTarget.location,
+      qty: finalizeTarget.qty
+    }];
+
+    const normalizedActions = targetItems.map((_, index) => {
+      const itemAction = itemFinalizeActions[index] || createDefaultItemAction();
+      return {
+        destination: itemAction.destination || finalizeForm.destination,
+        referenceNo: itemAction.referenceNo || finalizeForm.referenceNo,
+        otherNotes: itemAction.otherNotes || finalizeForm.otherNotes
+      };
+    });
+
     setSubmitting(true);
     try {
       const response = await fetch(`/api/counter-pickups/${finalizeTarget.id}/finalize`, {
@@ -516,12 +513,16 @@ export const CounterPickupListing: React.FC = () => {
           'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
-        body: JSON.stringify(finalizeForm)
+        body: JSON.stringify({
+          ...finalizeForm,
+          itemActions: normalizedActions
+        })
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || text.finalizeError);
       setFinalizeTarget(null);
       setFinalizeForm(emptyFinalizeForm);
+      setItemFinalizeActions([]);
       await loadRequests(view);
     } catch (err: any) {
       alert(err.message || text.finalizeError);
@@ -561,10 +562,11 @@ export const CounterPickupListing: React.FC = () => {
       const matchesDate =
         (!dateRange.start || itemDate >= dateRange.start) &&
         (!dateRange.end || itemDate <= dateRange.end);
-      const matchesMine = !showMyPending || item.createdByUid === profile?.uid;
-      return matchesSearch && matchesStatus && matchesQueue && matchesDate && matchesMine;
+      const matchesMyPending = counterTab !== 'My Pending' || item.status !== 'Finalized';
+      const matchesMyCreated = counterTab !== 'My Created' || item.createdByUid === profile?.uid;
+      return matchesSearch && matchesStatus && matchesQueue && matchesDate && matchesMyPending && matchesMyCreated;
     });
-  }, [requests, searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, showMyPending, profile?.uid]);
+  }, [requests, searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, counterTab, profile?.uid]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
   const paginatedRequests = useMemo(() => {
@@ -594,9 +596,11 @@ export const CounterPickupListing: React.FC = () => {
     if (destination === 'Returned') return text.returned;
     if (destination === 'Sold') return text.sold;
     if (destination === 'Other') return text.other;
+    if (destination === 'Mixed') return 'Mixed';
     return destination;
   };
   const historyNoteLabel = (item: CounterPickup) => item.comment || item.otherNotes || '-';
+  const historyPickupNoteLabel = (item: CounterPickup) => item.pickupNote || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
@@ -720,11 +724,20 @@ export const CounterPickupListing: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Comment / Note</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Pickup Note</label>
+                  <input
+                    value={pickupNote}
+                    onChange={(e) => setPickupNote(e.target.value)}
+                    placeholder="Internal note for warehouse picking"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Comment</label>
                   <input
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    placeholder="Optional note for this pickup order"
+                    placeholder="Final closure reason or customer outcome"
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
@@ -845,19 +858,22 @@ export const CounterPickupListing: React.FC = () => {
                   </button>
                 </div>
               </div>
-              {canCreate && (
-                <div className="lg:col-span-12 flex items-center justify-end">
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={showMyPending}
-                      onChange={(e) => setShowMyPending(e.target.checked)}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    My Pending
-                  </label>
+              <div className="lg:col-span-12 flex items-center justify-end">
+                <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  {(['All', 'My Pending', 'My Created'] as CounterListTab[]).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setCounterTab(tab)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
+                        counterTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
+                      )}
+                    >
+                      {tab === 'All' ? text.all : tab === 'My Pending' ? text.myPending : text.myCreated}
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
           </section>
           )}
@@ -880,16 +896,21 @@ export const CounterPickupListing: React.FC = () => {
                     <tr>
                       <th className="px-3 py-3 w-[14%]">{text.requestNo}</th>
                       <th className="px-3 py-3 w-[10%]">SKU</th>
-                      <th className="px-3 py-3 w-[18%]">{view === 'history' ? 'Comment / Note' : text.productName}</th>
-                      <th className="px-3 py-3 w-[7%]">{view === 'history' ? '-' : text.location}</th>
+                      <th className="px-3 py-3 w-[18%]">{text.productName}</th>
+                      <th className="px-3 py-3 w-[7%]">{text.location}</th>
                       <th className="px-3 py-3 w-[5%] text-right">{text.qty}</th>
                       <th className="px-3 py-3 w-[12%]">{text.warehouse} / {text.createdBy}</th>
                       <th className="px-3 py-3 w-[10%]">{text.createdAt}</th>
                       <th className="px-3 py-3 w-[8%]">{text.statusFilter}</th>
                       <th className="px-3 py-3 w-[7%]">{text.queueFilter}</th>
-                      <th className="px-3 py-3 w-[8%]">{text.referenceNo}</th>
-                      <th className="px-3 py-3 w-[7%]">{text.destination}</th>
-                      <th className="px-3 py-3 w-[13%] text-right">{text.actions}</th>
+                      {view === 'history' && (
+                        <>
+                          <th className="px-3 py-3 w-[8%]">{text.referenceNo}</th>
+                          <th className="px-3 py-3 w-[7%]">{text.destination}</th>
+                        </>
+                      )}
+                      <th className="px-3 py-3 w-[14%]">Comment</th>
+                      <th className="px-3 py-3 w-[14%]">Pickup Note</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -905,7 +926,7 @@ export const CounterPickupListing: React.FC = () => {
                                   onClick={() => setExpandedHistoryIds((prev) => prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id])}
                                   className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-700"
                                 >
-                                  {isExpandedHistory(item.id) ? 'Hide' : 'Expand'}
+                                  {isExpandedHistory(item.id) ? 'Hide Details' : 'View Details'}
                                 </button>
                               )}
                             </div>
@@ -914,27 +935,27 @@ export const CounterPickupListing: React.FC = () => {
                         </td>
                         <td className="px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm" title={item.sku}>{item.sku}</td>
                         <td className="px-3 py-3 text-slate-700 align-top">
-                          {view === 'history' ? (
-                            <p className="text-sm font-medium text-slate-700 break-words" title={historyNoteLabel(item)}>{historyNoteLabel(item)}</p>
-                          ) : (
-                            <div className="space-y-1">
-                              <p className="font-medium text-sm truncate" title={item.productName}>{item.productName}</p>
-                              {item.status === 'Picked' && (
-                                <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  {text.pickedAlert}
-                                </div>
-                              )}
-                              {item.status === 'PendingPutback' && (
-                                <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
-                                  <RotateCcw className="w-3 h-3" />
-                                  {text.putbackAlert}
-                                </div>
-                              )}
-                            </div>
-                          )}
+                          <div className="space-y-1">
+                            <p className="font-medium text-sm truncate" title={item.productName}>
+                              {view === 'history' && item.items?.length
+                                ? `${item.items[0].productName}${item.items.length > 1 ? ` + ${item.items.length - 1} more` : ''}`
+                                : item.productName}
+                            </p>
+                            {item.status === 'Picked' && (
+                              <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
+                                <AlertTriangle className="w-3 h-3" />
+                                {text.pickedAlert}
+                              </div>
+                            )}
+                            {item.status === 'PendingPutback' && (
+                              <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
+                                <RotateCcw className="w-3 h-3" />
+                                {text.putbackAlert}
+                              </div>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-3 py-3 text-slate-500 align-top text-sm break-all">{view === 'history' ? '-' : item.location}</td>
+                        <td className="px-3 py-3 text-slate-500 align-top text-sm break-all">{item.location}</td>
                         <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{item.qty}</td>
                         <td className="px-3 py-3 text-slate-500 align-top">
                           <div className="space-y-1 min-w-0">
@@ -962,50 +983,19 @@ export const CounterPickupListing: React.FC = () => {
                             {queueLabel(item.queueStatus)}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.referenceNo || '-'}</td>
-                        <td className="px-3 py-3 text-slate-500 align-top text-sm">{destinationLabel(item.destination)}</td>
-                        <td className="px-3 py-3 align-top">
-                          <div className="flex justify-end gap-1.5 flex-wrap">
-                            {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus === 'Pending' && (
-                              <button
-                                onClick={() => handleStartPicking(item.id)}
-                                disabled={submitting}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 text-white rounded-lg text-[11px] font-semibold hover:bg-sky-700 disabled:opacity-50"
-                              >
-                                <ShoppingBag className="w-3 h-3" />
-                                {text.startPicking}
-                              </button>
-                            )}
-                            {canManageWarehouse && item.status === 'PendingPick' && item.queueStatus !== 'Picked' && (
-                              <button
-                                onClick={() => handleMarkPicked(item.id)}
-                                disabled={submitting}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-[11px] font-semibold hover:bg-emerald-700 disabled:opacity-50"
-                              >
-                                <CheckCircle2 className="w-3 h-3" />
-                                {text.markPicked}
-                              </button>
-                            )}
-                            {canCreate && item.status === 'Picked' && (
-                              <button
-                                onClick={() => {
-                                  setFinalizeTarget(item);
-                                  setFinalizeForm(emptyFinalizeForm);
-                                }}
-                                disabled={submitting}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50"
-                              >
-                                <Send className="w-3 h-3" />
-                                {text.finalize}
-                              </button>
-                            )}
-                          </div>
-                        </td>
+                        {view === 'history' && (
+                          <>
+                            <td className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.referenceNo || '-'}</td>
+                            <td className="px-3 py-3 text-slate-500 align-top text-sm">{destinationLabel(item.destination)}</td>
+                          </>
+                        )}
+                        <td className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
+                        <td className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyPickupNoteLabel(item)}</td>
                       </tr>
                     ))}
                     {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
                       <tr key={`${item.id}-details`} className="bg-slate-50/60">
-                        <td colSpan={12} className="px-3 pb-4 pt-0">
+                        <td colSpan={view === 'history' ? 14 : 12} className="px-3 pb-4 pt-0">
                           <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
@@ -1015,6 +1005,9 @@ export const CounterPickupListing: React.FC = () => {
                               >
                                 Hide details
                               </button>
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {item.items?.length || 1} item(s) · {item.status} · {historyPickupNoteLabel(item) !== '-' ? `Pickup Note: ${historyPickupNoteLabel(item)}` : 'No pickup note'}
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                               {(item.items || [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
@@ -1123,6 +1116,90 @@ export const CounterPickupListing: React.FC = () => {
                   />
                 </div>
               )}
+
+              <div className="rounded-xl border border-slate-200 bg-white">
+                <div className="px-4 py-3 border-b border-slate-200">
+                  <div className="text-sm font-semibold text-slate-900">Item-level handling</div>
+                  <div className="text-xs text-slate-500 mt-1">Leave as default to apply the same handling to all items.</div>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {(finalizeTarget.items?.length ? finalizeTarget.items : [{
+                    sku: finalizeTarget.sku,
+                    productName: finalizeTarget.productName,
+                    location: finalizeTarget.location,
+                    qty: finalizeTarget.qty
+                  }]).map((item, index) => {
+                    const itemAction = itemFinalizeActions[index] || createDefaultItemAction();
+                    return (
+                      <div key={`${item.sku}-${index}`} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 break-words">{item.sku}</div>
+                            <div className="text-xs text-slate-500 break-words">{item.productName}</div>
+                          </div>
+                          <div className="text-xs font-semibold text-slate-500 whitespace-nowrap">{item.qty} x {item.location}</div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-xs font-medium text-slate-600">Destination</label>
+                            <select
+                              value={itemAction.destination || finalizeForm.destination}
+                              onChange={(e) => {
+                                const next = e.target.value as FinalizeFormState['destination'];
+                                setItemFinalizeActions((prev) => {
+                                  const copy = [...prev];
+                                  copy[index] = { ...(copy[index] || createDefaultItemAction()), destination: next };
+                                  return copy;
+                                });
+                              }}
+                              className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                            >
+                              <option value="">{text.selectOne}</option>
+                              <option value="Returned">{text.returned}</option>
+                              <option value="Sold">{text.sold}</option>
+                              <option value="Other">{text.other}</option>
+                            </select>
+                          </div>
+                          {(itemAction.destination || finalizeForm.destination) === 'Sold' && (
+                            <div>
+                              <label className="text-xs font-medium text-slate-600">{text.referenceNo}</label>
+                              <input
+                                value={itemAction.referenceNo}
+                                onChange={(e) => {
+                                  const value = e.target.value.toUpperCase();
+                                  setItemFinalizeActions((prev) => {
+                                    const copy = [...prev];
+                                    copy[index] = { ...(copy[index] || createDefaultItemAction()), referenceNo: value };
+                                    return copy;
+                                  });
+                                }}
+                                className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          )}
+                          {(itemAction.destination || finalizeForm.destination) === 'Other' && (
+                            <div>
+                              <label className="text-xs font-medium text-slate-600">{text.otherNotes}</label>
+                              <input
+                                value={itemAction.otherNotes}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setItemFinalizeActions((prev) => {
+                                    const copy = [...prev];
+                                    copy[index] = { ...(copy[index] || createDefaultItemAction()), otherNotes: value };
+                                    return copy;
+                                  });
+                                }}
+                                className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3">

@@ -7,6 +7,7 @@ export type UserStatus = 'Active' | 'Disabled';
 export type CounterPickupStatus = 'PendingPick' | 'Picked' | 'PendingPutback' | 'Finalized';
 export type CounterPickupQueueStatus = 'Pending' | 'Picking' | 'Picked';
 export type CounterPickupDestination = 'Returned' | 'Sold' | 'Other';
+export type CounterPickupFinalItemDestination = CounterPickupDestination;
 
 export interface SKU {
   id?: string;
@@ -202,6 +203,20 @@ export interface OperationLog {
   orderId?: string | null;
 }
 
+export interface CounterPickupItem {
+  sku: string;
+  productName: string;
+  location: string;
+  qty: number;
+  destination?: CounterPickupFinalItemDestination | null;
+  referenceNo?: string | null;
+  otherNotes?: string | null;
+  finalizedAt?: string | null;
+  finalizedBy?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+}
+
 export interface CounterPickupLog {
   id?: string;
   timestamp: string;
@@ -217,18 +232,14 @@ export interface CounterPickup {
   location: string;
   qty: number;
   warehouseId: string;
-  items?: Array<{
-    sku: string;
-    productName: string;
-    location: string;
-    qty: number;
-  }>;
+  items?: CounterPickupItem[];
   status: CounterPickupStatus;
   queueStatus: CounterPickupQueueStatus;
-  destination?: CounterPickupDestination | null;
+  destination?: CounterPickupDestination | 'Mixed' | null;
   referenceNo?: string | null;
   otherNotes?: string | null;
   comment?: string | null;
+  pickupNote?: string | null;
   createdBy: string;
   createdByUid?: string;
   pickedBy?: string | null;

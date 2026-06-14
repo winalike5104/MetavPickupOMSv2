@@ -565,6 +565,12 @@ export const PickingQueue: React.FC = () => {
                           <p className="text-sm font-bold text-slate-900">{item.qty}</p>
                         </div>
                       </div>
+                      {(item.pickupNote || item.comment) && (
+                        <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">Pickup Note</p>
+                          <p className="text-sm text-slate-700 break-words">{item.pickupNote || item.comment}</p>
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       {item.queueStatus === 'Pending' && (

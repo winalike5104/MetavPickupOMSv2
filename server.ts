@@ -179,6 +179,7 @@ const buildCounterPickupDetail = (pickup: any) => {
     referenceNo: pickup.referenceNo || null,
     otherNotes: pickup.otherNotes || null,
     comment: pickup.comment || null,
+    pickupNote: pickup.pickupNote || null,
     warehouseId: pickup.warehouseId || null,
     createdBy: pickup.createdBy,
     createdByUid: pickup.createdByUid || null,
@@ -731,7 +732,8 @@ async function startServer() {
       const qty = Number(req.body?.qty || 0);
       const manualProductName = String(req.body?.productName || "").trim();
       const manualLocation = String(req.body?.location || "").trim().toUpperCase();
-      const comment = String(req.body?.comment || req.body?.note || "").trim();
+      const comment = String(req.body?.comment || "").trim();
+      const pickupNote = String(req.body?.pickupNote || req.body?.note || "").trim();
       const incomingItems = Array.isArray(req.body?.items) ? req.body.items : [];
       const requestedWh = (req.headers["x-warehouse-id"] as string) || "";
       const warehouseId = requestedWh || (req.user.allowedWarehouses || [])[0] || "";
@@ -783,6 +785,7 @@ async function startServer() {
         referenceNo: null,
         otherNotes: null,
         comment: comment || null,
+        pickupNote: pickupNote || null,
         createdBy: req.user.name || req.user.username,
         createdByUid: req.user.uid,
         pickedBy: null,
@@ -910,6 +913,7 @@ async function startServer() {
       const destination = String(req.body?.destination || "").trim() as any;
       const referenceNo = String(req.body?.referenceNo || "").trim();
       const otherNotes = String(req.body?.otherNotes || "").trim();
+      const itemActions = Array.isArray(req.body?.itemActions) ? req.body.itemActions : [];
       const docRef = currentDb.collection("counter_pickups").doc(req.params.id);
       const snap = await docRef.get();
       if (!snap.exists) return res.status(404).json({ success: false, error: "Counter pickup not found" });
@@ -920,47 +924,118 @@ async function startServer() {
       }
 
       const timestamp = nowAucklandIso();
-      const updatePayload: any = {
-        destination,
-        updatedAt: timestamp
-      };
-      let action = "";
-      let detail = "";
+      const baseItems = Array.isArray(data.items) && data.items.length > 0
+        ? data.items
+        : [{ sku: data.sku, productName: data.productName, location: data.location, qty: data.qty }];
 
-      if (destination === "Returned") {
-        updatePayload.status = "PendingPutback";
-        action = "CP_RETURN_INIT";
-        detail = `Reception requested putback for SKU ${data.sku}, qty ${data.qty}.`;
-      } else if (destination === "Sold") {
-        if (!referenceNo) {
-          return res.status(400).json({ success: false, error: "Reference number is required when destination is Sold" });
-        }
-        updatePayload.status = "Finalized";
-        updatePayload.referenceNo = referenceNo;
-        updatePayload.finalizedAt = timestamp;
-        updatePayload.finalizedBy = req.user.name || req.user.username;
-        updatePayload.completedAt = timestamp;
-        updatePayload.completedBy = req.user.name || req.user.username;
-        action = "CP_FINALIZE_SOLD";
-        detail = `Reception finalized counter pickup as Sold. Reference: ${referenceNo}.`;
-      } else if (destination === "Other") {
-        if (otherNotes.length < 5) {
-          return res.status(400).json({ success: false, error: "Other notes must be at least 5 characters" });
-        }
-        updatePayload.status = "Finalized";
-        updatePayload.otherNotes = otherNotes;
-        updatePayload.finalizedAt = timestamp;
-        updatePayload.finalizedBy = req.user.name || req.user.username;
-        updatePayload.completedAt = timestamp;
-        updatePayload.completedBy = req.user.name || req.user.username;
-        action = "CP_FINALIZE_OTHER";
-        detail = `Reception finalized counter pickup as Other. Notes: ${otherNotes}.`;
-      } else {
+      const normalizedActions = baseItems.map((item: any, index: number) => {
+        const raw = itemActions[index] || {};
+        const itemDestination = String(raw.destination || destination || "").trim();
+        const itemReferenceNo = String(raw.referenceNo || referenceNo || "").trim();
+        const itemOtherNotes = String(raw.otherNotes || otherNotes || "").trim();
+        return {
+          destination: itemDestination,
+          referenceNo: itemReferenceNo,
+          otherNotes: itemOtherNotes
+        };
+      });
+
+      if (normalizedActions.some((item: any) => !item.destination)) {
         return res.status(400).json({ success: false, error: "Invalid destination" });
       }
 
+      const allSold = normalizedActions.every((item: any) => item.destination === "Sold");
+      const allOther = normalizedActions.every((item: any) => item.destination === "Other");
+      const anyReturned = normalizedActions.some((item: any) => item.destination === "Returned");
+      const topLevelDestination = anyReturned ? "Returned" : (allSold ? "Sold" : (allOther ? "Other" : "Mixed"));
+
+      const updatePayload: any = {
+        destination: topLevelDestination,
+        updatedAt: timestamp
+      };
+
+      const updatedItems = baseItems.map((item: any, index: number) => {
+        const itemAction = normalizedActions[index];
+        const itemUpdate: any = {
+          ...item,
+          destination: itemAction.destination
+        };
+
+        if (itemAction.destination === "Returned") {
+          itemUpdate.status = "PendingPutback";
+          itemUpdate.finalizedAt = null;
+          itemUpdate.finalizedBy = null;
+          itemUpdate.completedAt = null;
+          itemUpdate.completedBy = null;
+        } else if (itemAction.destination === "Sold") {
+          if (!itemAction.referenceNo) {
+            throw new Error("Reference number is required when destination is Sold");
+          }
+          itemUpdate.referenceNo = itemAction.referenceNo;
+          itemUpdate.finalizedAt = timestamp;
+          itemUpdate.finalizedBy = req.user.name || req.user.username;
+          itemUpdate.completedAt = timestamp;
+          itemUpdate.completedBy = req.user.name || req.user.username;
+        } else if (itemAction.destination === "Other") {
+          if (itemAction.otherNotes.length < 5) {
+            throw new Error("Other notes must be at least 5 characters");
+          }
+          itemUpdate.otherNotes = itemAction.otherNotes;
+          itemUpdate.finalizedAt = timestamp;
+          itemUpdate.finalizedBy = req.user.name || req.user.username;
+          itemUpdate.completedAt = timestamp;
+          itemUpdate.completedBy = req.user.name || req.user.username;
+        } else {
+          throw new Error("Invalid destination");
+        }
+
+        return itemUpdate;
+      });
+
+      const anyPendingPutback = updatedItems.some((item: any) => item.destination === "Returned");
+      if (anyPendingPutback) {
+        updatePayload.status = "PendingPutback";
+        updatePayload.otherNotes = null;
+        updatePayload.referenceNo = null;
+      } else {
+        updatePayload.status = "Finalized";
+      }
+      updatePayload.items = updatedItems;
+
+      if (allSold) {
+        updatePayload.referenceNo = referenceNo || updatedItems[0]?.referenceNo || null;
+        if (!updatePayload.referenceNo) {
+          return res.status(400).json({ success: false, error: "Reference number is required when destination is Sold" });
+        }
+      }
+      if (allOther) {
+        updatePayload.otherNotes = otherNotes || updatedItems[0]?.otherNotes || null;
+        if (!updatePayload.otherNotes || String(updatePayload.otherNotes).length < 5) {
+          return res.status(400).json({ success: false, error: "Other notes must be at least 5 characters" });
+        }
+      }
+
+      if (normalizedActions.length === 1) {
+        const onlyAction = normalizedActions[0];
+        if (onlyAction.destination === "Returned") {
+          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_RETURN_INIT", `Reception requested putback for SKU ${data.sku}, qty ${data.qty}.`, req.user);
+        } else if (onlyAction.destination === "Sold") {
+          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_FINALIZE_SOLD", `Reception finalized counter pickup as Sold. Reference: ${onlyAction.referenceNo || referenceNo}.`, req.user);
+        } else {
+          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_FINALIZE_OTHER", `Reception finalized counter pickup as Other. Notes: ${onlyAction.otherNotes || otherNotes}.`, req.user);
+        }
+      } else {
+        await writeCounterPickupLog(
+          currentDb,
+          req.params.id,
+          req.user.name || req.user.username,
+          anyPendingPutback ? "CP_RETURN_INIT" : "CP_FINALIZE_MIXED",
+          `Reception finalized counter pickup with mixed item actions: ${normalizedActions.map((item: any, index: number) => `${baseItems[index]?.sku || index}:${item.destination}`).join(', ')}.`,
+          req.user
+        );
+      }
+
       await docRef.set(updatePayload, { merge: true });
-      await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, action, detail, req.user);
 
       return res.json({ success: true });
     } catch (error: any) {
