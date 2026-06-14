@@ -553,16 +553,16 @@ export const PickingQueue: React.FC = () => {
                           <p className="text-sm font-bold text-slate-900">{item.id}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-slate-400">Products</p>
-                          <p className="text-sm font-bold text-slate-900">{item.items?.length || 1} line(s)</p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400">SKU</p>
+                          <p className="text-sm font-black text-slate-900 break-words">{item.sku}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-slate-400">Location</p>
-                          <p className="text-sm font-bold text-slate-900">{item.location}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400">LOC</p>
+                          <p className="text-sm font-black text-slate-900">{item.location}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-slate-400">Qty</p>
-                          <p className="text-sm font-bold text-slate-900">{item.qty}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400">QTY</p>
+                          <p className="text-sm font-black text-slate-900">{item.qty}</p>
                         </div>
                       </div>
                       <div className="mt-3 space-y-2">
@@ -570,8 +570,10 @@ export const PickingQueue: React.FC = () => {
                           <div key={`${item.id}-${entry.sku}-${idx}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                               <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Item {idx + 1}</span>
-                              <span className="text-sm font-bold text-slate-900 break-words">{entry.sku}</span>
-                              <span className="text-sm text-slate-700 break-words">{entry.productName}</span>
+                              <span className="text-sm font-black text-slate-900 break-words">{entry.sku}</span>
+                              {entry.productName && (
+                                <span className="text-xs text-slate-500 break-words truncate max-w-full">{entry.productName}</span>
+                              )}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                               <span>Loc: {entry.location}</span>
