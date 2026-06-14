@@ -1002,8 +1002,12 @@ async function startServer() {
         updatePayload.status = "PendingPutback";
         updatePayload.otherNotes = null;
         updatePayload.referenceNo = null;
+        updatePayload.putbackItems = updatedItems.filter((item: any) => item.destination === "Returned");
+        updatePayload.putbackQty = updatePayload.putbackItems.reduce((sum: number, item: any) => sum + Number(item.qty || 0), 0);
       } else {
         updatePayload.status = "Finalized";
+        updatePayload.putbackItems = [];
+        updatePayload.putbackQty = 0;
       }
       updatePayload.items = updatedItems;
 

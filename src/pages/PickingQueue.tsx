@@ -248,18 +248,29 @@ export const PickingQueue: React.FC = () => {
   }, [counterPickups]);
 
   const getQueueDisplayItems = (item: CounterPickup) => {
+    const putbackItems = Array.isArray((item as any).putbackItems) ? (item as any).putbackItems : [];
+    if (item.status === 'PendingPutback' && putbackItems.length > 0) {
+      return putbackItems;
+    }
+
     const sourceItems = item.items?.length
       ? item.items
       : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty, destination: item.destination }];
 
     if (item.status === 'PendingPutback') {
-      return sourceItems.filter((entry: any) => (entry.destination || item.destination) === 'Returned');
+      const returnedItems = sourceItems.filter((entry: any) => (entry.destination || item.destination) === 'Returned');
+      if (returnedItems.length > 0) return returnedItems;
+      return [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty, destination: item.destination }];
     }
 
     return sourceItems;
   };
 
   const getQueueDisplayQty = (item: CounterPickup) => {
+    const putbackQty = Number((item as any).putbackQty || 0);
+    if (item.status === 'PendingPutback' && putbackQty > 0) {
+      return putbackQty;
+    }
     return getQueueDisplayItems(item).reduce((sum, entry: any) => sum + (Number(entry.qty) || 0), 0) || item.qty;
   };
 
