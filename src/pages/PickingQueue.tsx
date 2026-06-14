@@ -231,6 +231,22 @@ export const PickingQueue: React.FC = () => {
     return matchesSearch;
   });
 
+  const counterStats = useMemo(() => {
+    const todayKey = new Date().toISOString().split('T')[0];
+    const createdToday = counterPickups.filter((item) => {
+      const createdKey = item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '';
+      return createdKey === todayKey;
+    }).length;
+
+    return {
+      createdToday,
+      pending: counterPickups.filter((item) => item.status === 'PendingPick').length,
+      ready: counterPickups.filter((item) => item.status === 'Picked').length,
+      putback: counterPickups.filter((item) => item.status === 'PendingPutback').length,
+      finalized: counterPickups.filter((item) => item.status === 'Finalized').length
+    };
+  }, [counterPickups]);
+
   const handleUpdateItemStatus = async (orderId: string, sku: string, status: 'Pending' | 'Picked') => {
     if (!profile) return;
     const updateKey = `${orderId}-${sku}`;
@@ -464,6 +480,21 @@ export const PickingQueue: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
         <div className="max-w-5xl mx-auto space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { label: 'Today New', value: counterStats.createdToday, tone: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+              { label: 'Pending', value: counterStats.pending, tone: 'bg-slate-50 text-slate-700 border-slate-200' },
+              { label: 'Ready', value: counterStats.ready, tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+              { label: 'Putback', value: counterStats.putback, tone: 'bg-amber-50 text-amber-700 border-amber-100' },
+              { label: 'Finalized', value: counterStats.finalized, tone: 'bg-rose-50 text-rose-700 border-rose-100' }
+            ].map((stat) => (
+              <div key={stat.label} className={cn('rounded-2xl border p-4 shadow-sm', stat.tone)}>
+                <div className="text-[10px] uppercase tracking-wider font-bold opacity-80">{stat.label}</div>
+                <div className="text-2xl font-black mt-1">{stat.value}</div>
+              </div>
+            ))}
+          </div>
+
           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

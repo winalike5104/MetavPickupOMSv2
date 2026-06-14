@@ -246,9 +246,12 @@ export const CounterPickupListing: React.FC = () => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(true);
+  const [showMyPending, setShowMyPending] = useState(false);
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<CounterPickupItemDraft>(createEmptyDraft);
   const [itemsDraft, setItemsDraft] = useState<CounterPickupItem[]>([]);
   const [comment, setComment] = useState('');
+  const suppressSkuSearchRef = useRef(false);
 
   const [finalizeTarget, setFinalizeTarget] = useState<CounterPickup | null>(null);
   const [finalizeForm, setFinalizeForm] = useState<FinalizeFormState>(emptyFinalizeForm);
@@ -275,7 +278,7 @@ export const CounterPickupListing: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view]);
+  }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view, showMyPending]);
 
   const resetCreateForm = () => {
     setDraft(createEmptyDraft());
@@ -307,6 +310,10 @@ export const CounterPickupListing: React.FC = () => {
   }, [token, activeWarehouse, view]);
 
   useEffect(() => {
+    if (suppressSkuSearchRef.current) {
+      suppressSkuSearchRef.current = false;
+      return;
+    }
     if (!token || draft.skuQuery.trim().length < 2) {
       setDraft((prev) => ({ ...prev, skuResults: [], showSkuResults: false }));
       return;
@@ -354,6 +361,7 @@ export const CounterPickupListing: React.FC = () => {
   }, [draft.skuQuery, token, activeWarehouse, text.searchSkuError]);
 
   const applySelectedSku = (selected: SKU) => {
+    suppressSkuSearchRef.current = true;
     setDraft((prev) => ({
       ...prev,
       sku: selected.sku,
@@ -371,6 +379,7 @@ export const CounterPickupListing: React.FC = () => {
 
   const useCustomSku = () => {
     const normalized = draft.skuQuery.trim().toUpperCase();
+    suppressSkuSearchRef.current = true;
     setDraft((prev) => ({
       ...prev,
       sku: normalized,
@@ -407,7 +416,13 @@ export const CounterPickupListing: React.FC = () => {
       return;
     }
     if (!Number.isInteger(item.qty) || item.qty <= 0) return;
-    setItemsDraft((prev) => [...prev, item]);
+    setItemsDraft((prev) => {
+      const idx = prev.findIndex((draftItem) => draftItem.sku === item.sku && draftItem.location === item.location);
+      if (idx >= 0) {
+        return prev.map((draftItem, i) => i === idx ? { ...draftItem, qty: draftItem.qty + item.qty } : draftItem);
+      }
+      return [...prev, item];
+    });
     setDraft(createEmptyDraft());
   };
 
@@ -546,9 +561,10 @@ export const CounterPickupListing: React.FC = () => {
       const matchesDate =
         (!dateRange.start || itemDate >= dateRange.start) &&
         (!dateRange.end || itemDate <= dateRange.end);
-      return matchesSearch && matchesStatus && matchesQueue && matchesDate;
+      const matchesMine = !showMyPending || item.createdByUid === profile?.uid;
+      return matchesSearch && matchesStatus && matchesQueue && matchesDate && matchesMine;
     });
-  }, [requests, searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end]);
+  }, [requests, searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, showMyPending, profile?.uid]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
   const paginatedRequests = useMemo(() => {
@@ -581,6 +597,7 @@ export const CounterPickupListing: React.FC = () => {
     return destination;
   };
   const historyNoteLabel = (item: CounterPickup) => item.comment || item.otherNotes || '-';
+  const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
@@ -828,6 +845,19 @@ export const CounterPickupListing: React.FC = () => {
                   </button>
                 </div>
               </div>
+              {canCreate && (
+                <div className="lg:col-span-12 flex items-center justify-end">
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={showMyPending}
+                      onChange={(e) => setShowMyPending(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    My Pending
+                  </label>
+                </div>
+              )}
             </div>
           </section>
           )}
@@ -867,7 +897,18 @@ export const CounterPickupListing: React.FC = () => {
                       <tr key={item.id} className={cn('hover:bg-slate-50 transition-colors', item.status === 'Picked' && 'bg-red-50/40', item.status === 'PendingPutback' && 'bg-amber-50/40')}>
                         <td className="px-3 py-3 font-bold text-slate-900 align-top">
                           <div className="space-y-1">
-                            <span className="block text-sm break-words" title={item.id}>{item.id}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="block text-sm break-words" title={item.id}>{item.id}</span>
+                              {view === 'history' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedHistoryIds((prev) => prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id])}
+                                  className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-700"
+                                >
+                                  {isExpandedHistory(item.id) ? 'Hide' : 'Expand'}
+                                </button>
+                              )}
+                            </div>
                             <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
                           </div>
                         </td>
@@ -917,7 +958,7 @@ export const CounterPickupListing: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-3 py-3 align-top">
-                          <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus))}>
+                          <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
                             {queueLabel(item.queueStatus)}
                           </span>
                         </td>
@@ -962,6 +1003,34 @@ export const CounterPickupListing: React.FC = () => {
                         </td>
                       </tr>
                     ))}
+                    {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
+                      <tr key={`${item.id}-details`} className="bg-slate-50/60">
+                        <td colSpan={12} className="px-3 pb-4 pt-0">
+                          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
+                              <button
+                                onClick={() => setExpandedHistoryIds((prev) => prev.filter((id) => id !== item.id))}
+                                className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                              >
+                                Hide details
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {(item.items || [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
+                                <div key={`${entry.sku}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-slate-900 break-words">{entry.sku}</div>
+                                    <div className="text-xs text-slate-500 truncate">{entry.productName}</div>
+                                  </div>
+                                  <div className="text-xs text-slate-700 font-semibold whitespace-nowrap">{entry.qty} x {entry.location}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -997,10 +1066,25 @@ export const CounterPickupListing: React.FC = () => {
 
       {finalizeTarget && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
             <div>
               <h2 className="text-xl font-bold text-slate-900">{text.finalizeTitle}</h2>
               <p className="text-sm text-slate-500 mt-1">{finalizeTarget.id} | {finalizeTarget.sku}</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold">Items</span>
+                <span>{(finalizeTarget.items?.length || 1)} product(s)</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="font-semibold">Total Qty</span>
+                <span>{finalizeTarget.qty}</span>
+              </div>
+              <div className="flex items-start justify-between gap-3 mt-2">
+                <span className="font-semibold">Note</span>
+                <span className="text-right max-w-[70%] break-words">{finalizeTarget.comment || finalizeTarget.otherNotes || '-'}</span>
+              </div>
             </div>
 
             <div className="space-y-4">
