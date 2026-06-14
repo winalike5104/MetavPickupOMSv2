@@ -885,127 +885,145 @@ export const CounterPickupListing: React.FC = () => {
                 <table className="w-full table-fixed text-left">
                   <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase">
                     <tr>
-                      <th className="px-3 py-3 w-[14%]">{text.requestNo}</th>
+                      <th className="px-3 py-3 w-[10%]">{text.requestNo}</th>
                       <th className="px-3 py-3 w-[10%]">SKU</th>
-                      <th className="px-3 py-3 w-[18%]">{text.productName}</th>
-                      <th className="px-3 py-3 w-[7%]">{text.location}</th>
+                      <th className="px-3 py-3 w-[20%]">{text.productName}</th>
+                      <th className="px-3 py-3 w-[8%]">{text.location}</th>
                       <th className="px-3 py-3 w-[5%] text-right">{text.qty}</th>
-                      <th className="px-3 py-3 w-[12%]">{text.warehouse} / {text.createdBy}</th>
-                      <th className="px-3 py-3 w-[10%]">{text.createdAt}</th>
+                      <th className="px-3 py-3 w-[10%]">{text.warehouse} / {text.createdBy}</th>
+                      <th className="px-3 py-3 w-[9%]">{text.createdAt}</th>
                       <th className="px-3 py-3 w-[8%]">{text.statusFilter}</th>
-                      <th className="px-3 py-3 w-[7%]">{text.queueFilter}</th>
+                      <th className="px-3 py-3 w-[8%]">{text.queueFilter}</th>
                       {view === 'history' && (
                         <>
-                          <th className="px-3 py-3 w-[8%]">{text.referenceNo}</th>
+                          <th className="px-3 py-3 w-[7%]">{text.referenceNo}</th>
                           <th className="px-3 py-3 w-[7%]">{text.destination}</th>
                         </>
                       )}
-                      <th className="px-3 py-3 w-[14%]">Comment</th>
-                      <th className="px-3 py-3 w-[14%]">Pickup Note</th>
+                      <th className="px-3 py-3 w-[10%]">Comment</th>
+                      <th className="px-3 py-3 w-[10%]">Pickup Note</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {paginatedRequests.map((item) => (
-                      <tr key={item.id} className={cn('hover:bg-slate-50 transition-colors', item.status === 'Picked' && 'bg-red-50/40', item.status === 'PendingPutback' && 'bg-amber-50/40')}>
-                        <td className="px-3 py-3 font-bold text-slate-900 align-top">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="block text-sm break-words" title={item.id}>{item.id}</span>
-                              {view === 'history' && (
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedHistoryIds((prev) => prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id])}
-                                  className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-700"
-                                >
-                                  {isExpandedHistory(item.id) ? 'Hide Details' : 'View Details'}
-                                </button>
-                              )}
-                            </div>
-                            <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm" title={item.sku}>{item.sku}</td>
-                        <td className="px-3 py-3 text-slate-700 align-top">
-                          <div className="space-y-1">
-                            <p className="font-medium text-sm truncate" title={item.productName}>
-                              {view === 'history' && item.items?.length
-                                ? `${item.items[0].productName}${item.items.length > 1 ? ` + ${item.items.length - 1} more` : ''}`
-                                : item.productName}
-                            </p>
-                            {item.status === 'Picked' && (
-                              <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
-                                <AlertTriangle className="w-3 h-3" />
-                                {text.pickedAlert}
+                      (() => {
+                        const requestItems = item.items?.length
+                          ? item.items
+                          : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }];
+                        return requestItems.map((entry, index) => (
+                          <tr
+                            key={`${item.id}-${entry.sku}-${index}`}
+                            className={cn(
+                              'transition-colors',
+                              item.status === 'Picked' && 'bg-red-50/40',
+                              item.status === 'PendingPutback' && 'bg-amber-50/40',
+                              index === 0 ? 'hover:bg-slate-50' : 'bg-slate-50/35 hover:bg-slate-100/60',
+                              index > 0 && 'border-t border-slate-100'
+                            )}
+                          >
+                            {index === 0 && (
+                              <td rowSpan={requestItems.length} className="px-3 py-3 font-bold text-slate-900 align-top">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="block text-sm break-words" title={item.id}>{item.id}</span>
+                                    {view === 'history' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedHistoryIds((prev) => prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id])}
+                                        className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-700"
+                                      >
+                                        {isExpandedHistory(item.id) ? 'Hide Details' : 'View Details'}
+                                      </button>
+                                    )}
+                                  </div>
+                                  <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
+                                </div>
+                              </td>
+                            )}
+                            <td className={cn('px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm', index > 0 && 'pl-5')}>
+                              <div className="flex items-center gap-2">
+                                {index > 0 && <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />}
+                                <span title={entry.sku}>{entry.sku}</span>
                               </div>
-                            )}
-                            {item.status === 'PendingPutback' && (
-                              <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
-                                <RotateCcw className="w-3 h-3" />
-                                {text.putbackAlert}
+                            </td>
+                            <td className="px-3 py-3 text-slate-700 align-top">
+                              <div className="space-y-1">
+                                <p className={cn('font-medium text-sm truncate', index > 0 && 'pl-4')} title={entry.productName}>{entry.productName}</p>
+                                {index === 0 && item.status === 'Picked' && (
+                                  <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {text.pickedAlert}
+                                  </div>
+                                )}
+                                {index === 0 && item.status === 'PendingPutback' && (
+                                  <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
+                                    <RotateCcw className="w-3 h-3" />
+                                    {text.putbackAlert}
+                                  </div>
+                                )}
                               </div>
+                            </td>
+                            <td className={cn('px-3 py-3 text-slate-500 align-top text-sm break-all', index > 0 && 'pl-5')}>{entry.location}</td>
+                            <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{entry.qty}</td>
+                            {index === 0 && (
+                              <>
+                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top">
+                                  <div className="space-y-1 min-w-0">
+                                    <p className="text-sm font-semibold text-slate-700 truncate" title={item.warehouseId || text.noWarehouse}>
+                                      {item.warehouseId || text.noWarehouse}
+                                    </p>
+                                    <p className="text-[11px] truncate" title={item.createdBy}>
+                                      {item.createdBy}
+                                    </p>
+                                  </div>
+                                </td>
+                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">
+                                  <div className="leading-tight">
+                                    <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
+                                    <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
+                                  </div>
+                                </td>
+                                <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
+                                  <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
+                                    {statusLabel(item.status)}
+                                  </span>
+                                </td>
+                                <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
+                                  <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
+                                    {queueLabel(item.queueStatus)}
+                                  </span>
+                                </td>
+                                {view === 'history' && (
+                                  <>
+                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.referenceNo || '-'}</td>
+                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">{destinationLabel(item.destination)}</td>
+                                  </>
+                                )}
+                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
+                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyPickupNoteLabel(item)}</td>
+                                <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
+                                  <div className="flex justify-end gap-1.5 flex-wrap">
+                                    {canCreate && item.status === 'Picked' && (
+                                      <button
+                                        onClick={() => {
+                                          setFinalizeTarget(item);
+                                          setFinalizeForm(emptyFinalizeForm);
+                                          setItemFinalizeActions((requestItems).map(() => createDefaultItemAction()));
+                                        }}
+                                        disabled={submitting}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+                                      >
+                                        <Send className="w-3 h-3" />
+                                        {text.finalize}
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </>
                             )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-slate-500 align-top text-sm break-all">{item.location}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{item.qty}</td>
-                        <td className="px-3 py-3 text-slate-500 align-top">
-                          <div className="space-y-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-700 truncate" title={item.warehouseId || text.noWarehouse}>
-                              {item.warehouseId || text.noWarehouse}
-                            </p>
-                            <p className="text-[11px] truncate" title={item.createdBy}>
-                              {item.createdBy}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-slate-500 align-top text-sm">
-                          <div className="leading-tight">
-                            <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
-                            <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 align-top">
-                          <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
-                            {statusLabel(item.status)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 align-top">
-                          <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
-                            {queueLabel(item.queueStatus)}
-                          </span>
-                        </td>
-                        {view === 'history' && (
-                          <>
-                            <td className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.referenceNo || '-'}</td>
-                            <td className="px-3 py-3 text-slate-500 align-top text-sm">{destinationLabel(item.destination)}</td>
-                          </>
-                        )}
-                        <td className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
-                        <td className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyPickupNoteLabel(item)}</td>
-                        <td className="px-3 py-3 align-top">
-                          <div className="flex justify-end gap-1.5 flex-wrap">
-                            {canCreate && item.status === 'Picked' && (
-                              <button
-                                onClick={() => {
-                                  setFinalizeTarget(item);
-                                  setFinalizeForm(emptyFinalizeForm);
-                                  setItemFinalizeActions((item.items?.length ? item.items : [{
-                                    sku: item.sku,
-                                    productName: item.productName,
-                                    location: item.location,
-                                    qty: item.qty
-                                  }]).map(() => createDefaultItemAction()));
-                                }}
-                                disabled={submitting}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50"
-                              >
-                                <Send className="w-3 h-3" />
-                                {text.finalize}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                          </tr>
+                        ));
+                      })()
                     ))}
                     {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
                       <tr key={`${item.id}-details`} className="bg-slate-50/60">
