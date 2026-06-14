@@ -164,17 +164,21 @@ const writeCounterPickupLog = async (
 };
 
 const buildCounterPickupDetail = (pickup: any) => {
+  const items = Array.isArray(pickup.items) ? pickup.items : [];
+  const primaryItem = items[0] || {};
   return {
     id: pickup.id,
-    sku: pickup.sku,
-    productName: pickup.productName,
-    location: pickup.location,
-    qty: pickup.qty,
+    sku: pickup.sku || primaryItem.sku || "",
+    productName: pickup.productName || primaryItem.productName || "",
+    location: pickup.location || primaryItem.location || "NOT_ASSIGNED",
+    qty: Number(pickup.qty || primaryItem.qty || 0),
+    items,
     status: pickup.status,
     queueStatus: pickup.queueStatus,
     destination: pickup.destination || null,
     referenceNo: pickup.referenceNo || null,
     otherNotes: pickup.otherNotes || null,
+    comment: pickup.comment || null,
     warehouseId: pickup.warehouseId || null,
     createdBy: pickup.createdBy,
     createdByUid: pickup.createdByUid || null,
@@ -727,36 +731,58 @@ async function startServer() {
       const qty = Number(req.body?.qty || 0);
       const manualProductName = String(req.body?.productName || "").trim();
       const manualLocation = String(req.body?.location || "").trim().toUpperCase();
+      const comment = String(req.body?.comment || req.body?.note || "").trim();
+      const incomingItems = Array.isArray(req.body?.items) ? req.body.items : [];
       const requestedWh = (req.headers["x-warehouse-id"] as string) || "";
       const warehouseId = requestedWh || (req.user.allowedWarehouses || [])[0] || "";
 
-      if (!rawSku) return res.status(400).json({ success: false, error: "SKU is required" });
       if (!warehouseId) return res.status(400).json({ success: false, error: "Warehouse is required" });
-      if (!Number.isInteger(qty) || qty <= 0) return res.status(400).json({ success: false, error: "Quantity must be a positive integer" });
+      const normalizedItems = incomingItems.length > 0
+        ? incomingItems
+        : (rawSku ? [{ sku: rawSku, qty, productName: manualProductName, location: manualLocation }] : []);
 
-      const skuSnap = await currentDb.collection("skus").where("sku", "==", rawSku).limit(1).get();
-      const skuData = skuSnap.empty ? null : skuSnap.docs[0].data() as any;
-      const resolvedProductName = skuData?.productName || manualProductName || rawSku;
-      const resolvedLocation = skuData?.location || manualLocation || "NOT_ASSIGNED";
+      if (normalizedItems.length === 0) return res.status(400).json({ success: false, error: "At least one item is required" });
 
-      if (!resolvedProductName) {
-        return res.status(400).json({ success: false, error: "Product name is required for unmatched or special SKU" });
+      const resolvedItems: Array<{ sku: string; qty: number; productName: string; location: string; }> = [];
+      for (const item of normalizedItems) {
+        const itemSku = String(item?.sku || "").trim().toUpperCase();
+        const itemQty = Number(item?.qty || 0);
+        const itemManualProductName = String(item?.productName || "").trim();
+        const itemManualLocation = String(item?.location || "").trim().toUpperCase();
+        if (!itemSku) return res.status(400).json({ success: false, error: "SKU is required" });
+        if (!Number.isInteger(itemQty) || itemQty <= 0) return res.status(400).json({ success: false, error: "Quantity must be a positive integer" });
+        const skuSnap = await currentDb.collection("skus").where("sku", "==", itemSku).limit(1).get();
+        const skuData = skuSnap.empty ? null : skuSnap.docs[0].data() as any;
+        const resolvedProductName = skuData?.productName || itemManualProductName || itemSku;
+        const resolvedLocation = skuData?.location || itemManualLocation || "NOT_ASSIGNED";
+        if (!resolvedProductName) {
+          return res.status(400).json({ success: false, error: "Product name is required for unmatched or special SKU" });
+        }
+        resolvedItems.push({
+          sku: itemSku,
+          qty: itemQty,
+          productName: resolvedProductName,
+          location: resolvedLocation
+        });
       }
 
       const counterPickupId = await getNextCounterPickupId(currentDb);
       const timestamp = nowAucklandIso();
+      const primaryItem = resolvedItems[0];
       const payload = {
         id: counterPickupId,
-        sku: rawSku,
-        productName: resolvedProductName,
-        location: resolvedLocation,
-        qty,
+        sku: primaryItem.sku,
+        productName: primaryItem.productName,
+        location: primaryItem.location,
+        qty: resolvedItems.reduce((sum: number, item: any) => sum + Number(item.qty || 0), 0),
         warehouseId,
+        items: resolvedItems,
         status: "PendingPick",
         queueStatus: "Pending",
         destination: null,
         referenceNo: null,
         otherNotes: null,
+        comment: comment || null,
         createdBy: req.user.name || req.user.username,
         createdByUid: req.user.uid,
         pickedBy: null,
@@ -777,7 +803,7 @@ async function startServer() {
         counterPickupId,
         req.user.name || req.user.username,
         "CP_CREATED",
-        `Counter pickup created for SKU ${rawSku}, qty ${qty}, warehouse ${warehouseId}${skuSnap.empty ? " (manual special SKU entry)" : ""}.`,
+        `Counter pickup created for ${resolvedItems.length} item(s), total qty ${payload.qty}, warehouse ${warehouseId}.`,
         req.user
       );
 

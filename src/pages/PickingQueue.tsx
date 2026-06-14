@@ -134,7 +134,7 @@ export const PickingQueue: React.FC = () => {
         }
         if (stopped) return;
         const activeQueueItems = ((data.requests || []) as CounterPickup[]).filter((item) =>
-          item.status === 'PendingPick' || item.status === 'Picked' || item.status === 'PendingPutback'
+          item.status === 'PendingPick' || item.status === 'Picked'
         );
         setCounterPickups(activeQueueItems);
       } catch (err) {

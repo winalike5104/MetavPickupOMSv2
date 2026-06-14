@@ -217,11 +217,18 @@ export interface CounterPickup {
   location: string;
   qty: number;
   warehouseId: string;
+  items?: Array<{
+    sku: string;
+    productName: string;
+    location: string;
+    qty: number;
+  }>;
   status: CounterPickupStatus;
   queueStatus: CounterPickupQueueStatus;
   destination?: CounterPickupDestination | null;
   referenceNo?: string | null;
   otherNotes?: string | null;
+  comment?: string | null;
   createdBy: string;
   createdByUid?: string;
   pickedBy?: string | null;

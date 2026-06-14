@@ -30,6 +30,28 @@ type FinalizeFormState = {
   otherNotes: string;
 };
 
+type CounterPickupItem = {
+  sku: string;
+  qty: number;
+  productName: string;
+  location: string;
+};
+
+type CounterPickupItemDraft = {
+  skuQuery: string;
+  sku: string;
+  qty: number;
+  productName: string;
+  location: string;
+  skuResults: SKU[];
+  showSkuResults: boolean;
+  skuMetaLoading: boolean;
+  skuMeta: { productName: string; location: string } | null;
+  skuLookupMiss: boolean;
+  manualProductName: string;
+  manualLocation: string;
+};
+
 const PAGE_SIZE = 50;
 
 const emptyFinalizeForm: FinalizeFormState = {
@@ -37,6 +59,21 @@ const emptyFinalizeForm: FinalizeFormState = {
   referenceNo: '',
   otherNotes: ''
 };
+
+const createEmptyDraft = (): CounterPickupItemDraft => ({
+  skuQuery: '',
+  sku: '',
+  qty: 1,
+  productName: '',
+  location: 'NOT_ASSIGNED',
+  skuResults: [],
+  showSkuResults: false,
+  skuMetaLoading: false,
+  skuMeta: null,
+  skuLookupMiss: false,
+  manualProductName: '',
+  manualLocation: 'NOT_ASSIGNED'
+});
 
 const CN_TEXT = {
   pageTitle: '申请提货列表',
@@ -209,17 +246,9 @@ export const CounterPickupListing: React.FC = () => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(true);
-
-  const [skuQuery, setSkuQuery] = useState('');
-  const [sku, setSku] = useState('');
-  const [qty, setQty] = useState(1);
-  const [skuResults, setSkuResults] = useState<SKU[]>([]);
-  const [showSkuResults, setShowSkuResults] = useState(false);
-  const [skuMetaLoading, setSkuMetaLoading] = useState(false);
-  const [skuMeta, setSkuMeta] = useState<{ productName: string; location: string } | null>(null);
-  const [skuLookupMiss, setSkuLookupMiss] = useState(false);
-  const [manualProductName, setManualProductName] = useState('');
-  const [manualLocation, setManualLocation] = useState('NOT_ASSIGNED');
+  const [draft, setDraft] = useState<CounterPickupItemDraft>(createEmptyDraft);
+  const [itemsDraft, setItemsDraft] = useState<CounterPickupItem[]>([]);
+  const [comment, setComment] = useState('');
 
   const [finalizeTarget, setFinalizeTarget] = useState<CounterPickup | null>(null);
   const [finalizeForm, setFinalizeForm] = useState<FinalizeFormState>(emptyFinalizeForm);
@@ -227,7 +256,7 @@ export const CounterPickupListing: React.FC = () => {
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const skuRef = useRef<HTMLDivElement>(null);
-  useClickOutside(skuRef, () => setShowSkuResults(false));
+  useClickOutside(skuRef, () => setDraft((prev) => ({ ...prev, showSkuResults: false })));
 
   const canCreate = profile?.roleTemplate === 'Reception' || profile?.roleTemplate === 'Admin';
   const canManageWarehouse =
@@ -249,15 +278,9 @@ export const CounterPickupListing: React.FC = () => {
   }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view]);
 
   const resetCreateForm = () => {
-    setSkuQuery('');
-    setSku('');
-    setQty(1);
-    setSkuResults([]);
-    setShowSkuResults(false);
-    setSkuMeta(null);
-    setSkuLookupMiss(false);
-    setManualProductName('');
-    setManualLocation('NOT_ASSIGNED');
+    setDraft(createEmptyDraft());
+    setItemsDraft([]);
+    setComment('');
   };
   const loadRequests = async (nextView = view) => {
     if (!token) return;
@@ -284,17 +307,16 @@ export const CounterPickupListing: React.FC = () => {
   }, [token, activeWarehouse, view]);
 
   useEffect(() => {
-    if (!token || skuQuery.trim().length < 2) {
-      setSkuResults([]);
-      setShowSkuResults(false);
+    if (!token || draft.skuQuery.trim().length < 2) {
+      setDraft((prev) => ({ ...prev, skuResults: [], showSkuResults: false }));
       return;
     }
 
     let cancelled = false;
     const timer = setTimeout(async () => {
-      setSkuMetaLoading(true);
+      setDraft((prev) => ({ ...prev, skuMetaLoading: true }));
       try {
-        const params = new URLSearchParams({ q: skuQuery.trim().toUpperCase(), limit: '20' });
+        const params = new URLSearchParams({ q: draft.skuQuery.trim().toUpperCase(), limit: '20' });
         const response = await fetch(`/api/skus/search?${params.toString()}`, {
           headers: {
             'x-v2-auth-token': `Bearer ${token}`,
@@ -304,18 +326,24 @@ export const CounterPickupListing: React.FC = () => {
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.error || text.searchSkuError);
         if (!cancelled) {
-          setSkuResults((data.skus || []) as SKU[]);
-          setShowSkuResults(true);
-          setSkuLookupMiss((data.skus || []).length === 0);
+          setDraft((prev) => ({
+            ...prev,
+            skuResults: (data.skus || []) as SKU[],
+            showSkuResults: true,
+            skuLookupMiss: (data.skus || []).length === 0,
+            skuMetaLoading: false
+          }));
         }
       } catch {
         if (!cancelled) {
-          setSkuResults([]);
-          setShowSkuResults(true);
-          setSkuLookupMiss(true);
+          setDraft((prev) => ({
+            ...prev,
+            skuResults: [],
+            showSkuResults: true,
+            skuLookupMiss: true,
+            skuMetaLoading: false
+          }));
         }
-      } finally {
-        if (!cancelled) setSkuMetaLoading(false);
       }
     }, 250);
 
@@ -323,39 +351,73 @@ export const CounterPickupListing: React.FC = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [skuQuery, token, activeWarehouse, text.searchSkuError]);
+  }, [draft.skuQuery, token, activeWarehouse, text.searchSkuError]);
 
   const applySelectedSku = (selected: SKU) => {
-    setSku(selected.sku);
-    setSkuQuery(selected.sku);
-    setSkuMeta({
-      productName: selected.productName || selected.sku,
-      location: selected.location || 'NOT_ASSIGNED'
-    });
-    setManualProductName(selected.productName || '');
-    setManualLocation(selected.location || 'NOT_ASSIGNED');
-    setSkuLookupMiss(false);
-    setShowSkuResults(false);
+    setDraft((prev) => ({
+      ...prev,
+      sku: selected.sku,
+      skuQuery: selected.sku,
+      skuMeta: {
+        productName: selected.productName || selected.sku,
+        location: selected.location || 'NOT_ASSIGNED'
+      },
+      manualProductName: selected.productName || '',
+      manualLocation: selected.location || 'NOT_ASSIGNED',
+      skuLookupMiss: false,
+      showSkuResults: false
+    }));
   };
 
   const useCustomSku = () => {
-    const normalized = skuQuery.trim().toUpperCase();
-    setSku(normalized);
-    setSkuQuery(normalized);
-    setSkuMeta(null);
-    setSkuLookupMiss(true);
-    setManualLocation((prev) => prev || 'NOT_ASSIGNED');
-    setShowSkuResults(false);
+    const normalized = draft.skuQuery.trim().toUpperCase();
+    setDraft((prev) => ({
+      ...prev,
+      sku: normalized,
+      skuQuery: normalized,
+      skuMeta: null,
+      skuLookupMiss: true,
+      manualLocation: prev.manualLocation || 'NOT_ASSIGNED',
+      showSkuResults: false
+    }));
+  };
+
+  const currentItem = (): CounterPickupItem => {
+    const finalSku = (draft.sku || draft.skuQuery).trim().toUpperCase();
+    const resolvedProductName = (draft.skuMeta?.productName || draft.manualProductName).trim();
+    const resolvedLocation = (draft.skuMeta?.location || draft.manualLocation || 'NOT_ASSIGNED').trim().toUpperCase();
+    return {
+      sku: finalSku,
+      qty: draft.qty,
+      productName: resolvedProductName,
+      location: resolvedLocation || 'NOT_ASSIGNED'
+    };
+  };
+
+  const canAddDraftItem = () => {
+    const item = currentItem();
+    return !!item.sku && !!item.productName && Number.isInteger(item.qty) && item.qty > 0;
+  };
+
+  const addDraftItem = () => {
+    const item = currentItem();
+    if (!item.sku) return;
+    if (!item.productName) {
+      alert(text.productNameRequired);
+      return;
+    }
+    if (!Number.isInteger(item.qty) || item.qty <= 0) return;
+    setItemsDraft((prev) => [...prev, item]);
+    setDraft(createEmptyDraft());
   };
 
   const handleCreate = async () => {
-    if (!token || !(sku || skuQuery).trim()) return;
-
-    const finalSku = (sku || skuQuery).trim().toUpperCase();
-    const resolvedProductName = (skuMeta?.productName || manualProductName).trim();
-    const resolvedLocation = (skuMeta?.location || manualLocation || 'NOT_ASSIGNED').trim().toUpperCase();
-
-    if (!resolvedProductName) {
+    if (!token) return;
+    const combinedItems = [...itemsDraft];
+    const pending = currentItem();
+    if (pending.sku) combinedItems.push(pending);
+    if (combinedItems.length === 0) return;
+    if (combinedItems.some((item) => !item.productName)) {
       alert(text.productNameRequired);
       return;
     }
@@ -370,10 +432,8 @@ export const CounterPickupListing: React.FC = () => {
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
-          sku: finalSku,
-          qty,
-          productName: resolvedProductName,
-          location: resolvedLocation || 'NOT_ASSIGNED'
+          items: combinedItems,
+          comment
         })
       });
       const data = await response.json();
@@ -478,7 +538,7 @@ export const CounterPickupListing: React.FC = () => {
 
   const filteredRequests = useMemo(() => {
     return requests.filter((item) => {
-      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''}`.toLowerCase();
+      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''} ${item.comment || ''} ${item.otherNotes || ''}`.toLowerCase();
       const matchesSearch = haystack.includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       const matchesQueue = queueFilter === 'All' || item.queueStatus === queueFilter;
@@ -520,6 +580,7 @@ export const CounterPickupListing: React.FC = () => {
     if (destination === 'Other') return text.other;
     return destination;
   };
+  const historyNoteLabel = (item: CounterPickup) => item.comment || item.otherNotes || '-';
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
@@ -561,23 +622,20 @@ export const CounterPickupListing: React.FC = () => {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <input
-                      value={skuQuery}
+                      value={draft.skuQuery}
                       onChange={(e) => {
                         const next = e.target.value.toUpperCase();
-                        setSkuQuery(next);
-                        setSku(next);
-                        setSkuMeta(null);
-                        setSkuLookupMiss(false);
+                        setDraft((prev) => ({ ...prev, skuQuery: next, sku: next, skuMeta: null, skuLookupMiss: false }));
                       }}
                       className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                       placeholder={text.skuPlaceholder}
                     />
-                    {skuMetaLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
+                    {draft.skuMetaLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
                   </div>
 
-                  {showSkuResults && (
+                  {draft.showSkuResults && (
                     <div className="mt-2 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-auto">
-                      {skuResults.map((result) => (
+                      {draft.skuResults.map((result) => (
                         <button
                           key={result.id || result.sku}
                           type="button"
@@ -600,9 +658,9 @@ export const CounterPickupListing: React.FC = () => {
                         onClick={useCustomSku}
                         className="w-full px-4 py-3 text-left hover:bg-indigo-50 text-indigo-600 font-semibold"
                       >
-                        {text.manualSku}: {skuQuery || 'SKU'}
+                        {text.manualSku}: {draft.skuQuery || 'SKU'}
                       </button>
-                      {skuResults.length === 0 && (
+                      {draft.skuResults.length === 0 && (
                         <div className="px-4 py-3 text-sm text-slate-500 border-t border-slate-100">{text.noResults}</div>
                       )}
                     </div>
@@ -616,8 +674,8 @@ export const CounterPickupListing: React.FC = () => {
                   <input
                     type="number"
                     min={1}
-                    value={qty}
-                    onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+                    value={draft.qty}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, qty: Math.max(1, Number(e.target.value) || 1) }))}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
@@ -625,12 +683,8 @@ export const CounterPickupListing: React.FC = () => {
                 <div className="lg:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-2">{text.productName}</label>
                   <input
-                    value={skuMeta?.productName || manualProductName}
-                    onChange={(e) => {
-                      setSkuMeta(null);
-                      setSkuLookupMiss(true);
-                      setManualProductName(e.target.value);
-                    }}
+                    value={draft.skuMeta?.productName || draft.manualProductName}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, skuMeta: null, skuLookupMiss: true, manualProductName: e.target.value }))}
                     placeholder={text.productNamePlaceholder}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
@@ -639,28 +693,65 @@ export const CounterPickupListing: React.FC = () => {
                 <div className="lg:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-2">{text.location}</label>
                   <input
-                    value={skuMeta?.location || manualLocation}
-                    onChange={(e) => {
-                      setSkuMeta(null);
-                      setSkuLookupMiss(true);
-                      setManualLocation(e.target.value.toUpperCase());
-                    }}
+                    value={draft.skuMeta?.location || draft.manualLocation}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, skuMeta: null, skuLookupMiss: true, manualLocation: e.target.value.toUpperCase() }))}
                     placeholder={text.locationPlaceholder}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <button
-                  onClick={handleCreate}
-                  disabled={submitting || !(sku || skuQuery).trim()}
-                  className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50"
-                >
-                  <Send className="w-4 h-4" />
-                  {text.submit}
-                </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Comment / Note</label>
+                  <input
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Optional note for this pickup order"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div className="flex items-end justify-end gap-2">
+                  <button
+                    onClick={addDraftItem}
+                    disabled={!canAddDraftItem()}
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all disabled:opacity-50"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Product
+                  </button>
+                  <button
+                    onClick={handleCreate}
+                    disabled={submitting || (itemsDraft.length === 0 && !canAddDraftItem())}
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4" />
+                    {text.submit}
+                  </button>
+                </div>
               </div>
+
+              {itemsDraft.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Added Products</div>
+                  {itemsDraft.map((item, index) => (
+                    <div key={`${item.sku}-${index}`} className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 break-words">{item.sku}</div>
+                        <div className="text-sm text-slate-500 truncate">{item.productName}</div>
+                      </div>
+                      <div className="text-sm text-slate-700 font-semibold whitespace-nowrap">{item.qty} x {item.location}</div>
+                      <button
+                        type="button"
+                        onClick={() => setItemsDraft((prev) => prev.filter((_, idx) => idx !== index))}
+                        className="text-xs font-semibold text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -759,8 +850,8 @@ export const CounterPickupListing: React.FC = () => {
                     <tr>
                       <th className="px-3 py-3 w-[14%]">{text.requestNo}</th>
                       <th className="px-3 py-3 w-[10%]">SKU</th>
-                      <th className="px-3 py-3 w-[18%]">{text.productName}</th>
-                      <th className="px-3 py-3 w-[7%]">{text.location}</th>
+                      <th className="px-3 py-3 w-[18%]">{view === 'history' ? 'Comment / Note' : text.productName}</th>
+                      <th className="px-3 py-3 w-[7%]">{view === 'history' ? '-' : text.location}</th>
                       <th className="px-3 py-3 w-[5%] text-right">{text.qty}</th>
                       <th className="px-3 py-3 w-[12%]">{text.warehouse} / {text.createdBy}</th>
                       <th className="px-3 py-3 w-[10%]">{text.createdAt}</th>
@@ -782,23 +873,27 @@ export const CounterPickupListing: React.FC = () => {
                         </td>
                         <td className="px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm" title={item.sku}>{item.sku}</td>
                         <td className="px-3 py-3 text-slate-700 align-top">
-                          <div className="space-y-1">
-                            <p className="font-medium text-sm truncate" title={item.productName}>{item.productName}</p>
-                            {item.status === 'Picked' && (
-                              <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
-                                <AlertTriangle className="w-3 h-3" />
-                                {text.pickedAlert}
-                              </div>
-                            )}
-                            {item.status === 'PendingPutback' && (
-                              <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
-                                <RotateCcw className="w-3 h-3" />
-                                {text.putbackAlert}
-                              </div>
-                            )}
-                          </div>
+                          {view === 'history' ? (
+                            <p className="text-sm font-medium text-slate-700 break-words" title={historyNoteLabel(item)}>{historyNoteLabel(item)}</p>
+                          ) : (
+                            <div className="space-y-1">
+                              <p className="font-medium text-sm truncate" title={item.productName}>{item.productName}</p>
+                              {item.status === 'Picked' && (
+                                <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  {text.pickedAlert}
+                                </div>
+                              )}
+                              {item.status === 'PendingPutback' && (
+                                <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
+                                  <RotateCcw className="w-3 h-3" />
+                                  {text.putbackAlert}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </td>
-                        <td className="px-3 py-3 text-slate-500 align-top text-sm break-all">{item.location}</td>
+                        <td className="px-3 py-3 text-slate-500 align-top text-sm break-all">{view === 'history' ? '-' : item.location}</td>
                         <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{item.qty}</td>
                         <td className="px-3 py-3 text-slate-500 align-top">
                           <div className="space-y-1 min-w-0">
