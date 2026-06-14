@@ -949,7 +949,7 @@ export const PickingQueue: React.FC = () => {
                                 className={cn(
                                   "flex items-center justify-between p-3 rounded-xl border shadow-sm",
                                   item.status === 'Picked'
-                                    ? "border-emerald-300 bg-emerald-50"
+                                    ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-100"
                                     : "border-slate-100 bg-white"
                                 )}
                               >
