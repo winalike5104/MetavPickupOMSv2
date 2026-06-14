@@ -659,7 +659,7 @@ export const PickingQueue: React.FC = () => {
                     key={key}
                     className={cn(
                       "bg-white rounded-2xl border transition-all overflow-hidden shadow-sm",
-                      allPicked ? "border-emerald-100 bg-emerald-50/30" : "border-slate-200 hover:border-indigo-200"
+                      allPicked ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200" : "border-slate-200 hover:border-indigo-200"
                     )}
                   >
                     <div className="p-4 flex items-center gap-4">
@@ -676,7 +676,7 @@ export const PickingQueue: React.FC = () => {
                             {task.sku}
                           </span>
                           {allPicked && (
-                            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded uppercase">
+                            <span className="flex items-center gap-1 text-[10px] font-black text-white bg-emerald-600 px-2 py-0.5 rounded uppercase shadow-sm">
                               <CheckCircle2 className="w-3 h-3" />
                               Ready
                             </span>
@@ -751,7 +751,15 @@ export const PickingQueue: React.FC = () => {
                           <div className="p-4 space-y-2">
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Associated Orders</h4>
                             {task.orders.map((order) => (
-                              <div key={order.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white shadow-sm">
+                              <div
+                                key={order.id}
+                                className={cn(
+                                  "flex items-center justify-between p-3 rounded-xl border shadow-sm",
+                                  order.warehouseStatus === 'Picked'
+                                    ? "border-emerald-300 bg-emerald-50"
+                                    : "border-slate-100 bg-white"
+                                )}
+                              >
                                 <div className="flex items-center gap-4">
                                   <div className="flex flex-col">
                                     <span className="text-sm font-bold text-slate-900">{order.bookingNumber}</span>
@@ -761,7 +769,7 @@ export const PickingQueue: React.FC = () => {
                                     "text-[10px] font-bold px-2 py-0.5 rounded uppercase",
                                     order.warehouseStatus === 'Pending' ? "bg-slate-100 text-slate-600" :
                                     order.warehouseStatus === 'Picking' ? "bg-amber-100 text-amber-600" :
-                                    "bg-emerald-100 text-emerald-600"
+                                    "bg-emerald-600 text-white shadow-sm"
                                   )}>
                                     {order.warehouseStatus === 'Picked' ? 'Ready' : order.warehouseStatus}
                                   </span>
@@ -825,7 +833,7 @@ export const PickingQueue: React.FC = () => {
                     key={task.id}
                     className={cn(
                       "bg-white rounded-2xl border transition-all overflow-hidden shadow-sm",
-                      task.warehouseStatus === 'Picked' ? "border-emerald-100 bg-emerald-50/30" : "border-slate-200 hover:border-purple-200"
+                      task.warehouseStatus === 'Picked' ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200" : "border-slate-200 hover:border-purple-200"
                     )}
                   >
                     <div className="p-4 flex items-center gap-4">
@@ -842,7 +850,7 @@ export const PickingQueue: React.FC = () => {
                             "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
                             task.warehouseStatus === 'Pending' ? "bg-slate-100 text-slate-600" :
                             task.warehouseStatus === 'Picking' ? "bg-amber-100 text-amber-600" :
-                            "bg-emerald-100 text-emerald-600"
+                            "bg-emerald-600 text-white shadow-sm"
                           )}>
                             {task.warehouseStatus === 'Picked' ? 'Ready' : task.warehouseStatus}
                           </span>
@@ -917,7 +925,15 @@ export const PickingQueue: React.FC = () => {
                           <div className="p-4 space-y-2">
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Order Items</h4>
                             {task.items.map((item) => (
-                              <div key={item.sku} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white shadow-sm">
+                              <div
+                                key={item.sku}
+                                className={cn(
+                                  "flex items-center justify-between p-3 rounded-xl border shadow-sm",
+                                  item.status === 'Picked'
+                                    ? "border-emerald-300 bg-emerald-50"
+                                    : "border-slate-100 bg-white"
+                                )}
+                              >
                                 <div className="flex items-center gap-4">
                                   <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100">
                                     <MapPin className="w-4 h-4 text-slate-400" />
@@ -932,7 +948,7 @@ export const PickingQueue: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {item.status === 'Picked' ? (
-                                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded uppercase">
+                                    <span className="flex items-center gap-1 text-[10px] font-black text-white bg-emerald-600 px-2 py-0.5 rounded uppercase shadow-sm">
                                       <CheckCircle2 className="w-3 h-3" />
                                       Picked
                                     </span>
