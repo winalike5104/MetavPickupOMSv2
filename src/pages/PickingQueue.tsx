@@ -258,26 +258,17 @@ export const PickingQueue: React.FC = () => {
       : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty, destination: item.destination }];
 
     if (item.status === 'PendingPutback') {
-      const returnedItems = sourceItems.filter((entry: any) => (entry.destination || item.destination) === 'Returned');
-      if (returnedItems.length > 0) return returnedItems;
-      if ((item as any).putbackQty || (item as any).putbackItems) {
-        return [];
-      }
-      return [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty, destination: item.destination }];
+      return sourceItems.filter((entry: any) => (entry.destination || item.destination) === 'Returned');
     }
 
     return sourceItems;
   };
 
   const getQueueDisplayQty = (item: CounterPickup) => {
-    const putbackQty = Number((item as any).putbackQty || 0);
-    if (item.status === 'PendingPutback' && putbackQty > 0) {
-      return putbackQty;
-    }
     const displayItems = getQueueDisplayItems(item);
     const displayQty = displayItems.reduce((sum, entry: any) => sum + (Number(entry.qty) || 0), 0);
-    if (item.status === 'PendingPutback') return displayQty;
-    return displayQty || item.qty;
+    if (displayQty > 0) return displayQty;
+    return item.status === 'PendingPutback' ? Number((item as any).putbackQty || item.qty || 0) : (displayQty || item.qty);
   };
 
   const handleUpdateItemStatus = async (orderId: string, sku: string, status: 'Pending' | 'Picked') => {
