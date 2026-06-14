@@ -567,14 +567,24 @@ export const PickingQueue: React.FC = () => {
                       </div>
                       <div className="mt-3 space-y-2">
                         {(item.items?.length ? item.items : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
-                          <div key={`${item.id}-${entry.sku}-${idx}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Item {idx + 1}</span>
-                              <span className="text-sm font-black text-slate-900 break-words">{entry.sku}</span>
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                              <span>Loc: {entry.location}</span>
-                              <span>Qty: {entry.qty}</span>
+                          <div key={`${item.id}-${entry.sku}-${idx}`} className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white px-4 py-3 shadow-sm">
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-black uppercase tracking-wider">
+                                  Item {idx + 1}
+                                </span>
+                                <span className="text-base md:text-lg font-black text-slate-950 break-words tracking-tight">
+                                  {entry.sku}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <span className="inline-flex items-center px-3 py-1 rounded-xl bg-blue-100 text-blue-800 text-sm font-black tracking-wide border border-blue-200">
+                                  Loc: {entry.location}
+                                </span>
+                                <span className="inline-flex items-center px-3 py-1 rounded-xl bg-slate-900 text-white text-sm font-black tracking-wide">
+                                  Qty: {entry.qty}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         ))}
