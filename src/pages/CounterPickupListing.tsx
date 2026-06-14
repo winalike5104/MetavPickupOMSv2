@@ -296,6 +296,7 @@ export const CounterPickupListing: React.FC = () => {
   const resetCreateForm = () => {
     setDraft(createEmptyDraft());
     setItemsDraft([]);
+    setPickupNote('');
   };
   const loadRequests = async (nextView = view) => {
     if (!token) return;
@@ -1104,43 +1105,47 @@ export const CounterPickupListing: React.FC = () => {
             </div>
 
             <div className="space-y-4 flex-1 overflow-y-auto pr-1">
-              <div>
-                <label className="text-sm font-medium text-slate-700">{text.destination}</label>
-                <select
-                  value={finalizeForm.destination}
-                  onChange={(e) => setFinalizeForm((prev) => ({ ...prev, destination: e.target.value as FinalizeFormState['destination'] }))}
-                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="">{text.selectOne}</option>
-                  <option value="Returned">{text.returned}</option>
-                  <option value="Sold">{text.sold}</option>
-                  <option value="Other">{text.other}</option>
-                </select>
-              </div>
+              {!splitPerItem && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">{text.destination}</label>
+                    <select
+                      value={finalizeForm.destination}
+                      onChange={(e) => setFinalizeForm((prev) => ({ ...prev, destination: e.target.value as FinalizeFormState['destination'] }))}
+                      className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="">{text.selectOne}</option>
+                      <option value="Returned">{text.returned}</option>
+                      <option value="Sold">{text.sold}</option>
+                      <option value="Other">{text.other}</option>
+                    </select>
+                  </div>
 
-              {finalizeForm.destination === 'Sold' && (
-                <div>
-                  <label className="text-sm font-medium text-slate-700">{text.referenceNo}</label>
-                  <input
-                    value={finalizeForm.referenceNo}
-                    onChange={(e) => setFinalizeForm((prev) => ({ ...prev, referenceNo: e.target.value.toUpperCase() }))}
-                    className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                </div>
+                  {finalizeForm.destination === 'Sold' && (
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">{text.referenceNo}</label>
+                      <input
+                        value={finalizeForm.referenceNo}
+                        onChange={(e) => setFinalizeForm((prev) => ({ ...prev, referenceNo: e.target.value.toUpperCase() }))}
+                        className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Comment</label>
+                    <input
+                      value={finalizeForm.comment}
+                      onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
+                      placeholder={finalizeForm.destination === 'Other' ? 'Required final closure comment' : 'Optional final closure comment'}
+                      className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    {finalizeForm.destination === 'Other' && (
+                      <p className="mt-1 text-xs text-slate-500">Required for Other closure.</p>
+                    )}
+                  </div>
+                </>
               )}
-
-              <div>
-                <label className="text-sm font-medium text-slate-700">Comment</label>
-                <input
-                  value={finalizeForm.comment}
-                  onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
-                  placeholder={finalizeForm.destination === 'Other' ? 'Required final closure comment' : 'Optional final closure comment'}
-                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                {finalizeForm.destination === 'Other' && (
-                  <p className="mt-1 text-xs text-slate-500">Required for Other closure.</p>
-                )}
-              </div>
 
               <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
                 <div>
