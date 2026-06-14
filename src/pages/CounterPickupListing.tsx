@@ -1131,21 +1131,21 @@ export const CounterPickupListing: React.FC = () => {
                       />
                     </div>
                   )}
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Comment</label>
-                    <input
-                      value={finalizeForm.comment}
-                      onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
-                      placeholder={finalizeForm.destination === 'Other' ? 'Required final closure comment' : 'Optional final closure comment'}
-                      className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                    {finalizeForm.destination === 'Other' && (
-                      <p className="mt-1 text-xs text-slate-500">Required for Other closure.</p>
-                    )}
-                  </div>
                 </>
               )}
+
+              <div>
+                <label className="text-sm font-medium text-slate-700">Comment</label>
+                <input
+                  value={finalizeForm.comment}
+                  onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
+                  placeholder={finalizeForm.destination === 'Other' ? 'Required final closure comment' : 'Optional final closure comment'}
+                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                {finalizeForm.destination === 'Other' && (
+                  <p className="mt-1 text-xs text-slate-500">Required for Other closure.</p>
+                )}
+              </div>
 
               <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
                 <div>
