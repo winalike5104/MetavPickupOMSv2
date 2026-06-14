@@ -526,6 +526,32 @@ export const CounterPickupListing: React.FC = () => {
     }
   };
 
+  const isFinalizeItemActionValid = (itemAction: FinalizeItemAction) => {
+    if (!itemAction.destination) return false;
+    if (itemAction.destination === 'Sold') return itemAction.referenceNo.trim().length > 0;
+    if (itemAction.destination === 'Other') return true;
+    return true;
+  };
+
+  const canSubmitFinalize = useMemo(() => {
+    if (!finalizeTarget) return false;
+
+    if (splitPerItem) {
+      const targetItems = finalizeTarget.items?.length ? finalizeTarget.items : [{
+        sku: finalizeTarget.sku,
+        productName: finalizeTarget.productName,
+        location: finalizeTarget.location,
+        qty: finalizeTarget.qty
+      }];
+      return targetItems.every((_, index) => isFinalizeItemActionValid(itemFinalizeActions[index] || createDefaultItemAction()));
+    }
+
+    if (!finalizeForm.destination) return false;
+    if (finalizeForm.destination === 'Sold') return finalizeForm.referenceNo.trim().length > 0;
+    if (finalizeForm.destination === 'Other') return finalizeForm.comment.trim().length > 0;
+    return true;
+  }, [finalizeTarget, splitPerItem, finalizeForm.destination, finalizeForm.referenceNo, finalizeForm.comment, itemFinalizeActions]);
+
   const handleCompletePutback = async (requestId: string) => {
     if (!token) return;
     setSubmitting(true);
@@ -1207,6 +1233,9 @@ export const CounterPickupListing: React.FC = () => {
                                   setItemFinalizeActions((prev) => {
                                     const copy = [...prev];
                                     copy[index] = { ...(copy[index] || createDefaultItemAction()), destination: next };
+                                    if (next !== 'Sold') {
+                                      copy[index].referenceNo = '';
+                                    }
                                     return copy;
                                   });
                                 }}
@@ -1256,7 +1285,7 @@ export const CounterPickupListing: React.FC = () => {
               </button>
               <button
                 onClick={handleFinalize}
-                disabled={submitting || !finalizeForm.destination}
+                disabled={submitting || !canSubmitFinalize}
                 className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50"
               >
                 {text.submit}
