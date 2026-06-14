@@ -259,6 +259,10 @@ export const PickingQueue: React.FC = () => {
     return sourceItems;
   };
 
+  const getQueueDisplayQty = (item: CounterPickup) => {
+    return getQueueDisplayItems(item).reduce((sum, entry: any) => sum + (Number(entry.qty) || 0), 0) || item.qty;
+  };
+
   const handleUpdateItemStatus = async (orderId: string, sku: string, status: 'Pending' | 'Picked') => {
     if (!profile) return;
     const updateKey = `${orderId}-${sku}`;
@@ -587,7 +591,7 @@ export const PickingQueue: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-slate-400">QTY</p>
-                          <p className="text-sm font-black text-slate-900">{item.qty}</p>
+                          <p className="text-sm font-black text-slate-900">{getQueueDisplayQty(item)}</p>
                         </div>
                       </div>
                       <div className="mt-3 space-y-2">
