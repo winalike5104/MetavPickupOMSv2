@@ -26,14 +26,12 @@ type QueueFilter = 'All' | CounterPickupQueueStatus;
 type FinalizeFormState = {
   destination: '' | 'Returned' | 'Sold' | 'Other';
   referenceNo: string;
-  otherNotes: string;
   comment: string;
 };
 
 type FinalizeItemAction = {
   destination: '' | 'Returned' | 'Sold' | 'Other';
   referenceNo: string;
-  otherNotes: string;
 };
 
 type CounterPickupItem = {
@@ -63,14 +61,12 @@ const PAGE_SIZE = 50;
 const emptyFinalizeForm: FinalizeFormState = {
   destination: '',
   referenceNo: '',
-  otherNotes: '',
   comment: ''
 };
 
 const createDefaultItemAction = (): FinalizeItemAction => ({
   destination: '',
   referenceNo: '',
-  otherNotes: ''
 });
 
 const createEmptyDraft = (): CounterPickupItemDraft => ({
@@ -123,7 +119,6 @@ const CN_TEXT = {
   createdAt: '创建时间',
   destination: '去向',
   referenceNo: '关联单号',
-  otherNotes: '备注说明',
   startPicking: '开始拣货',
   markPicked: '确认送达',
   finalize: '完成结案',
@@ -196,7 +191,6 @@ const EN_TEXT = {
   createdAt: 'Created At',
   destination: 'Destination',
   referenceNo: 'Reference No.',
-  otherNotes: 'Other Notes',
   startPicking: 'Start Picking',
   markPicked: 'Mark Picked',
   finalize: 'Finalize',
@@ -500,7 +494,6 @@ export const CounterPickupListing: React.FC = () => {
       return {
         destination: itemAction.destination || finalizeForm.destination,
         referenceNo: itemAction.referenceNo || finalizeForm.referenceNo,
-        otherNotes: itemAction.otherNotes || finalizeForm.otherNotes,
         comment: finalizeForm.comment
       };
     });
@@ -555,7 +548,7 @@ export const CounterPickupListing: React.FC = () => {
 
   const filteredRequests = useMemo(() => {
     return requests.filter((item) => {
-      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''} ${item.comment || ''} ${item.otherNotes || ''}`.toLowerCase();
+      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''} ${item.comment || ''}`.toLowerCase();
       const matchesSearch = haystack.includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       const matchesQueue = queueFilter === 'All' || item.queueStatus === queueFilter;
@@ -600,8 +593,7 @@ export const CounterPickupListing: React.FC = () => {
     if (destination === 'Mixed') return 'Mixed';
     return destination;
   };
-  const historyNoteLabel = (item: CounterPickup) => item.comment || item.otherNotes || '-';
-  const historyPickupNoteLabel = (item: CounterPickup) => item.pickupNote || '-';
+  const historyNoteLabel = (item: CounterPickup) => item.comment || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
@@ -901,8 +893,11 @@ export const CounterPickupListing: React.FC = () => {
                           <th className="px-3 py-3 w-[7%]">{text.destination}</th>
                         </>
                       )}
-                      <th className="px-3 py-3 w-[10%]">Comment</th>
-                      <th className="px-3 py-3 w-[10%]">Pickup Note</th>
+                      {view === 'history' && (
+                        <>
+                          <th className="px-3 py-3 w-[10%]">Comment</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -991,8 +986,9 @@ export const CounterPickupListing: React.FC = () => {
                                     <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">{destinationLabel(item.destination)}</td>
                                   </>
                                 )}
-                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
-                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyPickupNoteLabel(item)}</td>
+                                {view === 'history' && (
+                                  <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
+                                )}
                                 <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
                                   <div className="flex justify-end gap-1.5 flex-wrap">
                                     {canCreate && item.status === 'Picked' && (
@@ -1019,7 +1015,7 @@ export const CounterPickupListing: React.FC = () => {
                     ))}
                     {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
                       <tr key={`${item.id}-details`} className="bg-slate-50/60">
-                        <td colSpan={view === 'history' ? 14 : 12} className="px-3 pb-4 pt-0">
+                        <td colSpan={view === 'history' ? 11 : 10} className="px-3 pb-4 pt-0">
                           <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
@@ -1031,9 +1027,9 @@ export const CounterPickupListing: React.FC = () => {
                               </button>
                             </div>
                             <div className="text-xs text-slate-500">
-                              {item.items?.length || 1} item(s) · {item.status} · {historyPickupNoteLabel(item) !== '-' ? `Pickup Note: ${historyPickupNoteLabel(item)}` : 'No pickup note'}
+                              {item.items?.length || 1} item(s) · {item.status}
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
                               {(item.items || [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
                                 <div key={`${entry.sku}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
                                   <div className="min-w-0">
@@ -1083,7 +1079,7 @@ export const CounterPickupListing: React.FC = () => {
 
       {finalizeTarget && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5 max-h-[90vh] overflow-hidden flex flex-col">
             <div>
               <h2 className="text-xl font-bold text-slate-900">{text.finalizeTitle}</h2>
               <p className="text-sm text-slate-500 mt-1">{finalizeTarget.id} | {finalizeTarget.sku}</p>
@@ -1099,12 +1095,12 @@ export const CounterPickupListing: React.FC = () => {
                 <span>{finalizeTarget.qty}</span>
               </div>
               <div className="flex items-start justify-between gap-3 mt-2">
-                <span className="font-semibold">Note</span>
-                <span className="text-right max-w-[70%] break-words">{finalizeTarget.comment || finalizeTarget.otherNotes || '-'}</span>
+                <span className="font-semibold">Comment</span>
+                <span className="text-right max-w-[70%] break-words">{finalizeTarget.comment || '-'}</span>
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1 overflow-y-auto pr-1">
               <div>
                 <label className="text-sm font-medium text-slate-700">{text.destination}</label>
                 <select
@@ -1130,23 +1126,12 @@ export const CounterPickupListing: React.FC = () => {
                 </div>
               )}
 
-              {finalizeForm.destination === 'Other' && (
-                <div>
-                  <label className="text-sm font-medium text-slate-700">{text.otherNotes}</label>
-                  <textarea
-                    value={finalizeForm.otherNotes}
-                    onChange={(e) => setFinalizeForm((prev) => ({ ...prev, otherNotes: e.target.value }))}
-                    className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none min-h-[120px]"
-                  />
-                </div>
-              )}
-
               <div>
                 <label className="text-sm font-medium text-slate-700">Comment</label>
                 <input
                   value={finalizeForm.comment}
                   onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
-                  placeholder="Optional final closure comment"
+                  placeholder={finalizeForm.destination === 'Other' ? 'Required final closure comment' : 'Optional final closure comment'}
                   className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
                 {finalizeForm.destination === 'Other' && (
@@ -1187,7 +1172,7 @@ export const CounterPickupListing: React.FC = () => {
                     <div className="text-sm font-semibold text-slate-900">Item-level handling</div>
                     <div className="text-xs text-slate-500 mt-1">Leave as default to apply the same handling to all items.</div>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-slate-100 max-h-[38vh] overflow-y-auto">
                     {(finalizeTarget.items?.length ? finalizeTarget.items : [{
                       sku: finalizeTarget.sku,
                       productName: finalizeTarget.productName,
@@ -1235,23 +1220,6 @@ export const CounterPickupListing: React.FC = () => {
                                     setItemFinalizeActions((prev) => {
                                       const copy = [...prev];
                                       copy[index] = { ...(copy[index] || createDefaultItemAction()), referenceNo: value };
-                                      return copy;
-                                    });
-                                  }}
-                                  className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                />
-                              </div>
-                            )}
-                            {(itemAction.destination || finalizeForm.destination) === 'Other' && (
-                              <div>
-                                <label className="text-xs font-medium text-slate-600">{text.otherNotes}</label>
-                                <input
-                                  value={itemAction.otherNotes}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    setItemFinalizeActions((prev) => {
-                                      const copy = [...prev];
-                                      copy[index] = { ...(copy[index] || createDefaultItemAction()), otherNotes: value };
                                       return copy;
                                     });
                                   }}
