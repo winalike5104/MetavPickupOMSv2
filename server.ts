@@ -166,13 +166,16 @@ const writeCounterPickupLog = async (
 const buildCounterPickupDetail = (pickup: any) => {
   const items = Array.isArray(pickup.items) ? pickup.items : [];
   const primaryItem = items[0] || {};
+  const putbackItems = Array.isArray(pickup.putbackItems) ? pickup.putbackItems : [];
   return {
     id: pickup.id,
     sku: pickup.sku || primaryItem.sku || "",
     productName: pickup.productName || primaryItem.productName || "",
     location: pickup.location || primaryItem.location || "NOT_ASSIGNED",
-    qty: Number(pickup.qty || primaryItem.qty || 0),
+    qty: Number(pickup.putbackQty || pickup.qty || primaryItem.qty || 0),
     items,
+    putbackItems,
+    putbackQty: Number(pickup.putbackQty || 0),
     status: pickup.status,
     queueStatus: pickup.queueStatus,
     destination: pickup.destination || null,
