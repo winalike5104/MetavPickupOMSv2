@@ -548,7 +548,10 @@ export const CounterPickupListing: React.FC = () => {
 
   const filteredRequests = useMemo(() => {
     return requests.filter((item) => {
-      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''} ${item.comment || ''}`.toLowerCase();
+      const itemSearchText = (item.items || [])
+        .map((entry) => `${entry.sku || ''} ${entry.productName || ''} ${entry.location || ''} ${entry.qty || ''}`)
+        .join(' ');
+      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''} ${item.comment || ''} ${itemSearchText}`.toLowerCase();
       const matchesSearch = haystack.includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       const matchesQueue = queueFilter === 'All' || item.queueStatus === queueFilter;
