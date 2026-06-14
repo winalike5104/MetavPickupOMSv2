@@ -273,6 +273,7 @@ export const CounterPickupListing: React.FC = () => {
   const [finalizeTarget, setFinalizeTarget] = useState<CounterPickup | null>(null);
   const [finalizeForm, setFinalizeForm] = useState<FinalizeFormState>(emptyFinalizeForm);
   const [itemFinalizeActions, setItemFinalizeActions] = useState<FinalizeItemAction[]>([]);
+  const [splitPerItem, setSplitPerItem] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -926,15 +927,6 @@ export const CounterPickupListing: React.FC = () => {
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2">
                                     <span className="block text-sm break-words" title={item.id}>{item.id}</span>
-                                    {view === 'history' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setExpandedHistoryIds((prev) => prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id])}
-                                        className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-700"
-                                      >
-                                        {isExpandedHistory(item.id) ? 'Hide Details' : 'View Details'}
-                                      </button>
-                                    )}
                                   </div>
                                   <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
                                 </div>
@@ -1162,89 +1154,118 @@ export const CounterPickupListing: React.FC = () => {
                 )}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white">
-                <div className="px-4 py-3 border-b border-slate-200">
-                  <div className="text-sm font-semibold text-slate-900">Item-level handling</div>
-                  <div className="text-xs text-slate-500 mt-1">Leave as default to apply the same handling to all items.</div>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">Split per item</div>
+                  <div className="text-xs text-slate-500">Turn on only when different items in the same request need different outcomes.</div>
                 </div>
-                <div className="divide-y divide-slate-100">
-                  {(finalizeTarget.items?.length ? finalizeTarget.items : [{
-                    sku: finalizeTarget.sku,
-                    productName: finalizeTarget.productName,
-                    location: finalizeTarget.location,
-                    qty: finalizeTarget.qty
-                  }]).map((item, index) => {
-                    const itemAction = itemFinalizeActions[index] || createDefaultItemAction();
-                    return (
-                      <div key={`${item.sku}-${index}`} className="p-4 space-y-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-slate-900 break-words">{item.sku}</div>
-                            <div className="text-xs text-slate-500 break-words">{item.productName}</div>
-                          </div>
-                          <div className="text-xs font-semibold text-slate-500 whitespace-nowrap">{item.qty} x {item.location}</div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div>
-                            <label className="text-xs font-medium text-slate-600">Destination</label>
-                            <select
-                              value={itemAction.destination || finalizeForm.destination}
-                              onChange={(e) => {
-                                const next = e.target.value as FinalizeFormState['destination'];
-                                setItemFinalizeActions((prev) => {
-                                  const copy = [...prev];
-                                  copy[index] = { ...(copy[index] || createDefaultItemAction()), destination: next };
-                                  return copy;
-                                });
-                              }}
-                              className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                            >
-                              <option value="">{text.selectOne}</option>
-                              <option value="Returned">{text.returned}</option>
-                              <option value="Sold">{text.sold}</option>
-                              <option value="Other">{text.other}</option>
-                            </select>
-                          </div>
-                          {(itemAction.destination || finalizeForm.destination) === 'Sold' && (
-                            <div>
-                              <label className="text-xs font-medium text-slate-600">{text.referenceNo}</label>
-                              <input
-                                value={itemAction.referenceNo}
-                                onChange={(e) => {
-                                  const value = e.target.value.toUpperCase();
-                                  setItemFinalizeActions((prev) => {
-                                    const copy = [...prev];
-                                    copy[index] = { ...(copy[index] || createDefaultItemAction()), referenceNo: value };
-                                    return copy;
-                                  });
-                                }}
-                                className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                              />
-                            </div>
-                          )}
-                          {(itemAction.destination || finalizeForm.destination) === 'Other' && (
-                            <div>
-                              <label className="text-xs font-medium text-slate-600">{text.otherNotes}</label>
-                              <input
-                                value={itemAction.otherNotes}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  setItemFinalizeActions((prev) => {
-                                    const copy = [...prev];
-                                    copy[index] = { ...(copy[index] || createDefaultItemAction()), otherNotes: value };
-                                    return copy;
-                                  });
-                                }}
-                                className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={splitPerItem}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setSplitPerItem(checked);
+                      if (!checked) {
+                        setItemFinalizeActions((finalizeTarget.items?.length ? finalizeTarget.items : [{
+                          sku: finalizeTarget.sku,
+                          productName: finalizeTarget.productName,
+                          location: finalizeTarget.location,
+                          qty: finalizeTarget.qty
+                        }]).map(() => createDefaultItemAction()));
+                      }
+                    }}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">Enabled</span>
+                </label>
               </div>
+
+              {splitPerItem && (
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <div className="px-4 py-3 border-b border-slate-200">
+                    <div className="text-sm font-semibold text-slate-900">Item-level handling</div>
+                    <div className="text-xs text-slate-500 mt-1">Leave as default to apply the same handling to all items.</div>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {(finalizeTarget.items?.length ? finalizeTarget.items : [{
+                      sku: finalizeTarget.sku,
+                      productName: finalizeTarget.productName,
+                      location: finalizeTarget.location,
+                      qty: finalizeTarget.qty
+                    }]).map((item, index) => {
+                      const itemAction = itemFinalizeActions[index] || createDefaultItemAction();
+                      return (
+                        <div key={`${item.sku}-${index}`} className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900 break-words">{item.sku}</div>
+                              <div className="text-xs text-slate-500 break-words">{item.productName}</div>
+                            </div>
+                            <div className="text-xs font-semibold text-slate-500 whitespace-nowrap">{item.qty} x {item.location}</div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-xs font-medium text-slate-600">Destination</label>
+                              <select
+                                value={itemAction.destination || finalizeForm.destination}
+                                onChange={(e) => {
+                                  const next = e.target.value as FinalizeFormState['destination'];
+                                  setItemFinalizeActions((prev) => {
+                                    const copy = [...prev];
+                                    copy[index] = { ...(copy[index] || createDefaultItemAction()), destination: next };
+                                    return copy;
+                                  });
+                                }}
+                                className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                              >
+                                <option value="">{text.selectOne}</option>
+                                <option value="Returned">{text.returned}</option>
+                                <option value="Sold">{text.sold}</option>
+                                <option value="Other">{text.other}</option>
+                              </select>
+                            </div>
+                            {(itemAction.destination || finalizeForm.destination) === 'Sold' && (
+                              <div>
+                                <label className="text-xs font-medium text-slate-600">{text.referenceNo}</label>
+                                <input
+                                  value={itemAction.referenceNo}
+                                  onChange={(e) => {
+                                    const value = e.target.value.toUpperCase();
+                                    setItemFinalizeActions((prev) => {
+                                      const copy = [...prev];
+                                      copy[index] = { ...(copy[index] || createDefaultItemAction()), referenceNo: value };
+                                      return copy;
+                                    });
+                                  }}
+                                  className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                              </div>
+                            )}
+                            {(itemAction.destination || finalizeForm.destination) === 'Other' && (
+                              <div>
+                                <label className="text-xs font-medium text-slate-600">{text.otherNotes}</label>
+                                <input
+                                  value={itemAction.otherNotes}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    setItemFinalizeActions((prev) => {
+                                      const copy = [...prev];
+                                      copy[index] = { ...(copy[index] || createDefaultItemAction()), otherNotes: value };
+                                      return copy;
+                                    });
+                                  }}
+                                  className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3">
