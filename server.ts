@@ -913,6 +913,7 @@ async function startServer() {
       const destination = String(req.body?.destination || "").trim() as any;
       const referenceNo = String(req.body?.referenceNo || "").trim();
       const otherNotes = String(req.body?.otherNotes || "").trim();
+      const comment = String(req.body?.comment || "").trim();
       const itemActions = Array.isArray(req.body?.itemActions) ? req.body.itemActions : [];
       const docRef = currentDb.collection("counter_pickups").doc(req.params.id);
       const snap = await docRef.get();
@@ -951,6 +952,7 @@ async function startServer() {
 
       const updatePayload: any = {
         destination: topLevelDestination,
+        comment: comment || null,
         updatedAt: timestamp
       };
 
@@ -967,11 +969,13 @@ async function startServer() {
           itemUpdate.finalizedBy = null;
           itemUpdate.completedAt = null;
           itemUpdate.completedBy = null;
+          itemUpdate.comment = comment || null;
         } else if (itemAction.destination === "Sold") {
           if (!itemAction.referenceNo) {
             throw new Error("Reference number is required when destination is Sold");
           }
           itemUpdate.referenceNo = itemAction.referenceNo;
+          itemUpdate.comment = comment || null;
           itemUpdate.finalizedAt = timestamp;
           itemUpdate.finalizedBy = req.user.name || req.user.username;
           itemUpdate.completedAt = timestamp;
@@ -981,6 +985,7 @@ async function startServer() {
             throw new Error("Other notes must be at least 5 characters");
           }
           itemUpdate.otherNotes = itemAction.otherNotes;
+          itemUpdate.comment = comment || null;
           itemUpdate.finalizedAt = timestamp;
           itemUpdate.finalizedBy = req.user.name || req.user.username;
           itemUpdate.completedAt = timestamp;

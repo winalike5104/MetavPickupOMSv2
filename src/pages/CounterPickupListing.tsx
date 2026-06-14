@@ -27,6 +27,7 @@ type FinalizeFormState = {
   destination: '' | 'Returned' | 'Sold' | 'Other';
   referenceNo: string;
   otherNotes: string;
+  comment: string;
 };
 
 type FinalizeItemAction = {
@@ -62,7 +63,8 @@ const PAGE_SIZE = 50;
 const emptyFinalizeForm: FinalizeFormState = {
   destination: '',
   referenceNo: '',
-  otherNotes: ''
+  otherNotes: '',
+  comment: ''
 };
 
 const createDefaultItemAction = (): FinalizeItemAction => ({
@@ -265,7 +267,6 @@ export const CounterPickupListing: React.FC = () => {
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<CounterPickupItemDraft>(createEmptyDraft);
   const [itemsDraft, setItemsDraft] = useState<CounterPickupItem[]>([]);
-  const [comment, setComment] = useState('');
   const [pickupNote, setPickupNote] = useState('');
   const suppressSkuSearchRef = useRef(false);
 
@@ -300,7 +301,6 @@ export const CounterPickupListing: React.FC = () => {
   const resetCreateForm = () => {
     setDraft(createEmptyDraft());
     setItemsDraft([]);
-    setComment('');
   };
   const loadRequests = async (nextView = view) => {
     if (!token) return;
@@ -470,7 +470,6 @@ export const CounterPickupListing: React.FC = () => {
         },
       body: JSON.stringify({
         items: combinedItems,
-        comment,
         pickupNote
       })
       });
@@ -500,7 +499,8 @@ export const CounterPickupListing: React.FC = () => {
       return {
         destination: itemAction.destination || finalizeForm.destination,
         referenceNo: itemAction.referenceNo || finalizeForm.referenceNo,
-        otherNotes: itemAction.otherNotes || finalizeForm.otherNotes
+        otherNotes: itemAction.otherNotes || finalizeForm.otherNotes,
+        comment: finalizeForm.comment
       };
     });
 
@@ -729,15 +729,6 @@ export const CounterPickupListing: React.FC = () => {
                     value={pickupNote}
                     onChange={(e) => setPickupNote(e.target.value)}
                     placeholder="Internal note for warehouse picking"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Comment</label>
-                  <input
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Final closure reason or customer outcome"
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
@@ -991,6 +982,29 @@ export const CounterPickupListing: React.FC = () => {
                         )}
                         <td className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
                         <td className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyPickupNoteLabel(item)}</td>
+                        <td className="px-3 py-3 align-top">
+                          <div className="flex justify-end gap-1.5 flex-wrap">
+                            {canCreate && item.status === 'Picked' && (
+                              <button
+                                onClick={() => {
+                                  setFinalizeTarget(item);
+                                  setFinalizeForm(emptyFinalizeForm);
+                                  setItemFinalizeActions((item.items?.length ? item.items : [{
+                                    sku: item.sku,
+                                    productName: item.productName,
+                                    location: item.location,
+                                    qty: item.qty
+                                  }]).map(() => createDefaultItemAction()));
+                                }}
+                                disabled={submitting}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50"
+                              >
+                                <Send className="w-3 h-3" />
+                                {text.finalize}
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                     {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
@@ -1116,6 +1130,19 @@ export const CounterPickupListing: React.FC = () => {
                   />
                 </div>
               )}
+
+              <div>
+                <label className="text-sm font-medium text-slate-700">Comment</label>
+                <input
+                  value={finalizeForm.comment}
+                  onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
+                  placeholder="Optional final closure comment"
+                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                {finalizeForm.destination === 'Other' && (
+                  <p className="mt-1 text-xs text-slate-500">Required for Other closure.</p>
+                )}
+              </div>
 
               <div className="rounded-xl border border-slate-200 bg-white">
                 <div className="px-4 py-3 border-b border-slate-200">
