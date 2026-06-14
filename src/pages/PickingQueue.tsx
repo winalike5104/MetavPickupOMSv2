@@ -571,9 +571,6 @@ export const PickingQueue: React.FC = () => {
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                               <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Item {idx + 1}</span>
                               <span className="text-sm font-black text-slate-900 break-words">{entry.sku}</span>
-                              {entry.productName && (
-                                <span className="text-xs text-slate-500 break-words truncate max-w-full">{entry.productName}</span>
-                              )}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                               <span>Loc: {entry.location}</span>
