@@ -687,7 +687,10 @@ async function startServer() {
       if (requestedWh) {
         warehouseIds = [requestedWh];
       } else if (isSuper || allowedWarehouses.includes("*")) {
-        const allSnap = await currentDb.collection("counter_pickups").limit(limitValue).get();
+        const allSnap = await currentDb.collection("counter_pickups")
+          .orderBy(view === "history" ? "updatedAt" : "createdAt", "desc")
+          .limit(limitValue)
+          .get();
         let allRows = allSnap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
         allRows = allRows.filter((row: any) => view === "history" ? row.status === "Finalized" : row.status !== "Finalized");
         allRows.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
@@ -702,10 +705,18 @@ async function startServer() {
 
       let rows: any[] = [];
       if (warehouseIds.length === 1) {
-        const snap = await currentDb.collection("counter_pickups").where("warehouseId", "==", warehouseIds[0]).limit(limitValue).get();
+        const snap = await currentDb.collection("counter_pickups")
+          .where("warehouseId", "==", warehouseIds[0])
+          .orderBy(view === "history" ? "updatedAt" : "createdAt", "desc")
+          .limit(limitValue)
+          .get();
         rows = snap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
       } else if (warehouseIds.length > 1) {
-        const snap = await currentDb.collection("counter_pickups").where("warehouseId", "in", warehouseIds).limit(limitValue).get();
+        const snap = await currentDb.collection("counter_pickups")
+          .where("warehouseId", "in", warehouseIds)
+          .orderBy(view === "history" ? "updatedAt" : "createdAt", "desc")
+          .limit(limitValue)
+          .get();
         rows = snap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
       }
 
