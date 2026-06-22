@@ -705,18 +705,34 @@ async function startServer() {
 
       let rows: any[] = [];
       if (warehouseIds.length === 1) {
-        const snap = await currentDb.collection("counter_pickups")
-          .where("warehouseId", "==", warehouseIds[0])
-          .orderBy(view === "history" ? "updatedAt" : "createdAt", "desc")
-          .limit(limitValue)
-          .get();
+        let snap;
+        try {
+          snap = await currentDb.collection("counter_pickups")
+            .where("warehouseId", "==", warehouseIds[0])
+            .orderBy(view === "history" ? "updatedAt" : "createdAt", "desc")
+            .limit(limitValue)
+            .get();
+        } catch (queryError: any) {
+          if (queryError?.code !== 9 && queryError?.code !== "failed-precondition") throw queryError;
+          snap = await currentDb.collection("counter_pickups")
+            .where("warehouseId", "==", warehouseIds[0])
+            .get();
+        }
         rows = snap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
       } else if (warehouseIds.length > 1) {
-        const snap = await currentDb.collection("counter_pickups")
-          .where("warehouseId", "in", warehouseIds)
-          .orderBy(view === "history" ? "updatedAt" : "createdAt", "desc")
-          .limit(limitValue)
-          .get();
+        let snap;
+        try {
+          snap = await currentDb.collection("counter_pickups")
+            .where("warehouseId", "in", warehouseIds)
+            .orderBy(view === "history" ? "updatedAt" : "createdAt", "desc")
+            .limit(limitValue)
+            .get();
+        } catch (queryError: any) {
+          if (queryError?.code !== 9 && queryError?.code !== "failed-precondition") throw queryError;
+          snap = await currentDb.collection("counter_pickups")
+            .where("warehouseId", "in", warehouseIds)
+            .get();
+        }
         rows = snap.docs.map((d: any) => buildCounterPickupDetail({ id: d.id, ...d.data() }));
       }
 
