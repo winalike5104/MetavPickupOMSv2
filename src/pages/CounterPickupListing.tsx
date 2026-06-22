@@ -495,6 +495,7 @@ export const CounterPickupListing: React.FC = () => {
       return {
         destination: itemAction.destination || finalizeForm.destination,
         referenceNo: itemAction.referenceNo || finalizeForm.referenceNo,
+        otherNotes: finalizeForm.comment,
         comment: finalizeForm.comment
       };
     });
@@ -510,6 +511,7 @@ export const CounterPickupListing: React.FC = () => {
         },
         body: JSON.stringify({
           ...finalizeForm,
+          otherNotes: finalizeForm.comment,
           itemActions: normalizedActions
         })
       });
@@ -543,12 +545,17 @@ export const CounterPickupListing: React.FC = () => {
         location: finalizeTarget.location,
         qty: finalizeTarget.qty
       }];
-      return targetItems.every((_, index) => isFinalizeItemActionValid(itemFinalizeActions[index] || createDefaultItemAction()));
+      return targetItems.every((_, index) => {
+        const action = itemFinalizeActions[index] || createDefaultItemAction();
+        const destination = action.destination || finalizeForm.destination;
+        if (destination === 'Other' && finalizeForm.comment.trim().length < 5) return false;
+        return isFinalizeItemActionValid(action);
+      });
     }
 
     if (!finalizeForm.destination) return false;
     if (finalizeForm.destination === 'Sold') return finalizeForm.referenceNo.trim().length > 0;
-    if (finalizeForm.destination === 'Other') return finalizeForm.comment.trim().length > 0;
+    if (finalizeForm.destination === 'Other') return finalizeForm.comment.trim().length >= 5;
     return true;
   }, [finalizeTarget, splitPerItem, finalizeForm.destination, finalizeForm.referenceNo, finalizeForm.comment, itemFinalizeActions]);
 
