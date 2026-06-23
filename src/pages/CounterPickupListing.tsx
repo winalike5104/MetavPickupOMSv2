@@ -771,21 +771,18 @@ export const CounterPickupListing: React.FC = () => {
     return outcome;
   };
   const referenceLabelForHistory = (item: CounterPickupItem, request: CounterPickup) => {
-    return item.referenceNo || item.orderNumber || request.referenceNo || request.orderNumber || '-';
+    return item.orderNumber || item.referenceNo || request.orderNumber || request.referenceNo || '-';
   };
   const destinationLabelForHistory = (item: CounterPickupItem, request: CounterPickup) => {
-    const raw = item.destination || item.outcome || request.destination || request.outcome;
+    const raw = item.outcome || request.outcome;
     if (!raw) return '-';
     if (raw === 'sold') return request.requestType === 'scheduledDelivery' ? text.sent : text.sold;
     if (raw === 'returnedToWarehouse') return text.returned;
     if (raw === 'warrantySwapParts') return text.warrantySwapParts;
     if (raw === 'other') return text.other;
-    if (raw === 'Returned') return text.returned;
-    if (raw === 'Sold') return request.requestType === 'scheduledDelivery' ? text.sent : text.sold;
-    if (raw === 'Other') return text.other;
     return raw;
   };
-  const historyCommentLabel = (item: CounterPickupItem, request: CounterPickup) => item.comment || item.otherNotes || request.comment || request.otherNotes || '-';
+  const historyCommentLabel = (item: CounterPickupItem, request: CounterPickup) => item.comment || request.comment || '-';
   const historyStatusLabel = (request: CounterPickup) => statusLabel(request.status);
   const historyQueueLabel = (request: CounterPickup) => queueLabel(request.queueStatus);
   const historyTableTextClass = 'block min-h-[1.25rem] leading-5 whitespace-pre-wrap break-words';
@@ -820,9 +817,8 @@ export const CounterPickupListing: React.FC = () => {
     ];
 
     historyRows.forEach(({ request, item }) => {
-      const outcome = String(item.outcome || request.outcome || request.destination || '').trim();
-      const destination = String(item.destination || request.destination || '').trim();
-      if (outcome === 'returnedToWarehouse' || destination === 'Returned') return;
+      const outcome = String(item.outcome || request.outcome || '').trim();
+      if (outcome === 'returnedToWarehouse') return;
 
       rows.push([
         item.sku || '',

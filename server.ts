@@ -1023,10 +1023,18 @@ async function startServer() {
       const anyReturned = normalizedActions.some((item: any) => item.outcome === "returnedToWarehouse");
       const topLevelOutcome = allSold ? "sold" : allReturned ? "returnedToWarehouse" : allWarranty ? "warrantySwapParts" : allOther ? "other" : "Mixed";
 
+      const normalizeDisplayDestination = (outcome: string) => {
+        if (outcome === "returnedToWarehouse") return "Returned";
+        if (outcome === "sold") return "Sold";
+        if (outcome === "warrantySwapParts") return "Warranty / Swap / Parts";
+        if (outcome === "other") return "Other";
+        return "Mixed";
+      };
+
       const updatePayload: any = {
         sourceType,
         outcome: topLevelOutcome,
-        destination: topLevelOutcome === "returnedToWarehouse" ? "Returned" : topLevelOutcome === "sold" ? "Sold" : topLevelOutcome === "other" ? "Other" : "Mixed",
+        destination: normalizeDisplayDestination(topLevelOutcome),
         comment: comment || null,
         updatedAt: timestamp
       };
@@ -1036,7 +1044,7 @@ async function startServer() {
         const itemUpdate: any = {
           ...item,
           outcome: itemAction.outcome,
-          destination: itemAction.outcome === "returnedToWarehouse" ? "Returned" : itemAction.outcome === "sold" ? "Sold" : itemAction.outcome === "other" ? "Other" : itemAction.outcome === "warrantySwapParts" ? "Other" : null,
+          destination: normalizeDisplayDestination(itemAction.outcome),
           orderNumber: itemAction.orderNumber || null,
           comment: itemAction.comment || null,
           referenceNo: itemAction.orderNumber || null,
