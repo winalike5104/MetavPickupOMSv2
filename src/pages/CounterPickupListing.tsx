@@ -1126,25 +1126,25 @@ export const CounterPickupListing: React.FC = () => {
                 <table className="w-full table-fixed text-left">
                   <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase">
                     <tr>
-                      <th className="px-3 py-3 w-[10%]">{text.requestNo}</th>
-                      <th className="px-3 py-3 w-[12%]">{text.requestType} / {text.sourceType}</th>
-                      <th className="px-3 py-3 w-[10%]">SKU</th>
-                      <th className="px-3 py-3 w-[18%]">{text.productName}</th>
-                      <th className="px-3 py-3 w-[8%]">{text.location}</th>
-                      <th className="px-3 py-3 w-[5%] text-right">{text.qty}</th>
-                      <th className="px-3 py-3 w-[10%]">{text.warehouse} / {text.createdBy}</th>
-                      <th className="px-3 py-3 w-[9%]">{text.createdAt}</th>
-                      <th className="px-3 py-3 w-[8%]">{text.statusFilter}</th>
-                      <th className="px-3 py-3 w-[8%]">{text.queueFilter}</th>
+                      <th className="px-3 py-3 w-[18%] md:w-[10%]">{text.requestNo}</th>
+                      <th className="px-3 py-3 w-[20%] md:w-[12%]">{text.requestType} / {text.sourceType}</th>
+                      <th className="px-3 py-3 w-[16%] md:w-[10%]">SKU</th>
+                      <th className="hidden md:table-cell px-3 py-3 w-[18%]">{text.productName}</th>
+                      <th className="px-3 py-3 w-[14%] md:w-[8%]">{text.location}</th>
+                      <th className="px-3 py-3 w-[8%] md:w-[5%] text-right">{text.qty}</th>
+                      <th className="hidden md:table-cell px-3 py-3 w-[10%]">{text.warehouse} / {text.createdBy}</th>
+                      <th className="hidden md:table-cell px-3 py-3 w-[9%]">{text.createdAt}</th>
+                      <th className="hidden md:table-cell px-3 py-3 w-[8%]">{text.statusFilter}</th>
+                      <th className="hidden md:table-cell px-3 py-3 w-[8%]">{text.queueFilter}</th>
                       {view === 'history' && (
                         <>
-                          <th className="px-3 py-3 w-[7%]">{text.referenceNo}</th>
-                          <th className="px-3 py-3 w-[7%]">{text.destination}</th>
+                          <th className="hidden md:table-cell px-3 py-3 w-[7%]">{text.referenceNo}</th>
+                          <th className="hidden md:table-cell px-3 py-3 w-[7%]">{text.destination}</th>
                         </>
                       )}
                       {view === 'history' && (
                         <>
-                          <th className="px-3 py-3 w-[10%]">Comment</th>
+                          <th className="hidden md:table-cell px-3 py-3 w-[10%]">Comment</th>
                         </>
                       )}
                     </tr>
@@ -1203,7 +1203,8 @@ export const CounterPickupListing: React.FC = () => {
                             </td>
                             <td className="px-3 py-3 text-slate-700 align-top">
                               <div className="space-y-1">
-                                <p className={cn('font-medium text-sm truncate', index > 0 && 'pl-4')} title={entry.productName}>{entry.productName}</p>
+                                <p className={cn('font-medium text-sm truncate hidden md:block', index > 0 && 'pl-4')} title={entry.productName}>{entry.productName}</p>
+                                <p className="md:hidden text-[10px] text-slate-500 truncate" title={entry.productName}>{entry.productName}</p>
                                 {index === 0 && item.status === 'Picked' && (
                                   <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
                                     <AlertTriangle className="w-3 h-3" />
@@ -1222,7 +1223,7 @@ export const CounterPickupListing: React.FC = () => {
                             <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{entry.qty}</td>
                             {index === 0 && (
                               <>
-                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top">
+                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top">
                                   <div className="space-y-1 min-w-0">
                                     <p className="text-sm font-semibold text-slate-700 truncate" title={item.warehouseId || text.noWarehouse}>
                                       {item.warehouseId || text.noWarehouse}
@@ -1232,30 +1233,30 @@ export const CounterPickupListing: React.FC = () => {
                                     </p>
                                   </div>
                                 </td>
-                                <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">
+                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
                                   <div className="leading-tight">
                                     <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
                                     <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
                                   </div>
                                 </td>
-                                <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
+                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
                                   <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
                                     {statusLabel(item.status)}
                                   </span>
                                 </td>
-                                <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
+                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
                                   <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
                                     {queueLabel(item.queueStatus)}
                                   </span>
                                 </td>
                                 {view === 'history' && (
                                   <>
-                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.orderNumber || item.referenceNo || '-'}</td>
-                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabelForTarget(item.outcome || item.destination, item)}</td>
+                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.orderNumber || item.referenceNo || '-'}</td>
+                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabelForTarget(item.outcome || item.destination, item)}</td>
                                   </>
                                 )}
                                 {view === 'history' && (
-                                  <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
+                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
                                 )}
                                 <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
                                   <div className="flex justify-end gap-1.5 flex-wrap">

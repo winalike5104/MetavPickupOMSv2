@@ -959,13 +959,13 @@ export const PickingQueue: React.FC = () => {
                               <div
                                 key={item.sku}
                                 className={cn(
-                                  "flex items-center justify-between p-3 rounded-xl border shadow-sm",
+                                  "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl border shadow-sm",
                                   item.status === 'Picked'
                                     ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-100"
                                     : "border-slate-100 bg-white"
                                 )}
                               >
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-4 min-w-0">
                                   <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100">
                                     <MapPin className="w-4 h-4 text-slate-400" />
                                   </div>
@@ -977,7 +977,7 @@ export const PickingQueue: React.FC = () => {
                                     </div>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 sm:justify-end w-full sm:w-auto">
                                   {item.status === 'Picked' ? (
                                     <span className="flex items-center gap-1 text-[10px] font-black text-white bg-emerald-600 px-2 py-0.5 rounded uppercase shadow-sm">
                                       <CheckCircle2 className="w-3 h-3" />
@@ -989,33 +989,39 @@ export const PickingQueue: React.FC = () => {
                                         <button
                                           onClick={() => handleStartPicking([task.id])}
                                           disabled={updatingIds.includes(task.id)}
-                                          className="flex items-center justify-center bg-indigo-50 text-indigo-600 w-10 h-10 rounded-xl border border-indigo-100 active:bg-indigo-100 transition-all disabled:opacity-50"
-                                          title="Start Picking"
+                                          className="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white w-full sm:w-auto px-4 h-10 rounded-xl border border-indigo-700 active:bg-indigo-700 transition-all disabled:opacity-50 font-bold text-xs"
+                                          title={`Start picking ${item.sku}`}
                                         >
                                           {updatingIds.includes(task.id) ? (
                                             <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                                           ) : (
-                                            <Play className="w-5 h-5 fill-current" />
+                                            <>
+                                              <Play className="w-4 h-4 fill-current" />
+                                              <span className="whitespace-nowrap">Start</span>
+                                            </>
                                           )}
                                         </button>
                                       ) : (
                                         <>
                                           <button
                                             onClick={() => handleReportIssue(task.id, task.bookingNumber)}
-                                            className="text-[10px] font-bold text-slate-400 hover:text-red-600 transition-colors px-2"
+                                            className="text-[10px] font-bold text-slate-400 hover:text-red-600 transition-colors px-2 whitespace-nowrap"
                                           >
                                             Issue?
                                           </button>
                                           <button
                                             onClick={() => handleUpdateItemStatus(task.id, item.sku, 'Picked')}
                                             disabled={updatingIds.includes(`${task.id}-${item.sku}`)}
-                                            className="flex items-center justify-center bg-emerald-50 text-emerald-600 w-10 h-10 rounded-xl border border-emerald-100 active:bg-emerald-100 transition-all disabled:opacity-50"
-                                            title="Mark as Picked"
+                                            className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white w-full sm:w-auto px-4 h-10 rounded-xl border border-emerald-700 active:bg-emerald-700 transition-all disabled:opacity-50 font-bold text-xs"
+                                            title={`Mark ${item.sku} as picked`}
                                           >
                                             {updatingIds.includes(`${task.id}-${item.sku}`) ? (
                                               <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                                             ) : (
-                                              <CheckCircle2 className="w-5 h-5" />
+                                              <>
+                                                <CheckCircle2 className="w-4 h-4" />
+                                                <span className="whitespace-nowrap">Picked</span>
+                                              </>
                                             )}
                                           </button>
                                         </>
