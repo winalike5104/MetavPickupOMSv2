@@ -1562,9 +1562,27 @@ export const CounterPickupListing: React.FC = () => {
                 <span className="font-semibold">Items</span>
                 <span>{(finalizeTarget.items?.length || 1)} product(s)</span>
               </div>
-              <div className="flex items-center justify-between gap-3 mt-2">
-                <span className="font-semibold">Total Qty</span>
-                <span>{finalizeTarget.qty}</span>
+              <div className="mt-3 space-y-2">
+                {(finalizeTarget.items?.length ? finalizeTarget.items : [{
+                  sku: finalizeTarget.sku,
+                  productName: finalizeTarget.productName,
+                  location: finalizeTarget.location,
+                  qty: finalizeTarget.qty
+                }]).map((item, index) => (
+                  <div key={`${item.sku}-${index}`} className="flex items-start justify-between gap-3 rounded-lg bg-white border border-slate-200 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 break-words">
+                        {item.sku} - {item.qty}PCS
+                      </div>
+                      <div className="text-xs text-slate-500 truncate" title={item.productName}>
+                        {item.productName}
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500 whitespace-nowrap">
+                      {item.location || 'NOT_ASSIGNED'}
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="flex items-start justify-between gap-3 mt-2">
                 <span className="font-semibold">Comment</span>
