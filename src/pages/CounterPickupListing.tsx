@@ -719,17 +719,21 @@ export const CounterPickupListing: React.FC = () => {
     if (currentPage > displayTotalPages) setCurrentPage(displayTotalPages);
   }, [currentPage, displayTotalPages]);
 
-  const statusLabel = (status: CounterPickupStatus) => {
+  const statusLabel = (status?: CounterPickupStatus | null) => {
+    if (!status) return '-';
     if (status === 'PendingPick') return text.pendingPick;
     if (status === 'Picked') return text.picked;
     if (status === 'PendingPutback') return text.pendingPutback;
-    return text.finalized;
+    if (status === 'Finalized') return text.finalized;
+    return status;
   };
 
-  const queueLabel = (status: CounterPickupQueueStatus) => {
+  const queueLabel = (status?: CounterPickupQueueStatus | null) => {
+    if (!status) return '-';
     if (status === 'Pending') return text.queuePending;
     if (status === 'Picking') return text.queuePicking;
-    return text.queuePicked;
+    if (status === 'Picked') return text.queuePicked;
+    return status;
   };
 
   const destinationLabel = (destination?: string | null) => {
@@ -784,6 +788,7 @@ export const CounterPickupListing: React.FC = () => {
   const historyCommentLabel = (item: CounterPickupItem, request: CounterPickup) => item.comment || item.otherNotes || request.comment || request.otherNotes || '-';
   const historyStatusLabel = (request: CounterPickup) => statusLabel(request.status);
   const historyQueueLabel = (request: CounterPickup) => queueLabel(request.queueStatus);
+  const historyTableTextClass = 'block min-h-[1.25rem] leading-5 whitespace-pre-wrap break-words';
   const shouldShowCommentForOutcome = (outcome?: string | null) => outcome === 'warrantySwapParts' || outcome === 'other';
   const historyNoteLabel = (item: CounterPickup) => item.comment || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
@@ -1241,8 +1246,6 @@ export const CounterPickupListing: React.FC = () => {
                       <th className="px-3 py-3 w-[8%] md:w-[5%] text-right">{text.qty}</th>
                       <th className="hidden md:table-cell px-3 py-3 w-[10%]">{text.warehouse} / {text.createdBy}</th>
                       <th className="hidden md:table-cell px-3 py-3 w-[9%]">{text.createdAt}</th>
-                      <th className="hidden md:table-cell px-3 py-3 w-[8%]">{text.statusFilter}</th>
-                      <th className="hidden md:table-cell px-3 py-3 w-[8%]">{text.queueFilter}</th>
                       {view === 'history' && (
                         <>
                           <th className="hidden md:table-cell px-3 py-3 w-[7%]">{text.referenceNo}</th>
@@ -1505,24 +1508,20 @@ export const CounterPickupListing: React.FC = () => {
                                       <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
                                     </div>
                                   </td>
-                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
-                                      <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
-                                      {historyStatusLabel(item)}
-                                      </span>
-                                    </td>
-                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
-                                      <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
-                                      {historyQueueLabel(item)}
-                                      </span>
-                                    </td>
                                   {view === 'history' && (
                                     <>
-                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{referenceLabelForHistory(entry, item)}</td>
-                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">{destinationLabelForHistory(entry, item)}</td>
+                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">
+                                        <span className={historyTableTextClass}>{referenceLabelForHistory(entry, item)}</span>
+                                      </td>
+                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
+                                        <span className={historyTableTextClass}>{destinationLabelForHistory(entry, item)}</span>
+                                      </td>
                                     </>
                                   )}
                                   {view === 'history' && (
-                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">{historyCommentLabel(entry, item)}</td>
+                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">
+                                      <span className={historyTableTextClass}>{historyCommentLabel(entry, item)}</span>
+                                    </td>
                                   )}
                                   <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
                                     <div className="flex justify-end gap-1.5 flex-wrap">
