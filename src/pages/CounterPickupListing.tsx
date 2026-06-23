@@ -69,6 +69,18 @@ const emptyFinalizeForm: FinalizeFormState = {
 
 type HistorySourceFilter = Record<CounterPickupSourceType, boolean>;
 type HistoryRequestTypeFilter = Record<CounterPickupRequestType, boolean>;
+type CounterPickupRow = {
+  request: CounterPickup;
+  item: {
+    sku: string;
+    qty: number;
+    productName: string;
+    location: string;
+    outcome?: string | null;
+    destination?: string | null;
+  };
+  itemIndex: number;
+};
 
 const getOrderNumberPrefix = (sourceType: CounterPickupSourceType | '' | undefined) => {
   if (sourceType === 'metav') return 'MVNZ';
@@ -684,10 +696,34 @@ export const CounterPickupListing: React.FC = () => {
     const start = (currentPage - 1) * PAGE_SIZE;
     return filteredRequests.slice(start, start + PAGE_SIZE);
   }, [filteredRequests, currentPage]);
+  const historyRows = useMemo<CounterPickupRow[]>(() => {
+    return filteredRequests.flatMap((request) => {
+      const requestItems = request.items?.length
+        ? request.items
+        : [{ sku: request.sku, productName: request.productName, location: request.location, qty: request.qty }];
+      return requestItems.map((item, itemIndex) => ({
+        request,
+        item: {
+          sku: item.sku,
+          qty: item.qty,
+          productName: item.productName,
+          location: item.location,
+          outcome: item.outcome,
+          destination: item.destination,
+        },
+        itemIndex,
+      }));
+    });
+  }, [filteredRequests]);
+  const paginatedHistoryRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return historyRows.slice(start, start + PAGE_SIZE);
+  }, [historyRows, currentPage]);
+  const displayTotalPages = view === 'history' ? Math.max(1, Math.ceil(historyRows.length / PAGE_SIZE)) : totalPages;
 
   useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+    if (currentPage > displayTotalPages) setCurrentPage(displayTotalPages);
+  }, [currentPage, displayTotalPages]);
 
   const statusLabel = (status: CounterPickupStatus) => {
     if (status === 'PendingPick') return text.pendingPick;
@@ -766,30 +802,20 @@ export const CounterPickupListing: React.FC = () => {
       ['SKU', 'Qty', 'Requested By', 'Order Source', 'Request No.', 'Request Type', 'Created At']
     ];
 
-    filteredRequests.forEach((item) => {
-      const itemsToExport = (item.items?.length ? item.items : [{
-        sku: item.sku,
-        productName: item.productName,
-        location: item.location,
-        qty: item.qty,
-        outcome: item.outcome || item.destination
-      }]).filter((entry: any) => {
-        const outcome = String(entry.outcome || '').trim();
-        const destination = String(entry.destination || '').trim();
-        return outcome !== 'returnedToWarehouse' && destination !== 'Returned';
-      });
+    historyRows.forEach(({ request, item }) => {
+      const outcome = String(item.outcome || request.outcome || request.destination || '').trim();
+      const destination = String(item.destination || request.destination || '').trim();
+      if (outcome === 'returnedToWarehouse' || destination === 'Returned') return;
 
-      itemsToExport.forEach((entry: any) => {
-        rows.push([
-          entry.sku || '',
-          String(entry.qty || ''),
-          item.createdBy || '',
-          item.sourceType === 'offline' ? 'Offline Order' : item.sourceType === 'blackfern' ? 'BlackFern Order' : item.sourceType === 'other' ? 'Other' : 'Metav Order',
-          item.id,
-          item.requestType === 'scheduledDelivery' ? 'Scheduled Delivery' : 'Counter Pickup',
-          item.createdAt ? formatDate(item.createdAt, 'yyyy-MM-dd HH:mm') : ''
-        ]);
-      });
+      rows.push([
+        item.sku || '',
+        String(item.qty || ''),
+        request.createdBy || '',
+        request.sourceType === 'offline' ? 'Offline Order' : request.sourceType === 'blackfern' ? 'BlackFern Order' : request.sourceType === 'other' ? 'Other' : 'Metav Order',
+        request.id,
+        request.requestType === 'scheduledDelivery' ? 'Scheduled Delivery' : 'Counter Pickup',
+        request.createdAt ? formatDate(request.createdAt, 'yyyy-MM-dd HH:mm') : ''
+      ]);
     });
 
     exportCsv(rows, `counter-pickup-export-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -1213,133 +1239,236 @@ export const CounterPickupListing: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {paginatedRequests.map((item) => (
-                      (() => {
-                        const requestItems = item.items?.length
-                          ? item.items
-                          : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }];
-                        return requestItems.map((entry, index) => (
-                          <tr
-                            key={`${item.id}-${entry.sku}-${index}`}
-                            className={cn(
-                              'transition-colors',
-                              item.status === 'Picked' && 'bg-red-50/40',
-                              item.status === 'PendingPutback' && 'bg-amber-50/40',
-                              index === 0 ? 'hover:bg-slate-50' : 'bg-slate-50/35 hover:bg-slate-100/60',
-                              index > 0 && 'border-t border-slate-100'
-                            )}
-                          >
-                            {index === 0 && (
-                              <td rowSpan={requestItems.length} className="px-3 py-3 font-bold text-slate-900 align-top">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="block text-sm break-words" title={item.id}>{item.id}</span>
-                                  </div>
-                                  <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
-                                </div>
-                              </td>
-                            )}
-                            {index === 0 && (
-                              <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
-                                <div className="space-y-2">
-                                  <span className={cn('inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide', requestTypeBadgeClass(item.requestType))}>
-                                    {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
-                                  </span>
-                                  <div className="flex flex-wrap gap-1">
-                                    <span className={cn('inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide', sourceBadgeClass(item.sourceType))}>
-                                      {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                            )}
-                            <td className={cn('px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm', index > 0 && 'pl-5')}>
+                    {view === 'history'
+                      ? paginatedHistoryRows.map(({ request: item, item: entry, itemIndex }) => (
+                        <tr
+                          key={`${item.id}-${entry.sku}-${itemIndex}`}
+                          className={cn(
+                            'transition-colors',
+                            item.status === 'Picked' && 'bg-red-50/40',
+                            item.status === 'PendingPutback' && 'bg-amber-50/40',
+                            itemIndex === 0 ? 'hover:bg-slate-50' : 'bg-slate-50/35 hover:bg-slate-100/60',
+                            itemIndex > 0 && 'border-t border-slate-100'
+                          )}
+                        >
+                          <td className="px-3 py-3 font-bold text-slate-900 align-top">
+                            <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                {index > 0 && <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />}
-                                <span title={entry.sku}>{entry.sku}</span>
+                                <span className="block text-sm break-words" title={item.id}>{item.id}</span>
                               </div>
-                            </td>
-                            <td className="px-3 py-3 text-slate-700 align-top">
-                              <div className="space-y-1">
-                                <p className={cn('font-medium text-sm truncate hidden md:block', index > 0 && 'pl-4')} title={entry.productName}>{entry.productName}</p>
-                                <p className="md:hidden text-[10px] text-slate-500 truncate" title={entry.productName}>{entry.productName}</p>
-                                {index === 0 && item.status === 'Picked' && (
-                                  <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    {text.pickedAlert}
-                                  </div>
-                                )}
-                                {index === 0 && item.status === 'PendingPutback' && (
-                                  <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
-                                    <RotateCcw className="w-3 h-3" />
-                                    {text.putbackAlert}
-                                  </div>
-                                )}
+                              <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            <div className="space-y-2">
+                              <span className={cn('inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide', requestTypeBadgeClass(item.requestType))}>
+                                {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                <span className={cn('inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide', sourceBadgeClass(item.sourceType))}>
+                                  {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
+                                </span>
                               </div>
-                            </td>
-                            <td className={cn('px-3 py-3 text-slate-500 align-top text-sm break-all', index > 0 && 'pl-5')}>{entry.location}</td>
-                            <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{entry.qty}</td>
-                            {index === 0 && (
-                              <>
-                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top">
-                                  <div className="space-y-1 min-w-0">
-                                    <p className="text-sm font-semibold text-slate-700 truncate" title={item.warehouseId || text.noWarehouse}>
-                                      {item.warehouseId || text.noWarehouse}
-                                    </p>
-                                    <p className="text-[11px] truncate" title={item.createdBy}>
-                                      {item.createdBy}
-                                    </p>
+                            </div>
+                          </td>
+                          <td className={cn('px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm', itemIndex > 0 && 'pl-5')}>
+                            <div className="flex items-center gap-2">
+                              {itemIndex > 0 && <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />}
+                              <span title={entry.sku}>{entry.sku}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-slate-700 align-top">
+                            <div className="space-y-1">
+                              <p className={cn('font-medium text-sm truncate hidden md:block', itemIndex > 0 && 'pl-4')} title={entry.productName}>{entry.productName}</p>
+                              <p className="md:hidden text-[10px] text-slate-500 truncate" title={entry.productName}>{entry.productName}</p>
+                              {itemIndex === 0 && item.status === 'Picked' && (
+                                <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  {text.pickedAlert}
+                                </div>
+                              )}
+                              {itemIndex === 0 && item.status === 'PendingPutback' && (
+                                <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
+                                  <RotateCcw className="w-3 h-3" />
+                                  {text.putbackAlert}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className={cn('px-3 py-3 text-slate-500 align-top text-sm break-all', itemIndex > 0 && 'pl-5')}>{entry.location}</td>
+                          <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{entry.qty}</td>
+                          <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top">
+                            <div className="space-y-1 min-w-0">
+                              <p className="text-sm font-semibold text-slate-700 truncate" title={item.warehouseId || text.noWarehouse}>
+                                {item.warehouseId || text.noWarehouse}
+                              </p>
+                              <p className="text-[11px] truncate" title={item.createdBy}>
+                                {item.createdBy}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
+                            <div className="leading-tight">
+                              <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
+                              <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
+                            </div>
+                          </td>
+                          <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">
+                            {item.orderNumber || item.referenceNo || '-'}
+                          </td>
+                          <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
+                            {outcomeLabelForTarget(entry.outcome || item.outcome || item.destination, item)}
+                          </td>
+                          <td className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">
+                            {historyNoteLabel(item)}
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            <div className="flex justify-end gap-1.5 flex-wrap">
+                              {canCreate && item.status === 'Picked' && itemIndex === 0 && (
+                                <button
+                                  onClick={() => {
+                                    setFinalizeTarget(item);
+                                    setFinalizeForm(emptyFinalizeForm);
+                                    setItemFinalizeActions(item.items?.length ? item.items.map(() => createDefaultItemAction()) : [createDefaultItemAction()]);
+                                  }}
+                                  disabled={submitting}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+                                >
+                                  <Send className="w-3 h-3" />
+                                  {text.finalize}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                      : paginatedRequests.map((item) => (
+                        (() => {
+                          const requestItems = item.items?.length
+                            ? item.items
+                            : [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }];
+                          return requestItems.map((entry, index) => (
+                            <tr
+                              key={`${item.id}-${entry.sku}-${index}`}
+                              className={cn(
+                                'transition-colors',
+                                item.status === 'Picked' && 'bg-red-50/40',
+                                item.status === 'PendingPutback' && 'bg-amber-50/40',
+                                index === 0 ? 'hover:bg-slate-50' : 'bg-slate-50/35 hover:bg-slate-100/60',
+                                index > 0 && 'border-t border-slate-100'
+                              )}
+                            >
+                              {index === 0 && (
+                                <td rowSpan={requestItems.length} className="px-3 py-3 font-bold text-slate-900 align-top">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="block text-sm break-words" title={item.id}>{item.id}</span>
+                                    </div>
+                                    <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
                                   </div>
                                 </td>
-                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
-                                  <div className="leading-tight">
-                                    <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
-                                    <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
-                                  </div>
-                                </td>
-                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
-                                  <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
-                                    {statusLabel(item.status)}
-                                  </span>
-                                </td>
-                                <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
-                                  <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
-                                    {queueLabel(item.queueStatus)}
-                                  </span>
-                                </td>
-                                {view === 'history' && (
-                                  <>
-                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.orderNumber || item.referenceNo || '-'}</td>
-                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabelForTarget(item.outcome || item.destination, item)}</td>
-                                  </>
-                                )}
-                                {view === 'history' && (
-                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
-                                )}
+                              )}
+                              {index === 0 && (
                                 <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
-                                  <div className="flex justify-end gap-1.5 flex-wrap">
-                                    {canCreate && item.status === 'Picked' && (
-                                      <button
-                                        onClick={() => {
-                                          setFinalizeTarget(item);
-                                          setFinalizeForm(emptyFinalizeForm);
-                                          setItemFinalizeActions((requestItems).map(() => createDefaultItemAction()));
-                                        }}
-                                        disabled={submitting}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
-                                      >
-                                        <Send className="w-3 h-3" />
-                                        {text.finalize}
-                                      </button>
-                                    )}
+                                  <div className="space-y-2">
+                                    <span className={cn('inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide', requestTypeBadgeClass(item.requestType))}>
+                                      {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
+                                    </span>
+                                    <div className="flex flex-wrap gap-1">
+                                      <span className={cn('inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide', sourceBadgeClass(item.sourceType))}>
+                                        {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
+                                      </span>
+                                    </div>
                                   </div>
                                 </td>
-                              </>
-                            )}
-                          </tr>
-                        ));
-                      })()
-                    ))}
+                              )}
+                              <td className={cn('px-3 py-3 font-semibold text-slate-700 align-top break-words text-sm', index > 0 && 'pl-5')}>
+                                <div className="flex items-center gap-2">
+                                  {index > 0 && <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />}
+                                  <span title={entry.sku}>{entry.sku}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-slate-700 align-top">
+                                <div className="space-y-1">
+                                  <p className={cn('font-medium text-sm truncate hidden md:block', index > 0 && 'pl-4')} title={entry.productName}>{entry.productName}</p>
+                                  <p className="md:hidden text-[10px] text-slate-500 truncate" title={entry.productName}>{entry.productName}</p>
+                                  {index === 0 && item.status === 'Picked' && (
+                                    <div className="flex items-center gap-1 text-[11px] text-red-600 font-semibold">
+                                      <AlertTriangle className="w-3 h-3" />
+                                      {text.pickedAlert}
+                                    </div>
+                                  )}
+                                  {index === 0 && item.status === 'PendingPutback' && (
+                                    <div className="flex items-center gap-1 text-[11px] text-amber-700 font-semibold">
+                                      <RotateCcw className="w-3 h-3" />
+                                      {text.putbackAlert}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className={cn('px-3 py-3 text-slate-500 align-top text-sm break-all', index > 0 && 'pl-5')}>{entry.location}</td>
+                              <td className="px-3 py-3 text-right font-semibold text-slate-900 align-top text-sm">{entry.qty}</td>
+                              {index === 0 && (
+                                <>
+                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top">
+                                    <div className="space-y-1 min-w-0">
+                                      <p className="text-sm font-semibold text-slate-700 truncate" title={item.warehouseId || text.noWarehouse}>
+                                        {item.warehouseId || text.noWarehouse}
+                                      </p>
+                                      <p className="text-[11px] truncate" title={item.createdBy}>
+                                        {item.createdBy}
+                                      </p>
+                                    </div>
+                                  </td>
+                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
+                                    <div className="leading-tight">
+                                      <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
+                                      <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
+                                    </div>
+                                  </td>
+                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
+                                    <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
+                                      {statusLabel(item.status)}
+                                    </span>
+                                  </td>
+                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
+                                    <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
+                                      {queueLabel(item.queueStatus)}
+                                    </span>
+                                  </td>
+                                  {view === 'history' && (
+                                    <>
+                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.orderNumber || item.referenceNo || '-'}</td>
+                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabelForTarget(item.outcome || item.destination, item)}</td>
+                                    </>
+                                  )}
+                                  {view === 'history' && (
+                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
+                                  )}
+                                  <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
+                                    <div className="flex justify-end gap-1.5 flex-wrap">
+                                      {canCreate && item.status === 'Picked' && (
+                                        <button
+                                          onClick={() => {
+                                            setFinalizeTarget(item);
+                                            setFinalizeForm(emptyFinalizeForm);
+                                            setItemFinalizeActions((requestItems).map(() => createDefaultItemAction()));
+                                          }}
+                                          disabled={submitting}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+                                        >
+                                          <Send className="w-3 h-3" />
+                                          {text.finalize}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          ));
+                        })()
+                      ))}
                     {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
                       <tr key={`${item.id}-details`} className="bg-slate-50/60">
                         <td colSpan={13} className="px-3 pb-4 pt-0">
@@ -1406,10 +1535,10 @@ export const CounterPickupListing: React.FC = () => {
                 >
                   {text.prev}
                 </button>
-                <span className="text-sm text-slate-600">{currentPage} / {totalPages}</span>
+                <span className="text-sm text-slate-600">{currentPage} / {displayTotalPages}</span>
                 <button
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(displayTotalPages, prev + 1))}
+                  disabled={currentPage === displayTotalPages}
                   className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
                 >
                   {text.next}
@@ -1461,17 +1590,9 @@ export const CounterPickupListing: React.FC = () => {
 
               <div>
                 <label className="text-sm font-medium text-slate-700">{text.sourceType}</label>
-                <select
-                  value={finalizeForm.sourceType}
-                  onChange={(e) => setFinalizeForm((prev) => ({ ...prev, sourceType: e.target.value as FinalizeFormState['sourceType'] }))}
-                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="">{text.selectOne}</option>
-                  <option value="metav">{text.metavSource}</option>
-                  <option value="offline">{text.offlineSource}</option>
-                  <option value="blackfern">{text.blackfernSource}</option>
-                  <option value="other">{text.otherSource}</option>
-                </select>
+                <div className="mt-2 w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-medium">
+                  {finalizeTarget.sourceType === 'offline' ? text.offlineSource : finalizeTarget.sourceType === 'blackfern' ? text.blackfernSource : finalizeTarget.sourceType === 'other' ? text.otherSource : text.metavSource}
+                </div>
               </div>
 
               {!splitPerItem && (
