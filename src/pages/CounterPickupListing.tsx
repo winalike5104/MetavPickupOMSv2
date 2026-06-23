@@ -815,9 +815,24 @@ export const CounterPickupListing: React.FC = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+  const autoFitWorksheetColumns = (worksheet: XLSX.WorkSheet, rows: string[][]) => {
+    worksheet['!cols'] = rows[0]?.map((_, colIndex) => {
+      const maxLength = rows.reduce((max, row) => {
+        const cell = String(row[colIndex] ?? '');
+        return Math.max(max, cell.length);
+      }, 0);
+      return { wch: Math.min(Math.max(maxLength + 2, 10), 42) };
+    }) || [];
+    worksheet['!autofilter'] = {
+      ref: XLSX.utils.encode_range({
+        s: { r: 0, c: 0 },
+        e: { r: Math.max(rows.length - 1, 0), c: Math.max((rows[0]?.length || 1) - 1, 0) }
+      })
+    };
+  };
   const handleExportFilteredList = () => {
     const detailRows: string[][] = [
-      ['SKU', 'Qty', 'Requested By', 'Order Source', 'Request No.', 'Order Number', 'Request Type', 'Created At']
+      ['SKU', 'Qty', 'Requested By', 'Order Source', 'Request No.', 'Order Number', 'Destination', 'Comment', 'Request Type', 'Created At']
     ];
     const summaryMap = new Map<string, number>();
 
@@ -836,6 +851,8 @@ export const CounterPickupListing: React.FC = () => {
         request.sourceType === 'offline' ? 'Offline Order' : request.sourceType === 'blackfern' ? 'BlackFern Order' : request.sourceType === 'other' ? 'Other' : 'Metav Order',
         request.id,
         orderNumber,
+        destinationLabelForHistory(item as any, request),
+        historyCommentLabel(item as any, request),
         request.requestType === 'scheduledDelivery' ? 'Scheduled Delivery' : 'Counter Pickup',
         request.createdAt ? formatDate(request.createdAt, 'yyyy-MM-dd HH:mm') : ''
       ]);
@@ -849,8 +866,12 @@ export const CounterPickupListing: React.FC = () => {
     ];
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(detailRows), 'Detail');
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary');
+    const detailSheet = XLSX.utils.aoa_to_sheet(detailRows);
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+    autoFitWorksheetColumns(detailSheet, detailRows);
+    autoFitWorksheetColumns(summarySheet, summaryRows);
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detail');
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
     const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
