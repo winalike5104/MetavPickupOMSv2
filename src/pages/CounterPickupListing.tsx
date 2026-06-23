@@ -17,7 +17,7 @@ import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../components/AuthProvider';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { CounterPickup, CounterPickupOutcome, CounterPickupQueueStatus, CounterPickupRequestType, CounterPickupSourceType, CounterPickupStatus, SKU } from '../types';
-import { cn, formatDate, hasPermission } from '../utils';
+import { cn, formatDate, getAucklandDateKey, hasPermission } from '../utils';
 import * as XLSX from 'xlsx';
 
 type ListingView = 'active' | 'history';
@@ -114,6 +114,11 @@ const createEmptyDraft = (): CounterPickupItemDraft => ({
   manualProductName: '',
   manualLocation: 'NOT_ASSIGNED'
 });
+
+const isAucklandDateOnOrAfter = (value: string, compare: string) => {
+  if (!value) return true;
+  return value >= compare;
+};
 
 const CN_TEXT = {
   pageTitle: '申请提货列表',
@@ -663,7 +668,7 @@ export const CounterPickupListing: React.FC = () => {
   const filteredRequests = useMemo(() => {
     const hasSourceFilter = Object.values(historySourceFilters).some(Boolean);
     const hasRequestTypeFilter = Object.values(historyRequestTypeFilters).some(Boolean);
-    const todayKey = new Date().toISOString().split('T')[0];
+    const todayKey = getAucklandDateKey(new Date());
     return requests.filter((item) => {
       const itemSearchText = (item.items || [])
         .map((entry) => `${entry.sku || ''} ${entry.productName || ''} ${entry.location || ''} ${entry.qty || ''} ${entry.orderNumber || ''} ${entry.comment || ''} ${entry.outcome || ''}`)
@@ -672,7 +677,7 @@ export const CounterPickupListing: React.FC = () => {
       const matchesSearch = haystack.includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       const matchesQueue = queueFilter === 'All' || item.queueStatus === queueFilter;
-      const itemDate = item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '';
+      const itemDate = item.createdAt ? getAucklandDateKey(item.createdAt) : '';
       const matchesDate =
         (!dateRange.start || itemDate >= dateRange.start) &&
         (!dateRange.end || itemDate <= dateRange.end);

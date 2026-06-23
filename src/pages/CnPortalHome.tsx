@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link } from 'react-router-dom';
 import { ClipboardList, Clock, Mail, Users, ArrowRight } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
@@ -35,6 +35,13 @@ export const CnPortalHome: React.FC = () => {
       to: '/cn/users',
       icon: Users,
       visible: isAdmin(profile, profile?.email) || hasPermission(profile, 'Manage Users', profile?.email)
+    },
+    {
+      title: '申请提货',
+      desc: '进入提货列表，处理前台需要的提货、已送达和回库。',
+      to: '/cn/counter-pickups',
+      icon: ClipboardList,
+      visible: profile?.roleTemplate === 'Reception' || profile?.roleTemplate === 'Admin' || hasPermission(profile, 'Manage Picking', profile?.email)
     }
   ];
 

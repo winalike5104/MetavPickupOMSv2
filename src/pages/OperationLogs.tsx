@@ -4,7 +4,7 @@ import { collection, query, getDocs, orderBy, limit, writeBatch } from 'firebase
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { OperationLog } from '../types';
-import { logAction, hasPermission, isAdmin, isSystemAdmin, formatDate, cn } from '../utils';
+import { logAction, hasPermission, isAdmin, isSystemAdmin, formatDate, cn, getAucklandDateKey } from '../utils';
 import { FileText, Search, User, Clock, Activity, Filter, ArrowUpDown, Calendar, ShieldAlert, Terminal, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { PageHeader } from '../components/PageHeader';
@@ -129,7 +129,7 @@ export default function OperationLogs() {
         const matchesAction = actionFilter === 'All' || log.action === actionFilter;
         const matchesCategory = categoryFilter === 'All' || category === categoryFilter;
         
-        const logDate = new Date(log.timestamp).toISOString().split('T')[0];
+        const logDate = getAucklandDateKey(log.timestamp);
         const matchesStart = !dateFilter.start || logDate >= dateFilter.start;
         const matchesEnd = !dateFilter.end || logDate <= dateFilter.end;
 

@@ -232,9 +232,21 @@ export const PickingQueue: React.FC = () => {
   });
 
   const counterStats = useMemo(() => {
-    const todayKey = new Date().toISOString().split('T')[0];
+    const todayKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Pacific/Auckland',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
     const createdToday = counterPickups.filter((item) => {
-      const createdKey = item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '';
+      const createdKey = item.createdAt
+        ? new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Pacific/Auckland',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date(item.createdAt))
+        : '';
       return createdKey === todayKey;
     }).length;
 
@@ -246,6 +258,16 @@ export const PickingQueue: React.FC = () => {
       finalized: counterPickups.filter((item) => item.status === 'Finalized').length
     };
   }, [counterPickups]);
+
+  const counterPickupRequests = useMemo(
+    () => counterPickups.filter((item) => (item.requestType || 'counterPickup') === 'counterPickup'),
+    [counterPickups]
+  );
+
+  const scheduledDeliveryRequests = useMemo(
+    () => counterPickups.filter((item) => item.requestType === 'scheduledDelivery'),
+    [counterPickups]
+  );
 
   const getQueueDisplayItems = (item: CounterPickup) => {
     const putbackItems = Array.isArray((item as any).putbackItems) ? (item as any).putbackItems : [];
@@ -542,14 +564,22 @@ export const PickingQueue: React.FC = () => {
             </select>
           </div>
 
-          {counterPickups.length > 0 && (
+          {(counterPickupRequests.length > 0 || scheduledDeliveryRequests.length > 0) && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
                 <h3 className="text-sm font-black text-amber-900 uppercase tracking-wider">Counter Pickup Priority</h3>
               </div>
-              <div className="space-y-3">
-                {counterPickups.map((item) => (
+              <div className="space-y-5">
+                {counterPickupRequests.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full bg-amber-300 text-amber-950 text-[10px] font-black uppercase tracking-wider shadow-sm">
+                        Counter Pickup
+                      </span>
+                      <span className="text-[11px] text-amber-800 font-semibold">Reception urgent requests</span>
+                    </div>
+                    {counterPickupRequests.map((item) => (
                   (() => {
                     const displayItems = getQueueDisplayItems(item);
                     if (item.status === 'PendingPutback' && displayItems.length === 0) return null;
@@ -565,8 +595,8 @@ export const PickingQueue: React.FC = () => {
                     )}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">Counter Pickup</span>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px] font-black uppercase tracking-wider">Counter Pickup</span>
                         <span className={cn(
                           "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider",
                           item.queueStatus === 'Pending'
@@ -607,7 +637,7 @@ export const PickingQueue: React.FC = () => {
                           <div key={`${item.id}-${entry.sku}-${idx}`} className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white px-4 py-3 shadow-sm">
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-black uppercase tracking-wider">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-300 text-amber-950 text-[10px] font-black uppercase tracking-wider">
                                   Item {idx + 1}
                                 </span>
                                 <span className="text-base md:text-lg font-black text-slate-950 break-words tracking-tight">
@@ -638,7 +668,7 @@ export const PickingQueue: React.FC = () => {
                         <button
                           onClick={() => handleCounterStartPicking(item.id)}
                           disabled={updatingIds.includes(item.id)}
-                          className="flex items-center justify-center bg-indigo-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md disabled:opacity-50"
+                          className="flex items-center justify-center bg-amber-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-amber-700 transition-all shadow-md disabled:opacity-50"
                           title="Start Picking"
                         >
                           {updatingIds.includes(item.id) ? (
@@ -652,7 +682,7 @@ export const PickingQueue: React.FC = () => {
                         <button
                           onClick={() => handleCounterMarkPicked(item.id)}
                           disabled={updatingIds.includes(item.id)}
-                          className="flex items-center justify-center bg-emerald-600 text-white w-12 h-12 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50"
+                          className="flex items-center justify-center bg-amber-700 text-white w-12 h-12 rounded-2xl font-bold hover:bg-amber-800 transition-all shadow-md disabled:opacity-50"
                           title="Complete Picking"
                         >
                           {updatingIds.includes(item.id) ? (
@@ -666,7 +696,138 @@ export const PickingQueue: React.FC = () => {
                   </div>
                     );
                   })()
-                ))}
+                    ))}
+                  </div>
+                )}
+
+                {scheduledDeliveryRequests.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full bg-slate-200 text-slate-900 text-[10px] font-black uppercase tracking-wider shadow-sm">
+                        Scheduled Delivery
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-semibold">Warehouse delivery requests</span>
+                    </div>
+                    {scheduledDeliveryRequests.map((item) => (
+                      (() => {
+                        const displayItems = getQueueDisplayItems(item);
+                        if (item.status === 'PendingPutback' && displayItems.length === 0) return null;
+                        const isPutbackTask = item.status === 'PendingPutback';
+                        return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-4 border shadow-sm transition-all",
+                          item.queueStatus === 'Picked' || isPutbackTask
+                            ? "bg-emerald-50 border-emerald-300 ring-1 ring-emerald-200"
+                            : "bg-slate-50 border-slate-200"
+                        )}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-black uppercase tracking-wider">Scheduled Delivery</span>
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider",
+                              item.queueStatus === 'Pending'
+                                ? "bg-slate-200 text-slate-800"
+                                : item.queueStatus === 'Picking'
+                                  ? "bg-slate-500 text-white"
+                                  : "bg-emerald-600 text-white shadow-sm"
+                            )}>
+                              {item.queueStatus === 'Picked' ? 'Ready' : item.queueStatus}
+                            </span>
+                            {item.status === 'PendingPutback' && (
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold uppercase">
+                                Putback Pending
+                              </span>
+                            )}
+                            <span className="text-[10px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-slate-400">Request</p>
+                              <p className="text-sm font-bold text-slate-900">{item.id}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-slate-400">SKU</p>
+                              <p className="text-sm font-black text-slate-900 break-words">{item.sku}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-slate-400">LOC</p>
+                              <p className="text-sm font-black text-slate-900">{item.location}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-slate-400">QTY</p>
+                              <p className="text-sm font-black text-slate-900">{getQueueDisplayQty(item)}</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            {displayItems.map((entry, idx) => (
+                              <div key={`${item.id}-${entry.sku}-${idx}`} className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-4 py-3 shadow-sm">
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-200 text-slate-900 text-[10px] font-black uppercase tracking-wider">
+                                      Item {idx + 1}
+                                    </span>
+                                    <span className="text-base md:text-lg font-black text-slate-950 break-words tracking-tight">
+                                      {entry.sku}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <span className="inline-flex items-center px-3 py-1 rounded-xl bg-slate-200 text-slate-900 text-sm font-black tracking-wide border border-slate-300">
+                                      Loc: {entry.location}
+                                    </span>
+                                    <span className="inline-flex items-center px-3 py-1 rounded-xl bg-slate-700 text-white text-sm font-black tracking-wide">
+                                      Qty: {entry.qty}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {(item.pickupNote || item.comment) && (
+                            <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+                              <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">Pickup Note</p>
+                              <p className="text-sm text-slate-700 break-words">{item.pickupNote || item.comment}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {item.queueStatus === 'Pending' && (
+                            <button
+                              onClick={() => handleCounterStartPicking(item.id)}
+                              disabled={updatingIds.includes(item.id)}
+                              className="flex items-center justify-center bg-slate-700 text-white w-12 h-12 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-md disabled:opacity-50"
+                              title="Start Picking"
+                            >
+                              {updatingIds.includes(item.id) ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Play className="w-6 h-6 fill-current" />
+                              )}
+                            </button>
+                          )}
+                          {item.queueStatus === 'Picking' && (
+                            <button
+                              onClick={() => handleCounterMarkPicked(item.id)}
+                              disabled={updatingIds.includes(item.id)}
+                              className="flex items-center justify-center bg-slate-900 text-white w-12 h-12 rounded-2xl font-bold hover:bg-black transition-all shadow-md disabled:opacity-50"
+                              title="Complete Picking"
+                            >
+                              {updatingIds.includes(item.id) ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="w-6 h-6" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                        );
+                      })()
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

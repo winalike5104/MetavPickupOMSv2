@@ -145,6 +145,14 @@ export const safeSearch = (value: string | null | undefined, term: string): bool
   return value.toLowerCase().includes(term.toLowerCase());
 };
 
+export const getAucklandDateKey = (value: string | number | Date) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Pacific/Auckland',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',

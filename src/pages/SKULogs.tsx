@@ -3,7 +3,7 @@ import { collection, query, getDocs, orderBy, limit, where } from 'firebase/fire
 import { db } from '../firebase';
 import { useAuth } from '../components/AuthProvider';
 import { OperationLog } from '../types';
-import { logAction, isAdmin, isSystemAdmin, formatDate, cn } from '../utils';
+import { logAction, isAdmin, isSystemAdmin, formatDate, cn, getAucklandDateKey } from '../utils';
 import { 
   FileText, 
   Search, 
@@ -123,7 +123,7 @@ export default function SKULogs() {
       
       const matchesAction = actionFilter === 'All' || log.action === actionFilter;
       
-      const logDate = new Date(log.timestamp).toISOString().split('T')[0];
+      const logDate = getAucklandDateKey(log.timestamp);
       const matchesStart = !dateFilter.start || logDate >= dateFilter.start;
       const matchesEnd = !dateFilter.end || logDate <= dateFilter.end;
 
