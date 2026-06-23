@@ -67,6 +67,9 @@ const emptyFinalizeForm: FinalizeFormState = {
   sourceType: ''
 };
 
+type HistorySourceFilter = Record<CounterPickupSourceType, boolean>;
+type HistoryRequestTypeFilter = Record<CounterPickupRequestType, boolean>;
+
 const getOrderNumberPrefix = (sourceType: CounterPickupSourceType | '' | undefined) => {
   if (sourceType === 'metav') return 'MVNZ';
   if (sourceType === 'blackfern') return 'BFINV-';
@@ -152,6 +155,7 @@ const CN_TEXT = {
   blackfernSource: 'BlackFern 订单',
   otherSource: '其他',
   sold: '售出',
+  sent: '已寄出',
   returned: 'Returned to warehouse',
   warrantySwapParts: '售后 / Warranty / Swap / Parts',
   other: '其他',
@@ -234,6 +238,7 @@ const EN_TEXT = {
   blackfernSource: 'BlackFern Order',
   otherSource: 'Other',
   sold: 'Sold',
+  sent: 'Sent',
   returned: 'Returned to warehouse',
   warrantySwapParts: 'Warranty / Swap / Parts',
   other: 'Other',
@@ -293,6 +298,17 @@ export const CounterPickupListing: React.FC = () => {
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('All');
   const [counterTab, setCounterTab] = useState<CounterListTab>('All');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [historySourceFilters, setHistorySourceFilters] = useState<HistorySourceFilter>({
+    metav: false,
+    offline: false,
+    blackfern: false,
+    other: false,
+  });
+  const [historyRequestTypeFilters, setHistoryRequestTypeFilters] = useState<HistoryRequestTypeFilter>({
+    counterPickup: false,
+    scheduledDelivery: false,
+  });
+  const [historyTodayOnly, setHistoryTodayOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(true);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
@@ -330,7 +346,7 @@ export const CounterPickupListing: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view, counterTab]);
+  }, [searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, view, counterTab, historySourceFilters, historyRequestTypeFilters, historyTodayOnly]);
 
   const resetCreateForm = () => {
     setDraft(createEmptyDraft());
@@ -526,6 +542,10 @@ export const CounterPickupListing: React.FC = () => {
 
   const handleFinalize = async () => {
     if (!token || !finalizeTarget) return;
+    if (!finalizeForm.sourceType) {
+      alert(text.sourceType + ' is required.');
+      return;
+    }
     const targetItems = finalizeTarget.items?.length ? finalizeTarget.items : [{
       sku: finalizeTarget.sku,
       productName: finalizeTarget.productName,
@@ -635,6 +655,9 @@ export const CounterPickupListing: React.FC = () => {
   };
 
   const filteredRequests = useMemo(() => {
+    const hasSourceFilter = Object.values(historySourceFilters).some(Boolean);
+    const hasRequestTypeFilter = Object.values(historyRequestTypeFilters).some(Boolean);
+    const todayKey = new Date().toISOString().split('T')[0];
     return requests.filter((item) => {
       const itemSearchText = (item.items || [])
         .map((entry) => `${entry.sku || ''} ${entry.productName || ''} ${entry.location || ''} ${entry.qty || ''} ${entry.orderNumber || ''} ${entry.comment || ''} ${entry.outcome || ''}`)
@@ -649,9 +672,12 @@ export const CounterPickupListing: React.FC = () => {
         (!dateRange.end || itemDate <= dateRange.end);
       const matchesMyPending = counterTab !== 'My Pending' || item.status !== 'Finalized';
       const matchesMyCreated = counterTab !== 'My Created' || item.createdByUid === profile?.uid;
-      return matchesSearch && matchesStatus && matchesQueue && matchesDate && matchesMyPending && matchesMyCreated;
+      const matchesToday = !historyTodayOnly || itemDate === todayKey;
+      const matchesSource = !hasSourceFilter || !!item.sourceType && historySourceFilters[(item.sourceType as CounterPickupSourceType) || 'other'];
+      const matchesRequestType = !hasRequestTypeFilter || !!item.requestType && historyRequestTypeFilters[(item.requestType as CounterPickupRequestType) || 'counterPickup'];
+      return matchesSearch && matchesStatus && matchesQueue && matchesDate && matchesMyPending && matchesMyCreated && matchesToday && matchesSource && matchesRequestType;
     });
-  }, [requests, searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, counterTab, profile?.uid]);
+  }, [requests, searchTerm, statusFilter, queueFilter, dateRange.start, dateRange.end, counterTab, profile?.uid, historySourceFilters, historyRequestTypeFilters, historyTodayOnly]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
   const paginatedRequests = useMemo(() => {
@@ -692,6 +718,25 @@ export const CounterPickupListing: React.FC = () => {
     if (outcome === 'other') return text.other;
     return outcome;
   };
+  const outcomeOptions = (target: CounterPickup | null) => {
+    const isScheduledDelivery = target?.requestType === 'scheduledDelivery';
+    return [
+      { value: 'sold', label: isScheduledDelivery ? text.sent : text.sold },
+      { value: 'returnedToWarehouse', label: text.returned },
+      { value: 'warrantySwapParts', label: text.warrantySwapParts },
+      { value: 'other', label: text.other },
+    ] as const;
+  };
+  const outcomeLabelForTarget = (outcome?: string | null, target?: CounterPickup | null) => {
+    if (!outcome) return '-';
+    const isScheduledDelivery = target?.requestType === 'scheduledDelivery';
+    if (outcome === 'sold') return isScheduledDelivery ? text.sent : text.sold;
+    if (outcome === 'returnedToWarehouse') return text.returned;
+    if (outcome === 'warrantySwapParts') return text.warrantySwapParts;
+    if (outcome === 'other') return text.other;
+    return outcome;
+  };
+  const shouldShowCommentForOutcome = (outcome?: string | null) => outcome === 'warrantySwapParts' || outcome === 'other';
   const historyNoteLabel = (item: CounterPickup) => item.comment || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
   return (
@@ -905,6 +950,84 @@ export const CounterPickupListing: React.FC = () => {
                   placeholder={text.searchPlaceholder}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
+                {view === 'history' && (
+                  <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{text.sourceType} / {text.requestType}</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistorySourceFilters({
+                            metav: false,
+                            offline: false,
+                            blackfern: false,
+                            other: false,
+                          });
+                          setHistoryRequestTypeFilters({
+                            counterPickup: false,
+                            scheduledDelivery: false,
+                          });
+                          setHistoryTodayOnly(false);
+                        }}
+                        className="text-[11px] font-semibold text-slate-500 hover:text-slate-700"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">{text.sourceType}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {([
+                          ['metav', text.metavSource],
+                          ['offline', text.offlineSource],
+                          ['blackfern', text.blackfernSource],
+                          ['other', text.otherSource],
+                        ] as const).map(([value, label]) => (
+                          <label key={value} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={historySourceFilters[value]}
+                              onChange={(e) => setHistorySourceFilters((prev) => ({ ...prev, [value]: e.target.checked }))}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">{text.requestType}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {([
+                          ['counterPickup', text.counterPickupType],
+                          ['scheduledDelivery', text.scheduledDeliveryType],
+                        ] as const).map(([value, label]) => (
+                          <label key={value} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={historyRequestTypeFilters[value]}
+                              onChange={(e) => setHistoryRequestTypeFilters((prev) => ({ ...prev, [value]: e.target.checked }))}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={historyTodayOnly}
+                        onChange={(e) => setHistoryTodayOnly(e.target.checked)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>Today</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="lg:col-span-2">
@@ -1004,8 +1127,9 @@ export const CounterPickupListing: React.FC = () => {
                   <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase">
                     <tr>
                       <th className="px-3 py-3 w-[10%]">{text.requestNo}</th>
+                      <th className="px-3 py-3 w-[12%]">{text.requestType} / {text.sourceType}</th>
                       <th className="px-3 py-3 w-[10%]">SKU</th>
-                      <th className="px-3 py-3 w-[20%]">{text.productName}</th>
+                      <th className="px-3 py-3 w-[18%]">{text.productName}</th>
                       <th className="px-3 py-3 w-[8%]">{text.location}</th>
                       <th className="px-3 py-3 w-[5%] text-right">{text.qty}</th>
                       <th className="px-3 py-3 w-[10%]">{text.warehouse} / {text.createdBy}</th>
@@ -1049,6 +1173,25 @@ export const CounterPickupListing: React.FC = () => {
                                     <span className="block text-sm break-words" title={item.id}>{item.id}</span>
                                   </div>
                                   <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
+                                </div>
+                              </td>
+                            )}
+                            {index === 0 && (
+                              <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
+                                <div className="space-y-2">
+                                  <span className={cn(
+                                    'inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide',
+                                    item.requestType === 'scheduledDelivery'
+                                      ? 'bg-sky-100 text-sky-700'
+                                      : 'bg-violet-100 text-violet-700'
+                                  )}>
+                                    {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
+                                  </span>
+                                  <div className="flex flex-wrap gap-1">
+                                    <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                                      {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
                             )}
@@ -1108,7 +1251,7 @@ export const CounterPickupListing: React.FC = () => {
                                 {view === 'history' && (
                                   <>
                                     <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.orderNumber || item.referenceNo || '-'}</td>
-                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabel(item.outcome || item.destination)}</td>
+                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabelForTarget(item.outcome || item.destination, item)}</td>
                                   </>
                                 )}
                                 {view === 'history' && (
@@ -1120,10 +1263,7 @@ export const CounterPickupListing: React.FC = () => {
                                       <button
                                         onClick={() => {
                                           setFinalizeTarget(item);
-                                          setFinalizeForm({
-                                            ...emptyFinalizeForm,
-                                            sourceType: item.sourceType || 'metav'
-                                          });
+                                          setFinalizeForm(emptyFinalizeForm);
                                           setItemFinalizeActions((requestItems).map(() => createDefaultItemAction()));
                                         }}
                                         disabled={submitting}
@@ -1143,7 +1283,7 @@ export const CounterPickupListing: React.FC = () => {
                     ))}
                     {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
                       <tr key={`${item.id}-details`} className="bg-slate-50/60">
-                        <td colSpan={view === 'history' ? 11 : 10} className="px-3 pb-4 pt-0">
+                        <td colSpan={13} className="px-3 pb-4 pt-0">
                           <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
@@ -1156,6 +1296,14 @@ export const CounterPickupListing: React.FC = () => {
                             </div>
                             <div className="text-xs text-slate-500">
                               {item.items?.length || 1} item(s) · {item.status}
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-[11px]">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
+                                {text.requestType}: {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold">
+                                {text.sourceType}: {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
+                              </span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
                               {(item.items || [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
@@ -1238,12 +1386,20 @@ export const CounterPickupListing: React.FC = () => {
 
             <div className="space-y-4 flex-1 overflow-y-auto pr-1">
               <div>
+                <label className="text-sm font-medium text-slate-700">{text.requestType}</label>
+                <div className="mt-2 w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-medium">
+                  {finalizeTarget.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
+                </div>
+              </div>
+
+              <div>
                 <label className="text-sm font-medium text-slate-700">{text.sourceType}</label>
                 <select
                   value={finalizeForm.sourceType}
                   onChange={(e) => setFinalizeForm((prev) => ({ ...prev, sourceType: e.target.value as FinalizeFormState['sourceType'] }))}
                   className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
+                  <option value="">{text.selectOne}</option>
                   <option value="metav">{text.metavSource}</option>
                   <option value="offline">{text.offlineSource}</option>
                   <option value="blackfern">{text.blackfernSource}</option>
@@ -1261,7 +1417,7 @@ export const CounterPickupListing: React.FC = () => {
                       className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                     >
                       <option value="">{text.selectOne}</option>
-                      <option value="sold">{text.sold}</option>
+                      <option value="sold">{finalizeTarget.requestType === 'scheduledDelivery' ? text.sent : text.sold}</option>
                       <option value="returnedToWarehouse">{text.returned}</option>
                       <option value="warrantySwapParts">{text.warrantySwapParts}</option>
                       <option value="other">{text.other}</option>
@@ -1284,18 +1440,20 @@ export const CounterPickupListing: React.FC = () => {
                 </>
               )}
 
-              <div>
-                <label className="text-sm font-medium text-slate-700">Comment</label>
-                <input
-                  value={finalizeForm.comment}
-                  onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
-                  placeholder={finalizeForm.outcome === 'other' || finalizeForm.outcome === 'warrantySwapParts' ? 'Required final closure comment' : 'Optional final closure comment'}
-                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                {(finalizeForm.outcome === 'other' || finalizeForm.outcome === 'warrantySwapParts') && (
-                  <p className="mt-1 text-xs text-slate-500">Required for this closure type.</p>
+                {shouldShowCommentForOutcome(finalizeForm.outcome) && (
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Comment</label>
+                  <input
+                    value={finalizeForm.comment}
+                    onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
+                    placeholder={finalizeForm.outcome === 'other' || finalizeForm.outcome === 'warrantySwapParts' ? 'Required final closure comment' : 'Optional final closure comment'}
+                    className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  {(finalizeForm.outcome === 'other' || finalizeForm.outcome === 'warrantySwapParts') && (
+                    <p className="mt-1 text-xs text-slate-500">Required for this closure type.</p>
+                  )}
+                </div>
                 )}
-              </div>
 
               <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
                 <div>
@@ -1369,7 +1527,7 @@ export const CounterPickupListing: React.FC = () => {
                                 className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                               >
                                 <option value="">{text.selectOne}</option>
-                                <option value="sold">{text.sold}</option>
+                                <option value="sold">{item.requestType === 'scheduledDelivery' ? text.sent : text.sold}</option>
                                 <option value="returnedToWarehouse">{text.returned}</option>
                                 <option value="warrantySwapParts">{text.warrantySwapParts}</option>
                                 <option value="other">{text.other}</option>
