@@ -739,6 +739,61 @@ export const CounterPickupListing: React.FC = () => {
   const shouldShowCommentForOutcome = (outcome?: string | null) => outcome === 'warrantySwapParts' || outcome === 'other';
   const historyNoteLabel = (item: CounterPickup) => item.comment || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
+  const sourceBadgeClass = (source?: string | null) => {
+    if (source === 'metav') return 'bg-red-100 text-red-700 border border-red-200';
+    if (source === 'offline') return 'bg-blue-100 text-blue-700 border border-blue-200';
+    if (source === 'blackfern') return 'bg-slate-900 text-white border border-slate-900';
+    return 'bg-slate-100 text-slate-600 border border-slate-200';
+  };
+  const requestTypeBadgeClass = (requestType?: string | null) => {
+    if (requestType === 'scheduledDelivery') return 'bg-violet-100 text-violet-700 border border-violet-200';
+    return 'bg-amber-100 text-amber-700 border border-amber-200';
+  };
+  const exportCsv = (rows: string[][], filename: string) => {
+    const csv = ['\uFEFF' + rows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n')].join('');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+  const handleExportFilteredList = () => {
+    const rows: string[][] = [
+      ['SKU', 'Qty', 'Requested By', 'Order Source', 'Request No.', 'Request Type', 'Created At']
+    ];
+
+    filteredRequests.forEach((item) => {
+      const itemsToExport = (item.items?.length ? item.items : [{
+        sku: item.sku,
+        productName: item.productName,
+        location: item.location,
+        qty: item.qty,
+        outcome: item.outcome || item.destination
+      }]).filter((entry: any) => {
+        const outcome = String(entry.outcome || '').trim();
+        const destination = String(entry.destination || '').trim();
+        return outcome !== 'returnedToWarehouse' && destination !== 'Returned';
+      });
+
+      itemsToExport.forEach((entry: any) => {
+        rows.push([
+          entry.sku || '',
+          String(entry.qty || ''),
+          item.createdBy || '',
+          item.sourceType === 'offline' ? 'Offline Order' : item.sourceType === 'blackfern' ? 'BlackFern Order' : item.sourceType === 'other' ? 'Other' : 'Metav Order',
+          item.id,
+          item.requestType === 'scheduledDelivery' ? 'Scheduled Delivery' : 'Counter Pickup',
+          item.createdAt ? formatDate(item.createdAt, 'yyyy-MM-dd HH:mm') : ''
+        ]);
+      });
+    });
+
+    exportCsv(rows, `counter-pickup-export-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
@@ -761,14 +816,14 @@ export const CounterPickupListing: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div ref={sentinelRef} className="h-px w-full pointer-events-none -mt-8" />
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full mx-auto space-y-6">
           {!canViewPage ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
               <ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">You do not have access to Counter Pickup.</p>
             </div>
           ) : canCreate && showCreateForm && (
-            <section className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
+            <section className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">{text.createRequest}</h2>
                 <p className="text-sm text-slate-500 mt-1">{text.createHint}</p>
@@ -940,7 +995,7 @@ export const CounterPickupListing: React.FC = () => {
           )}
 
           {canViewPage && (
-          <section className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+          <section className="bg-white p-3 md:p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
               <div className="lg:col-span-4 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -1090,6 +1145,16 @@ export const CounterPickupListing: React.FC = () => {
                   </button>
                 </div>
               </div>
+              <div className="lg:col-span-12 flex items-center justify-start lg:justify-end">
+                <button
+                  type="button"
+                  onClick={handleExportFilteredList}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all"
+                >
+                  <Archive className="w-4 h-4" />
+                  Export Excel
+                </button>
+              </div>
               <div className="lg:col-span-12 flex items-center justify-end">
                 <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                   {(['All', 'My Pending', 'My Created'] as CounterListTab[]).map((tab) => (
@@ -1122,7 +1187,7 @@ export const CounterPickupListing: React.FC = () => {
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto md:overflow-x-visible">
+              <div className="overflow-x-auto">
                 <table className="w-full table-fixed text-left">
                   <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase">
                     <tr>
@@ -1179,16 +1244,11 @@ export const CounterPickupListing: React.FC = () => {
                             {index === 0 && (
                               <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
                                 <div className="space-y-2">
-                                  <span className={cn(
-                                    'inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide',
-                                    item.requestType === 'scheduledDelivery'
-                                      ? 'bg-sky-100 text-sky-700'
-                                      : 'bg-violet-100 text-violet-700'
-                                  )}>
+                                  <span className={cn('inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide', requestTypeBadgeClass(item.requestType))}>
                                     {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
                                   </span>
                                   <div className="flex flex-wrap gap-1">
-                                    <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                                    <span className={cn('inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide', sourceBadgeClass(item.sourceType))}>
                                       {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
                                     </span>
                                   </div>
