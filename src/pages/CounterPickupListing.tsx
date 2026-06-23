@@ -27,7 +27,6 @@ type FinalizeFormState = {
   outcome: '' | CounterPickupOutcome;
   orderNumber: string;
   comment: string;
-  sourceType: '' | CounterPickupSourceType;
 };
 
 type FinalizeItemAction = {
@@ -64,7 +63,6 @@ const emptyFinalizeForm: FinalizeFormState = {
   outcome: '',
   orderNumber: '',
   comment: '',
-  sourceType: ''
 };
 
 type HistorySourceFilter = Record<CounterPickupSourceType, boolean>;
@@ -554,10 +552,6 @@ export const CounterPickupListing: React.FC = () => {
 
   const handleFinalize = async () => {
     if (!token || !finalizeTarget) return;
-    if (!finalizeForm.sourceType) {
-      alert(text.sourceType + ' is required.');
-      return;
-    }
     const targetItems = finalizeTarget.items?.length ? finalizeTarget.items : [{
       sku: finalizeTarget.sku,
       productName: finalizeTarget.productName,
@@ -583,11 +577,11 @@ export const CounterPickupListing: React.FC = () => {
           'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
-        body: JSON.stringify({
-          sourceType: finalizeForm.sourceType || finalizeTarget.sourceType || 'other',
+      body: JSON.stringify({
+          sourceType: finalizeTarget.sourceType || 'other',
           outcome: finalizeForm.outcome,
-          referenceNo: applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
-          orderNumber: applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
+          referenceNo: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
+          orderNumber: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
           comment: finalizeForm.comment,
           itemActions: normalizedActions
         })
@@ -630,7 +624,7 @@ export const CounterPickupListing: React.FC = () => {
         const effectiveAction = {
           ...action,
           outcome,
-          orderNumber: applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', action.orderNumber || finalizeForm.orderNumber),
+          orderNumber: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', action.orderNumber || finalizeForm.orderNumber),
           comment: action.comment || finalizeForm.comment
         };
         if (!effectiveAction.outcome) return false;
@@ -857,7 +851,9 @@ export const CounterPickupListing: React.FC = () => {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-3">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.requestType}</label>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">
+                    {text.requestType} <span className="ml-1 inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] uppercase tracking-wide">Required</span>
+                  </label>
                   <select
                     value={requestType}
                     onChange={(e) => setRequestType(e.target.value as CounterPickupRequestType)}
@@ -869,7 +865,9 @@ export const CounterPickupListing: React.FC = () => {
                 </div>
 
                 <div className="lg:col-span-3">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.sourceType}</label>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">
+                    {text.sourceType} <span className="ml-1 inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] uppercase tracking-wide">Required</span>
+                  </label>
                   <select
                     value={sourceType}
                     onChange={(e) => setSourceType(e.target.value as CounterPickupSourceType)}
@@ -883,7 +881,9 @@ export const CounterPickupListing: React.FC = () => {
                 </div>
 
                 <div className="lg:col-span-6" ref={skuRef}>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.skuLabel}</label>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">
+                    {text.skuLabel} <span className="ml-1 inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] uppercase tracking-wide">Required</span>
+                  </label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <input
@@ -1566,14 +1566,6 @@ export const CounterPickupListing: React.FC = () => {
                 <span className="font-semibold">Total Qty</span>
                 <span>{finalizeTarget.qty}</span>
               </div>
-              <div className="flex items-center justify-between gap-3 mt-2">
-                <span className="font-semibold">{text.requestType}</span>
-                <span>{finalizeTarget.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 mt-2">
-                <span className="font-semibold">{text.sourceType}</span>
-                <span>{finalizeTarget.sourceType === 'offline' ? text.offlineSource : finalizeTarget.sourceType === 'blackfern' ? text.blackfernSource : finalizeTarget.sourceType === 'other' ? text.otherSource : text.metavSource}</span>
-              </div>
               <div className="flex items-start justify-between gap-3 mt-2">
                 <span className="font-semibold">Comment</span>
                 <span className="text-right max-w-[70%] break-words">{finalizeTarget.comment || '-'}</span>
@@ -1617,7 +1609,7 @@ export const CounterPickupListing: React.FC = () => {
                       <label className="text-sm font-medium text-slate-700">{text.orderNumber}</label>
                       <input
                         value={finalizeForm.orderNumber}
-                        onChange={(e) => setFinalizeForm((prev) => ({ ...prev, orderNumber: applyOrderNumberPrefix(prev.sourceType || finalizeTarget.sourceType || 'other', e.target.value) }))}
+                        onChange={(e) => setFinalizeForm((prev) => ({ ...prev, orderNumber: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', e.target.value) }))}
                         inputMode="numeric"
                         pattern="[0-9]*"
                         placeholder="Digits only"
@@ -1727,7 +1719,7 @@ export const CounterPickupListing: React.FC = () => {
                                   <input
                                     value={itemAction.orderNumber}
                                     onChange={(e) => {
-                                    const value = applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', e.target.value);
+                                    const value = applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', e.target.value);
                                       setItemFinalizeActions((prev) => {
                                         const copy = [...prev];
                                         copy[index] = { ...(copy[index] || createDefaultItemAction()), orderNumber: value };
