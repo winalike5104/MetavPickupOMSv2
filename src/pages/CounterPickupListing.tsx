@@ -1252,6 +1252,7 @@ export const CounterPickupListing: React.FC = () => {
                           <th className="hidden md:table-cell px-3 py-3 w-[10%]">Comment</th>
                         </>
                       )}
+                      <th className="px-3 py-3 w-[12%] text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -1498,7 +1499,7 @@ export const CounterPickupListing: React.FC = () => {
                       ))}
                     {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
                       <tr key={`${item.id}-details`} className="bg-slate-50/60">
-                        <td colSpan={13} className="px-3 pb-4 pt-0">
+                        <td colSpan={14} className="px-3 pb-4 pt-0">
                           <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
