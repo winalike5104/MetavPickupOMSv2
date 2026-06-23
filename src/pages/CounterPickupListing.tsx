@@ -782,6 +782,8 @@ export const CounterPickupListing: React.FC = () => {
     return raw;
   };
   const historyCommentLabel = (item: CounterPickupItem, request: CounterPickup) => item.comment || item.otherNotes || request.comment || request.otherNotes || '-';
+  const historyStatusLabel = (request: CounterPickup) => statusLabel(request.status);
+  const historyQueueLabel = (request: CounterPickup) => queueLabel(request.queueStatus);
   const shouldShowCommentForOutcome = (outcome?: string | null) => outcome === 'warrantySwapParts' || outcome === 'other';
   const historyNoteLabel = (item: CounterPickup) => item.comment || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
@@ -1258,16 +1260,17 @@ export const CounterPickupListing: React.FC = () => {
                   <tbody className="divide-y divide-slate-50">
                     {view === 'history'
                       ? paginatedHistoryRows.map(({ request: item, item: entry, itemIndex }) => (
-                        <tr
-                          key={`${item.id}-${entry.sku}-${itemIndex}`}
-                          className={cn(
-                            'transition-colors',
-                            item.status === 'Picked' && 'bg-red-50/40',
-                            item.status === 'PendingPutback' && 'bg-amber-50/40',
-                            itemIndex === 0 ? 'hover:bg-slate-50' : 'bg-slate-50/35 hover:bg-slate-100/60',
-                            itemIndex > 0 && 'border-t border-slate-100'
-                          )}
-                        >
+                        <>
+                          <tr
+                            key={`${item.id}-${entry.sku}-${itemIndex}`}
+                            className={cn(
+                              'transition-colors',
+                              item.status === 'Picked' && 'bg-red-50/40',
+                              item.status === 'PendingPutback' && 'bg-amber-50/40',
+                              itemIndex === 0 ? 'hover:bg-slate-50' : 'bg-slate-50/35 hover:bg-slate-100/60',
+                              itemIndex > 0 && 'border-t border-slate-100'
+                            )}
+                          >
                           <td className="px-3 py-3 font-bold text-slate-900 align-top">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
@@ -1369,6 +1372,54 @@ export const CounterPickupListing: React.FC = () => {
                             </div>
                           </td>
                         </tr>
+                        {itemIndex === 0 && isExpandedHistory(item.id) && (
+                          <tr key={`${item.id}-details`} className="bg-slate-50/60">
+                            <td colSpan={14} className="px-3 pb-4 pt-0">
+                              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
+                                  <button
+                                    onClick={() => setExpandedHistoryIds((prev) => prev.filter((id) => id !== item.id))}
+                                    className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                                  >
+                                    Hide details
+                                  </button>
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {item.items?.length || 1} item(s) · {item.status}
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-[11px]">
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
+                                    {text.requestType}: {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
+                                  </span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold">
+                                    {text.sourceType}: {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
+                                  </span>
+                                </div>
+                                {(item.pickupNote || item.comment) && (
+                                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Pickup Note</div>
+                                    <div className="text-sm text-slate-700 break-words whitespace-pre-wrap">
+                                      {item.pickupNote || item.comment}
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                                  {(item.items || [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((detailEntry, idx) => (
+                                    <div key={`${detailEntry.sku}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-semibold text-slate-900 break-words">{detailEntry.sku}</div>
+                                        <div className="text-xs text-slate-500 truncate">{detailEntry.productName}</div>
+                                      </div>
+                                      <div className="text-xs text-slate-700 font-semibold whitespace-nowrap">{detailEntry.qty} x {detailEntry.location}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                       ))
                       : paginatedRequests.map((item) => (
                         (() => {
@@ -1454,16 +1505,16 @@ export const CounterPickupListing: React.FC = () => {
                                       <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
                                     </div>
                                   </td>
-                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
-                                    <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
-                                      {statusLabel(item.status)}
-                                    </span>
-                                  </td>
-                                  <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
-                                    <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
-                                      {queueLabel(item.queueStatus)}
-                                    </span>
-                                  </td>
+                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
+                                      <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getStatusBadgeClass(item.status))}>
+                                      {historyStatusLabel(item)}
+                                      </span>
+                                    </td>
+                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 align-top">
+                                      <span className={cn('inline-flex px-2 py-1 rounded-full text-[11px] font-bold leading-none', getQueueBadgeClass(item.queueStatus), item.status === 'Picked' && view === 'active' && 'ring-1 ring-emerald-500')}>
+                                      {historyQueueLabel(item)}
+                                      </span>
+                                    </td>
                                   {view === 'history' && (
                                     <>
                                       <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{referenceLabelForHistory(entry, item)}</td>
@@ -1497,53 +1548,7 @@ export const CounterPickupListing: React.FC = () => {
                           ));
                         })()
                       ))}
-                    {view === 'history' && paginatedRequests.map((item) => isExpandedHistory(item.id) && (
-                      <tr key={`${item.id}-details`} className="bg-slate-50/60">
-                        <td colSpan={14} className="px-3 pb-4 pt-0">
-                          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
-                              <button
-                                onClick={() => setExpandedHistoryIds((prev) => prev.filter((id) => id !== item.id))}
-                                className="text-xs font-semibold text-slate-500 hover:text-slate-700"
-                              >
-                                Hide details
-                              </button>
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {item.items?.length || 1} item(s) · {item.status}
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-[11px]">
-                              <span className="inline-flex items-center px-2 py-1 rounded-full bg-violet-50 text-violet-700 font-semibold">
-                                {text.requestType}: {item.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold">
-                                {text.sourceType}: {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
-                              </span>
-                            </div>
-                            {(item.pickupNote || item.comment) && (
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Pickup Note</div>
-                                <div className="text-sm text-slate-700 break-words whitespace-pre-wrap">
-                                  {item.pickupNote || item.comment}
-                                </div>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-                              {(item.items || [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
-                                <div key={`${entry.sku}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-semibold text-slate-900 break-words">{entry.sku}</div>
-                                    <div className="text-xs text-slate-500 truncate">{entry.productName}</div>
-                                  </div>
-                                  <div className="text-xs text-slate-700 font-semibold whitespace-nowrap">{entry.qty} x {entry.location}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    
                   </tbody>
                 </table>
               </div>
