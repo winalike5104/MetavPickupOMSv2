@@ -18,6 +18,7 @@ import { useAuth } from '../components/AuthProvider';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { CounterPickup, CounterPickupOutcome, CounterPickupQueueStatus, CounterPickupRequestType, CounterPickupSourceType, CounterPickupStatus, SKU } from '../types';
 import { cn, formatDate, hasPermission } from '../utils';
+import * as XLSX from 'xlsx';
 
 type ListingView = 'active' | 'history';
 type CounterListTab = 'All' | 'My Pending' | 'My Created';
@@ -577,10 +578,9 @@ export const CounterPickupListing: React.FC = () => {
           'x-v2-auth-token': `Bearer ${token}`,
           'x-warehouse-id': activeWarehouse || ''
         },
-      body: JSON.stringify({
+        body: JSON.stringify({
           sourceType: finalizeTarget.sourceType || 'other',
           outcome: finalizeForm.outcome,
-          referenceNo: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
           orderNumber: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
           comment: finalizeForm.comment,
           itemActions: normalizedActions
@@ -704,6 +704,10 @@ export const CounterPickupListing: React.FC = () => {
           location: item.location,
           outcome: item.outcome,
           destination: item.destination,
+          orderNumber: item.orderNumber,
+          referenceNo: item.referenceNo,
+          comment: item.comment,
+          otherNotes: item.otherNotes,
         },
         itemIndex,
       }));
@@ -812,26 +816,52 @@ export const CounterPickupListing: React.FC = () => {
     URL.revokeObjectURL(url);
   };
   const handleExportFilteredList = () => {
-    const rows: string[][] = [
-      ['SKU', 'Qty', 'Requested By', 'Order Source', 'Request No.', 'Request Type', 'Created At']
+    const detailRows: string[][] = [
+      ['SKU', 'Qty', 'Requested By', 'Order Source', 'Request No.', 'Order Number', 'Request Type', 'Created At']
     ];
+    const summaryMap = new Map<string, number>();
 
     historyRows.forEach(({ request, item }) => {
       const outcome = String(item.outcome || request.outcome || '').trim();
       if (outcome === 'returnedToWarehouse') return;
 
-      rows.push([
-        item.sku || '',
+      const sku = item.sku || '';
+      const qty = Number(item.qty || 0);
+      const orderNumber = item.orderNumber || item.referenceNo || request.orderNumber || request.referenceNo || '';
+
+      detailRows.push([
+        sku,
         String(item.qty || ''),
         request.createdBy || '',
         request.sourceType === 'offline' ? 'Offline Order' : request.sourceType === 'blackfern' ? 'BlackFern Order' : request.sourceType === 'other' ? 'Other' : 'Metav Order',
         request.id,
+        orderNumber,
         request.requestType === 'scheduledDelivery' ? 'Scheduled Delivery' : 'Counter Pickup',
         request.createdAt ? formatDate(request.createdAt, 'yyyy-MM-dd HH:mm') : ''
       ]);
+
+      summaryMap.set(sku, (summaryMap.get(sku) || 0) + qty);
     });
 
-    exportCsv(rows, `counter-pickup-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    const summaryRows: string[][] = [
+      ['SKU', 'Total Qty'],
+      ...Array.from(summaryMap.entries()).map(([sku, totalQty]) => [sku, String(totalQty)])
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(detailRows), 'Detail');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary');
+
+    const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `counter-pickup-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">

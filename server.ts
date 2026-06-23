@@ -995,7 +995,7 @@ async function startServer() {
 
       const timestamp = nowAucklandIso();
       const sourceType = normalizeCounterPickupSourceType(req.body?.sourceType || data.sourceType);
-      const referenceNo = normalizeCounterPickupOrderNumber(sourceType, req.body?.referenceNo || req.body?.orderNumber || "");
+      const referenceNo = normalizeCounterPickupOrderNumber(sourceType, req.body?.orderNumber || req.body?.referenceNo || "");
       const baseItems = Array.isArray(data.items) && data.items.length > 0
         ? data.items
         : [{ sku: data.sku, productName: data.productName, location: data.location, qty: data.qty }];
@@ -1046,9 +1046,7 @@ async function startServer() {
           outcome: itemAction.outcome,
           destination: normalizeDisplayDestination(itemAction.outcome),
           orderNumber: itemAction.orderNumber || null,
-          comment: itemAction.comment || null,
-          referenceNo: itemAction.orderNumber || null,
-          otherNotes: itemAction.comment || null
+          comment: itemAction.comment || null
         };
 
         if (itemAction.outcome === "returnedToWarehouse") {
@@ -1112,15 +1110,13 @@ async function startServer() {
 
       if (allSold) {
         updatePayload.orderNumber = normalizeCounterPickupOrderNumber(sourceType, referenceNo || updatedItems[0]?.orderNumber || null) || null;
-        updatePayload.referenceNo = updatePayload.orderNumber;
-        if (!updatePayload.referenceNo) {
+        if (!updatePayload.orderNumber) {
           return res.status(400).json({ success: false, error: "Order Number is required when outcome is Sold" });
         }
       }
       if (allOther) {
         updatePayload.comment = otherNotes || updatedItems[0]?.comment || null;
-        updatePayload.otherNotes = updatePayload.comment;
-        if (!updatePayload.otherNotes || String(updatePayload.otherNotes).length < 5) {
+        if (!updatePayload.comment || String(updatePayload.comment).length < 5) {
           return res.status(400).json({ success: false, error: "Comment must be at least 5 characters when outcome is Other" });
         }
       }
