@@ -6,8 +6,11 @@ export type PaymentMethod = 'Cash' | 'EFTPOS' | 'Bank Transfer' | 'Online Paymen
 export type UserStatus = 'Active' | 'Disabled';
 export type CounterPickupStatus = 'PendingPick' | 'Picked' | 'PendingPutback' | 'Finalized';
 export type CounterPickupQueueStatus = 'Pending' | 'Picking' | 'Picked';
-export type CounterPickupDestination = 'Returned' | 'Sold' | 'Other';
-export type CounterPickupFinalItemDestination = CounterPickupDestination;
+export type CounterPickupRequestType = 'counterPickup' | 'scheduledDelivery';
+export type CounterPickupSourceType = 'metav' | 'offline' | 'blackfern' | 'other';
+export type CounterPickupOutcome = 'sold' | 'returnedToWarehouse' | 'warrantySwapParts' | 'other';
+export type CounterPickupLegacyDestination = 'Returned' | 'Sold' | 'Other';
+export type CounterPickupFinalItemDestination = CounterPickupOutcome | CounterPickupLegacyDestination;
 
 export interface SKU {
   id?: string;
@@ -208,7 +211,12 @@ export interface CounterPickupItem {
   productName: string;
   location: string;
   qty: number;
+  requestType?: CounterPickupRequestType | null;
+  sourceType?: CounterPickupSourceType | null;
+  outcome?: CounterPickupOutcome | null;
   destination?: CounterPickupFinalItemDestination | null;
+  orderNumber?: string | null;
+  comment?: string | null;
   referenceNo?: string | null;
   otherNotes?: string | null;
   finalizedAt?: string | null;
@@ -232,13 +240,17 @@ export interface CounterPickup {
   location: string;
   qty: number;
   warehouseId: string;
+  requestType?: CounterPickupRequestType | null;
+  sourceType?: CounterPickupSourceType | null;
   items?: CounterPickupItem[];
   status: CounterPickupStatus;
   queueStatus: CounterPickupQueueStatus;
-  destination?: CounterPickupDestination | 'Mixed' | null;
+  destination?: CounterPickupLegacyDestination | 'Mixed' | null;
+  outcome?: CounterPickupOutcome | 'Mixed' | null;
+  orderNumber?: string | null;
+  comment?: string | null;
   referenceNo?: string | null;
   otherNotes?: string | null;
-  comment?: string | null;
   pickupNote?: string | null;
   createdBy: string;
   createdByUid?: string;

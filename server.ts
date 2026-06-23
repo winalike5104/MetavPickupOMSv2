@@ -127,6 +127,36 @@ const AUCKLAND_TIMEZONE = "Pacific/Auckland";
 
 const nowAucklandIso = () => DateTime.now().setZone(AUCKLAND_TIMEZONE).toISO();
 
+const normalizeCounterPickupRequestType = (value: any) => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "scheduleddelivery" || raw === "scheduled_delivery" || raw === "delivery") return "scheduledDelivery";
+  return "counterPickup";
+};
+
+const normalizeCounterPickupSourceType = (value: any) => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "metav" || raw === "metav order" || raw === "metav-order") return "metav";
+  if (raw === "offline" || raw === "offline order" || raw === "offline-order") return "offline";
+  if (raw === "blackfern" || raw === "blackfern order" || raw === "blackfern-order") return "blackfern";
+  return "other";
+};
+
+const normalizeCounterPickupOutcome = (value: any) => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "sold") return "sold";
+  if (raw === "returned" || raw === "returnedtowarehouse" || raw === "returned_to_warehouse") return "returnedToWarehouse";
+  if (raw === "warranty" || raw === "swap" || raw === "parts" || raw === "warrantyswapparts" || raw === "warranty/swap/parts") return "warrantySwapParts";
+  return "other";
+};
+
+const normalizeCounterPickupOrderNumber = (sourceType: any, value: any) => {
+  const source = normalizeCounterPickupSourceType(sourceType);
+  const raw = String(value || "").replace(/\D/g, "").trim();
+  if (!raw) return "";
+  const prefix = source === "metav" ? "MVNZ" : source === "blackfern" ? "BFINV-" : "INV-";
+  return raw.startsWith(prefix) ? raw : `${prefix}${raw}`;
+};
+
 const isFrontDeskRole = (user: any) => {
   const role = user?.roleTemplate || user?.role || "";
   return ["Reception", "Admin"].includes(role);
@@ -173,12 +203,16 @@ const buildCounterPickupDetail = (pickup: any) => {
     productName: pickup.productName || primaryItem.productName || "",
     location: pickup.location || primaryItem.location || "NOT_ASSIGNED",
     qty: Number(pickup.putbackQty || pickup.qty || primaryItem.qty || 0),
+    requestType: pickup.requestType || "counterPickup",
+    sourceType: pickup.sourceType || null,
     items,
     putbackItems,
     putbackQty: Number(pickup.putbackQty || 0),
     status: pickup.status,
     queueStatus: pickup.queueStatus,
     destination: pickup.destination || null,
+    outcome: pickup.outcome || null,
+    orderNumber: pickup.orderNumber || null,
     referenceNo: pickup.referenceNo || null,
     otherNotes: pickup.otherNotes || null,
     comment: pickup.comment || null,
@@ -764,6 +798,8 @@ async function startServer() {
       const manualLocation = String(req.body?.location || "").trim().toUpperCase();
       const comment = String(req.body?.comment || "").trim();
       const pickupNote = String(req.body?.pickupNote || req.body?.note || "").trim();
+      const requestType = normalizeCounterPickupRequestType(req.body?.requestType);
+      const sourceType = normalizeCounterPickupSourceType(req.body?.sourceType);
       const incomingItems = Array.isArray(req.body?.items) ? req.body.items : [];
       const requestedWh = (req.headers["x-warehouse-id"] as string) || "";
       const warehouseId = requestedWh || (req.user.allowedWarehouses || [])[0] || "";
@@ -808,10 +844,14 @@ async function startServer() {
         location: primaryItem.location,
         qty: resolvedItems.reduce((sum: number, item: any) => sum + Number(item.qty || 0), 0),
         warehouseId,
+        requestType,
+        sourceType,
         items: resolvedItems,
         status: "PendingPick",
         queueStatus: "Pending",
         destination: null,
+        outcome: null,
+        orderNumber: null,
         referenceNo: null,
         otherNotes: null,
         comment: comment || null,
@@ -940,10 +980,9 @@ async function startServer() {
         return res.status(403).json({ success: false, error: "Forbidden: Reception access required" });
       }
 
-      const destination = String(req.body?.destination || "").trim() as any;
-      const referenceNo = String(req.body?.referenceNo || "").trim();
-      const otherNotes = String(req.body?.otherNotes || "").trim();
-      const comment = String(req.body?.comment || "").trim();
+      const defaultOutcome = normalizeCounterPickupOutcome(req.body?.outcome || req.body?.destination || req.body?.defaultOutcome || "");
+      const otherNotes = String(req.body?.otherNotes || req.body?.comment || "").trim();
+      const comment = String(req.body?.comment || req.body?.otherNotes || "").trim();
       const itemActions = Array.isArray(req.body?.itemActions) ? req.body.itemActions : [];
       const docRef = currentDb.collection("counter_pickups").doc(req.params.id);
       const snap = await docRef.get();
@@ -955,33 +994,39 @@ async function startServer() {
       }
 
       const timestamp = nowAucklandIso();
+      const sourceType = normalizeCounterPickupSourceType(req.body?.sourceType || data.sourceType);
+      const referenceNo = normalizeCounterPickupOrderNumber(sourceType, req.body?.referenceNo || req.body?.orderNumber || "");
       const baseItems = Array.isArray(data.items) && data.items.length > 0
         ? data.items
         : [{ sku: data.sku, productName: data.productName, location: data.location, qty: data.qty }];
 
       const normalizedActions = baseItems.map((item: any, index: number) => {
         const raw = itemActions[index] || {};
-        const itemDestination = String(raw.destination || destination || "").trim();
-        const itemReferenceNo = String(raw.referenceNo || referenceNo || "").trim();
-        const itemOtherNotes = String(raw.otherNotes || otherNotes || "").trim();
+        const itemOutcome = normalizeCounterPickupOutcome(raw.outcome || raw.destination || defaultOutcome);
+        const itemOrderNumber = normalizeCounterPickupOrderNumber(sourceType, raw.orderNumber || raw.referenceNo || referenceNo || "");
+        const itemComment = String(raw.comment || raw.otherNotes || comment || otherNotes || "").trim();
         return {
-          destination: itemDestination,
-          referenceNo: itemReferenceNo,
-          otherNotes: itemOtherNotes
+          outcome: itemOutcome,
+          orderNumber: itemOrderNumber,
+          comment: itemComment
         };
       });
 
-      if (normalizedActions.some((item: any) => !item.destination)) {
-        return res.status(400).json({ success: false, error: "Invalid destination" });
+      if (normalizedActions.some((item: any) => !item.outcome)) {
+        return res.status(400).json({ success: false, error: "Invalid outcome" });
       }
 
-      const allSold = normalizedActions.every((item: any) => item.destination === "Sold");
-      const allOther = normalizedActions.every((item: any) => item.destination === "Other");
-      const anyReturned = normalizedActions.some((item: any) => item.destination === "Returned");
-      const topLevelDestination = anyReturned ? "Returned" : (allSold ? "Sold" : (allOther ? "Other" : "Mixed"));
+      const allSold = normalizedActions.every((item: any) => item.outcome === "sold");
+      const allOther = normalizedActions.every((item: any) => item.outcome === "other");
+      const allReturned = normalizedActions.every((item: any) => item.outcome === "returnedToWarehouse");
+      const allWarranty = normalizedActions.every((item: any) => item.outcome === "warrantySwapParts");
+      const anyReturned = normalizedActions.some((item: any) => item.outcome === "returnedToWarehouse");
+      const topLevelOutcome = allSold ? "sold" : allReturned ? "returnedToWarehouse" : allWarranty ? "warrantySwapParts" : allOther ? "other" : "Mixed";
 
       const updatePayload: any = {
-        destination: topLevelDestination,
+        sourceType,
+        outcome: topLevelOutcome,
+        destination: topLevelOutcome === "returnedToWarehouse" ? "Returned" : topLevelOutcome === "sold" ? "Sold" : topLevelOutcome === "other" ? "Other" : "Mixed",
         comment: comment || null,
         updatedAt: timestamp
       };
@@ -990,49 +1035,65 @@ async function startServer() {
         const itemAction = normalizedActions[index];
         const itemUpdate: any = {
           ...item,
-          destination: itemAction.destination
+          outcome: itemAction.outcome,
+          destination: itemAction.outcome === "returnedToWarehouse" ? "Returned" : itemAction.outcome === "sold" ? "Sold" : itemAction.outcome === "other" ? "Other" : itemAction.outcome === "warrantySwapParts" ? "Other" : null,
+          orderNumber: itemAction.orderNumber || null,
+          comment: itemAction.comment || null,
+          referenceNo: itemAction.orderNumber || null,
+          otherNotes: itemAction.comment || null
         };
 
-        if (itemAction.destination === "Returned") {
+        if (itemAction.outcome === "returnedToWarehouse") {
           itemUpdate.status = "PendingPutback";
           itemUpdate.finalizedAt = null;
           itemUpdate.finalizedBy = null;
           itemUpdate.completedAt = null;
           itemUpdate.completedBy = null;
-          itemUpdate.comment = comment || null;
-        } else if (itemAction.destination === "Sold") {
-          if (!itemAction.referenceNo) {
-            throw new Error("Reference number is required when destination is Sold");
+          itemUpdate.comment = itemAction.comment || comment || null;
+        } else if (itemAction.outcome === "sold") {
+          if (!itemAction.orderNumber) {
+            throw new Error("Order Number is required when outcome is Sold");
           }
-          itemUpdate.referenceNo = itemAction.referenceNo;
-          itemUpdate.comment = comment || null;
+          itemUpdate.comment = itemAction.comment || comment || null;
           itemUpdate.finalizedAt = timestamp;
           itemUpdate.finalizedBy = req.user.name || req.user.username;
           itemUpdate.completedAt = timestamp;
           itemUpdate.completedBy = req.user.name || req.user.username;
-        } else if (itemAction.destination === "Other") {
-          if (itemAction.otherNotes.length < 5) {
-            throw new Error("Other notes must be at least 5 characters");
+        } else if (itemAction.outcome === "warrantySwapParts") {
+          if (!itemAction.orderNumber) {
+            throw new Error("Order Number is required when outcome is Warranty / Swap / Parts");
           }
-          itemUpdate.otherNotes = itemAction.otherNotes;
-          itemUpdate.comment = comment || null;
+          if (itemAction.comment.length < 5) {
+            throw new Error("Comment must be at least 5 characters when outcome is Warranty / Swap / Parts");
+          }
+          itemUpdate.comment = itemAction.comment;
+          itemUpdate.finalizedAt = timestamp;
+          itemUpdate.finalizedBy = req.user.name || req.user.username;
+          itemUpdate.completedAt = timestamp;
+          itemUpdate.completedBy = req.user.name || req.user.username;
+        } else if (itemAction.outcome === "other") {
+          if (itemAction.comment.length < 5) {
+            throw new Error("Comment must be at least 5 characters when outcome is Other");
+          }
+          itemUpdate.comment = itemAction.comment;
           itemUpdate.finalizedAt = timestamp;
           itemUpdate.finalizedBy = req.user.name || req.user.username;
           itemUpdate.completedAt = timestamp;
           itemUpdate.completedBy = req.user.name || req.user.username;
         } else {
-          throw new Error("Invalid destination");
+          throw new Error("Invalid outcome");
         }
 
         return itemUpdate;
       });
 
-      const anyPendingPutback = updatedItems.some((item: any) => item.destination === "Returned");
+      const anyPendingPutback = updatedItems.some((item: any) => item.outcome === "returnedToWarehouse");
       if (anyPendingPutback) {
         updatePayload.status = "PendingPutback";
         updatePayload.otherNotes = null;
         updatePayload.referenceNo = null;
-        updatePayload.putbackItems = updatedItems.filter((item: any) => item.destination === "Returned");
+        updatePayload.orderNumber = null;
+        updatePayload.putbackItems = updatedItems.filter((item: any) => item.outcome === "returnedToWarehouse");
         updatePayload.putbackQty = updatePayload.putbackItems.reduce((sum: number, item: any) => sum + Number(item.qty || 0), 0);
       } else {
         updatePayload.status = "Finalized";
@@ -1042,26 +1103,30 @@ async function startServer() {
       updatePayload.items = updatedItems;
 
       if (allSold) {
-        updatePayload.referenceNo = referenceNo || updatedItems[0]?.referenceNo || null;
+        updatePayload.orderNumber = normalizeCounterPickupOrderNumber(sourceType, referenceNo || updatedItems[0]?.orderNumber || null) || null;
+        updatePayload.referenceNo = updatePayload.orderNumber;
         if (!updatePayload.referenceNo) {
-          return res.status(400).json({ success: false, error: "Reference number is required when destination is Sold" });
+          return res.status(400).json({ success: false, error: "Order Number is required when outcome is Sold" });
         }
       }
       if (allOther) {
-        updatePayload.otherNotes = otherNotes || updatedItems[0]?.otherNotes || null;
+        updatePayload.comment = otherNotes || updatedItems[0]?.comment || null;
+        updatePayload.otherNotes = updatePayload.comment;
         if (!updatePayload.otherNotes || String(updatePayload.otherNotes).length < 5) {
-          return res.status(400).json({ success: false, error: "Other notes must be at least 5 characters" });
+          return res.status(400).json({ success: false, error: "Comment must be at least 5 characters when outcome is Other" });
         }
       }
 
       if (normalizedActions.length === 1) {
         const onlyAction = normalizedActions[0];
-        if (onlyAction.destination === "Returned") {
+        if (onlyAction.outcome === "returnedToWarehouse") {
           await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_RETURN_INIT", `Reception requested putback for SKU ${data.sku}, qty ${data.qty}.`, req.user);
-        } else if (onlyAction.destination === "Sold") {
-          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_FINALIZE_SOLD", `Reception finalized counter pickup as Sold. Reference: ${onlyAction.referenceNo || referenceNo}.`, req.user);
+        } else if (onlyAction.outcome === "sold") {
+          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_FINALIZE_SOLD", `Reception finalized counter pickup as Sold. Order Number: ${onlyAction.orderNumber || referenceNo}.`, req.user);
+        } else if (onlyAction.outcome === "warrantySwapParts") {
+          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_FINALIZE_WARRANTY", `Reception finalized counter pickup as Warranty / Swap / Parts. Order Number: ${onlyAction.orderNumber || referenceNo}. Comment: ${onlyAction.comment || comment}.`, req.user);
         } else {
-          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_FINALIZE_OTHER", `Reception finalized counter pickup as Other. Notes: ${onlyAction.otherNotes || otherNotes}.`, req.user);
+          await writeCounterPickupLog(currentDb, req.params.id, req.user.name || req.user.username, "CP_FINALIZE_OTHER", `Reception finalized counter pickup as Other. Comment: ${onlyAction.comment || otherNotes}.`, req.user);
         }
       } else {
         await writeCounterPickupLog(
@@ -1069,7 +1134,7 @@ async function startServer() {
           req.params.id,
           req.user.name || req.user.username,
           anyPendingPutback ? "CP_RETURN_INIT" : "CP_FINALIZE_MIXED",
-          `Reception finalized counter pickup with mixed item actions: ${normalizedActions.map((item: any, index: number) => `${baseItems[index]?.sku || index}:${item.destination}`).join(', ')}.`,
+          `Reception finalized counter pickup with mixed item actions: ${normalizedActions.map((item: any, index: number) => `${baseItems[index]?.sku || index}:${item.outcome}`).join(', ')}.`,
           req.user
         );
       }

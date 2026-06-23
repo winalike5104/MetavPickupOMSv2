@@ -16,7 +16,7 @@ import {
 import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../components/AuthProvider';
 import { useClickOutside } from '../hooks/useClickOutside';
-import { CounterPickup, CounterPickupQueueStatus, CounterPickupStatus, SKU } from '../types';
+import { CounterPickup, CounterPickupOutcome, CounterPickupQueueStatus, CounterPickupRequestType, CounterPickupSourceType, CounterPickupStatus, SKU } from '../types';
 import { cn, formatDate, hasPermission } from '../utils';
 
 type ListingView = 'active' | 'history';
@@ -24,14 +24,16 @@ type CounterListTab = 'All' | 'My Pending' | 'My Created';
 type StatusFilter = 'All' | CounterPickupStatus;
 type QueueFilter = 'All' | CounterPickupQueueStatus;
 type FinalizeFormState = {
-  destination: '' | 'Returned' | 'Sold' | 'Other';
-  referenceNo: string;
+  outcome: '' | CounterPickupOutcome;
+  orderNumber: string;
   comment: string;
+  sourceType: '' | CounterPickupSourceType;
 };
 
 type FinalizeItemAction = {
-  destination: '' | 'Returned' | 'Sold' | 'Other';
-  referenceNo: string;
+  outcome: '' | CounterPickupOutcome;
+  orderNumber: string;
+  comment: string;
 };
 
 type CounterPickupItem = {
@@ -59,14 +61,29 @@ type CounterPickupItemDraft = {
 const PAGE_SIZE = 50;
 
 const emptyFinalizeForm: FinalizeFormState = {
-  destination: '',
-  referenceNo: '',
-  comment: ''
+  outcome: '',
+  orderNumber: '',
+  comment: '',
+  sourceType: ''
+};
+
+const getOrderNumberPrefix = (sourceType: CounterPickupSourceType | '' | undefined) => {
+  if (sourceType === 'metav') return 'MVNZ';
+  if (sourceType === 'blackfern') return 'BFINV-';
+  return 'INV-';
+};
+
+const applyOrderNumberPrefix = (sourceType: CounterPickupSourceType | '' | undefined, value: string) => {
+  const raw = value.replace(/\D/g, '').trim();
+  if (!raw) return '';
+  const prefix = getOrderNumberPrefix(sourceType);
+  return raw.startsWith(prefix) ? raw : `${prefix}${raw}`;
 };
 
 const createDefaultItemAction = (): FinalizeItemAction => ({
-  destination: '',
-  referenceNo: '',
+  outcome: '',
+  orderNumber: '',
+  comment: '',
 });
 
 const createEmptyDraft = (): CounterPickupItemDraft => ({
@@ -96,6 +113,8 @@ const CN_TEXT = {
   createHint: '像创建订单一样搜索 SKU，自动带出产品和库位。特殊 SKU 也可以手动填写。',
   showCreate: '展开申请表单',
   hideCreate: '收起申请表单',
+  requestType: '请求类型',
+  sourceType: '订单来源',
   skuLabel: 'SKU / 产品搜索',
   skuPlaceholder: '搜索 SKU 或产品名称...',
   skuHelp: '系统会自动带出产品名称和主库位。若为特殊 SKU，可手动补充产品信息。',
@@ -119,14 +138,22 @@ const CN_TEXT = {
   createdAt: '创建时间',
   destination: '去向',
   referenceNo: '关联单号',
+  orderNumber: '订单号',
   startPicking: '开始拣货',
   markPicked: '确认送达',
   finalize: '完成结案',
   completePutback: '确认回库',
   finalizeTitle: '完成结案',
   selectOne: '请选择',
-  returned: '回库',
-  sold: '已售出',
+  counterPickupType: '前台取货',
+  scheduledDeliveryType: '安排发货',
+  metavSource: 'Metav 订单',
+  offlineSource: 'Offline 订单',
+  blackfernSource: 'BlackFern 订单',
+  otherSource: '其他',
+  sold: '售出',
+  returned: 'Returned to warehouse',
+  warrantySwapParts: '售后 / Warranty / Swap / Parts',
   other: '其他',
   cancel: '取消',
   productNameRequired: '特殊 SKU 或未匹配 SKU 必须填写产品名称。',
@@ -168,6 +195,8 @@ const EN_TEXT = {
   createHint: 'Search SKU like Order Create, auto-fill product and location, or enter a special SKU manually.',
   showCreate: 'Show Request Form',
   hideCreate: 'Hide Request Form',
+  requestType: 'Request Type',
+  sourceType: 'Order Source',
   skuLabel: 'SKU / Product Search',
   skuPlaceholder: 'Search SKU or product name...',
   skuHelp: 'The system will auto-fill product name and primary location. If this is a special SKU, you can enter product details manually.',
@@ -191,14 +220,22 @@ const EN_TEXT = {
   createdAt: 'Created At',
   destination: 'Destination',
   referenceNo: 'Reference No.',
+  orderNumber: 'Order Number',
   startPicking: 'Start Picking',
   markPicked: 'Mark Picked',
   finalize: 'Finalize',
   completePutback: 'Complete Putback',
   finalizeTitle: 'Finalize',
   selectOne: 'Select one',
-  returned: 'Returned to warehouse',
+  counterPickupType: 'Counter Pickup',
+  scheduledDeliveryType: 'Scheduled Delivery',
+  metavSource: 'Metav Order',
+  offlineSource: 'Offline Order',
+  blackfernSource: 'BlackFern Order',
+  otherSource: 'Other',
   sold: 'Sold',
+  returned: 'Returned to warehouse',
+  warrantySwapParts: 'Warranty / Swap / Parts',
   other: 'Other',
   cancel: 'Cancel',
   productNameRequired: 'Product name is required for unmatched or special SKU.',
@@ -262,6 +299,8 @@ export const CounterPickupListing: React.FC = () => {
   const [draft, setDraft] = useState<CounterPickupItemDraft>(createEmptyDraft);
   const [itemsDraft, setItemsDraft] = useState<CounterPickupItem[]>([]);
   const [pickupNote, setPickupNote] = useState('');
+  const [requestType, setRequestType] = useState<CounterPickupRequestType>('counterPickup');
+  const [sourceType, setSourceType] = useState<CounterPickupSourceType>('metav');
   const suppressSkuSearchRef = useRef(false);
 
   const [finalizeTarget, setFinalizeTarget] = useState<CounterPickup | null>(null);
@@ -297,6 +336,8 @@ export const CounterPickupListing: React.FC = () => {
     setDraft(createEmptyDraft());
     setItemsDraft([]);
     setPickupNote('');
+    setRequestType('counterPickup');
+    setSourceType('metav');
   };
   const loadRequests = async (nextView = view) => {
     if (!token) return;
@@ -466,7 +507,9 @@ export const CounterPickupListing: React.FC = () => {
         },
       body: JSON.stringify({
         items: combinedItems,
-        pickupNote
+        pickupNote,
+        requestType,
+        sourceType
       })
       });
       const data = await response.json();
@@ -493,10 +536,9 @@ export const CounterPickupListing: React.FC = () => {
     const normalizedActions = targetItems.map((_, index) => {
       const itemAction = itemFinalizeActions[index] || createDefaultItemAction();
       return {
-        destination: itemAction.destination || finalizeForm.destination,
-        referenceNo: itemAction.referenceNo || finalizeForm.referenceNo,
-        otherNotes: finalizeForm.comment,
-        comment: finalizeForm.comment
+        outcome: itemAction.outcome || finalizeForm.outcome,
+        orderNumber: itemAction.orderNumber || finalizeForm.orderNumber,
+        comment: itemAction.comment || finalizeForm.comment
       };
     });
 
@@ -510,8 +552,11 @@ export const CounterPickupListing: React.FC = () => {
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
-          ...finalizeForm,
-          otherNotes: finalizeForm.comment,
+          sourceType: finalizeForm.sourceType || finalizeTarget.sourceType || 'other',
+          outcome: finalizeForm.outcome,
+          referenceNo: applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
+          orderNumber: applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
+          comment: finalizeForm.comment,
           itemActions: normalizedActions
         })
       });
@@ -529,9 +574,11 @@ export const CounterPickupListing: React.FC = () => {
   };
 
   const isFinalizeItemActionValid = (itemAction: FinalizeItemAction) => {
-    if (!itemAction.destination) return false;
-    if (itemAction.destination === 'Sold') return itemAction.referenceNo.trim().length > 0;
-    if (itemAction.destination === 'Other') return true;
+    if (!itemAction.outcome) return false;
+    if (itemAction.outcome === 'sold') return itemAction.orderNumber.trim().length > 0;
+    if (itemAction.outcome === 'returnedToWarehouse') return true;
+    if (itemAction.outcome === 'warrantySwapParts') return itemAction.orderNumber.trim().length > 0 && itemAction.comment.trim().length >= 5;
+    if (itemAction.outcome === 'other') return itemAction.comment.trim().length >= 5;
     return true;
   };
 
@@ -547,17 +594,24 @@ export const CounterPickupListing: React.FC = () => {
       }];
       return targetItems.every((_, index) => {
         const action = itemFinalizeActions[index] || createDefaultItemAction();
-        const destination = action.destination || finalizeForm.destination;
-        if (destination === 'Other' && finalizeForm.comment.trim().length < 5) return false;
-        return isFinalizeItemActionValid(action);
+        const outcome = action.outcome || finalizeForm.outcome;
+        const effectiveAction = {
+          ...action,
+          outcome,
+          orderNumber: applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', action.orderNumber || finalizeForm.orderNumber),
+          comment: action.comment || finalizeForm.comment
+        };
+        if (!effectiveAction.outcome) return false;
+        return isFinalizeItemActionValid(effectiveAction);
       });
     }
 
-    if (!finalizeForm.destination) return false;
-    if (finalizeForm.destination === 'Sold') return finalizeForm.referenceNo.trim().length > 0;
-    if (finalizeForm.destination === 'Other') return finalizeForm.comment.trim().length >= 5;
+    if (!finalizeForm.outcome) return false;
+    if (finalizeForm.outcome === 'sold') return finalizeForm.orderNumber.trim().length > 0;
+    if (finalizeForm.outcome === 'warrantySwapParts') return finalizeForm.orderNumber.trim().length > 0 && finalizeForm.comment.trim().length >= 5;
+    if (finalizeForm.outcome === 'other') return finalizeForm.comment.trim().length >= 5;
     return true;
-  }, [finalizeTarget, splitPerItem, finalizeForm.destination, finalizeForm.referenceNo, finalizeForm.comment, itemFinalizeActions]);
+  }, [finalizeTarget, splitPerItem, finalizeForm.outcome, finalizeForm.orderNumber, finalizeForm.comment, itemFinalizeActions]);
 
   const handleCompletePutback = async (requestId: string) => {
     if (!token) return;
@@ -583,9 +637,9 @@ export const CounterPickupListing: React.FC = () => {
   const filteredRequests = useMemo(() => {
     return requests.filter((item) => {
       const itemSearchText = (item.items || [])
-        .map((entry) => `${entry.sku || ''} ${entry.productName || ''} ${entry.location || ''} ${entry.qty || ''}`)
+        .map((entry) => `${entry.sku || ''} ${entry.productName || ''} ${entry.location || ''} ${entry.qty || ''} ${entry.orderNumber || ''} ${entry.comment || ''} ${entry.outcome || ''}`)
         .join(' ');
-      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.referenceNo || ''} ${item.comment || ''} ${itemSearchText}`.toLowerCase();
+      const haystack = `${item.id} ${item.sku} ${item.productName} ${item.location} ${item.createdBy} ${item.orderNumber || ''} ${item.referenceNo || ''} ${item.comment || ''} ${itemSearchText}`.toLowerCase();
       const matchesSearch = haystack.includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       const matchesQueue = queueFilter === 'All' || item.queueStatus === queueFilter;
@@ -630,6 +684,14 @@ export const CounterPickupListing: React.FC = () => {
     if (destination === 'Mixed') return 'Mixed';
     return destination;
   };
+  const outcomeLabel = (outcome?: string | null) => {
+    if (!outcome) return '-';
+    if (outcome === 'sold') return text.sold;
+    if (outcome === 'returnedToWarehouse') return text.returned;
+    if (outcome === 'warrantySwapParts') return text.warrantySwapParts;
+    if (outcome === 'other') return text.other;
+    return outcome;
+  };
   const historyNoteLabel = (item: CounterPickup) => item.comment || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
   return (
@@ -668,6 +730,32 @@ export const CounterPickupListing: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <div className="lg:col-span-3">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.requestType}</label>
+                  <select
+                    value={requestType}
+                    onChange={(e) => setRequestType(e.target.value as CounterPickupRequestType)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="counterPickup">{text.counterPickupType}</option>
+                    <option value="scheduledDelivery">{text.scheduledDeliveryType}</option>
+                  </select>
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{text.sourceType}</label>
+                  <select
+                    value={sourceType}
+                    onChange={(e) => setSourceType(e.target.value as CounterPickupSourceType)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="metav">{text.metavSource}</option>
+                    <option value="offline">{text.offlineSource}</option>
+                    <option value="blackfern">{text.blackfernSource}</option>
+                    <option value="other">{text.otherSource}</option>
+                  </select>
+                </div>
+
                 <div className="lg:col-span-6" ref={skuRef}>
                   <label className="block text-sm font-medium text-slate-700 mb-2">{text.skuLabel}</label>
                   <div className="relative">
@@ -1019,8 +1107,8 @@ export const CounterPickupListing: React.FC = () => {
                                 </td>
                                 {view === 'history' && (
                                   <>
-                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.referenceNo || '-'}</td>
-                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">{destinationLabel(item.destination)}</td>
+                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.orderNumber || item.referenceNo || '-'}</td>
+                                    <td rowSpan={requestItems.length} className="px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabel(item.outcome || item.destination)}</td>
                                   </>
                                 )}
                                 {view === 'history' && (
@@ -1032,7 +1120,10 @@ export const CounterPickupListing: React.FC = () => {
                                       <button
                                         onClick={() => {
                                           setFinalizeTarget(item);
-                                          setFinalizeForm(emptyFinalizeForm);
+                                          setFinalizeForm({
+                                            ...emptyFinalizeForm,
+                                            sourceType: item.sourceType || 'metav'
+                                          });
                                           setItemFinalizeActions((requestItems).map(() => createDefaultItemAction()));
                                         }}
                                         disabled={submitting}
@@ -1131,6 +1222,14 @@ export const CounterPickupListing: React.FC = () => {
                 <span className="font-semibold">Total Qty</span>
                 <span>{finalizeTarget.qty}</span>
               </div>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="font-semibold">{text.requestType}</span>
+                <span>{finalizeTarget.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="font-semibold">{text.sourceType}</span>
+                <span>{finalizeTarget.sourceType === 'offline' ? text.offlineSource : finalizeTarget.sourceType === 'blackfern' ? text.blackfernSource : finalizeTarget.sourceType === 'other' ? text.otherSource : text.metavSource}</span>
+              </div>
               <div className="flex items-start justify-between gap-3 mt-2">
                 <span className="font-semibold">Comment</span>
                 <span className="text-right max-w-[70%] break-words">{finalizeTarget.comment || '-'}</span>
@@ -1138,28 +1237,46 @@ export const CounterPickupListing: React.FC = () => {
             </div>
 
             <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+              <div>
+                <label className="text-sm font-medium text-slate-700">{text.sourceType}</label>
+                <select
+                  value={finalizeForm.sourceType}
+                  onChange={(e) => setFinalizeForm((prev) => ({ ...prev, sourceType: e.target.value as FinalizeFormState['sourceType'] }))}
+                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="metav">{text.metavSource}</option>
+                  <option value="offline">{text.offlineSource}</option>
+                  <option value="blackfern">{text.blackfernSource}</option>
+                  <option value="other">{text.otherSource}</option>
+                </select>
+              </div>
+
               {!splitPerItem && (
                 <>
                   <div>
                     <label className="text-sm font-medium text-slate-700">{text.destination}</label>
                     <select
-                      value={finalizeForm.destination}
-                      onChange={(e) => setFinalizeForm((prev) => ({ ...prev, destination: e.target.value as FinalizeFormState['destination'] }))}
+                      value={finalizeForm.outcome}
+                      onChange={(e) => setFinalizeForm((prev) => ({ ...prev, outcome: e.target.value as FinalizeFormState['outcome'] }))}
                       className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                     >
                       <option value="">{text.selectOne}</option>
-                      <option value="Returned">{text.returned}</option>
-                      <option value="Sold">{text.sold}</option>
-                      <option value="Other">{text.other}</option>
+                      <option value="sold">{text.sold}</option>
+                      <option value="returnedToWarehouse">{text.returned}</option>
+                      <option value="warrantySwapParts">{text.warrantySwapParts}</option>
+                      <option value="other">{text.other}</option>
                     </select>
                   </div>
 
-                  {finalizeForm.destination === 'Sold' && (
+                  {(finalizeForm.outcome === 'sold' || finalizeForm.outcome === 'warrantySwapParts') && (
                     <div>
-                      <label className="text-sm font-medium text-slate-700">{text.referenceNo}</label>
+                      <label className="text-sm font-medium text-slate-700">{text.orderNumber}</label>
                       <input
-                        value={finalizeForm.referenceNo}
-                        onChange={(e) => setFinalizeForm((prev) => ({ ...prev, referenceNo: e.target.value.toUpperCase() }))}
+                        value={finalizeForm.orderNumber}
+                        onChange={(e) => setFinalizeForm((prev) => ({ ...prev, orderNumber: applyOrderNumberPrefix(prev.sourceType || finalizeTarget.sourceType || 'other', e.target.value) }))}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="Digits only"
                         className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                       />
                     </div>
@@ -1172,11 +1289,11 @@ export const CounterPickupListing: React.FC = () => {
                 <input
                   value={finalizeForm.comment}
                   onChange={(e) => setFinalizeForm((prev) => ({ ...prev, comment: e.target.value }))}
-                  placeholder={finalizeForm.destination === 'Other' ? 'Required final closure comment' : 'Optional final closure comment'}
+                  placeholder={finalizeForm.outcome === 'other' || finalizeForm.outcome === 'warrantySwapParts' ? 'Required final closure comment' : 'Optional final closure comment'}
                   className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
-                {finalizeForm.destination === 'Other' && (
-                  <p className="mt-1 text-xs text-slate-500">Required for Other closure.</p>
+                {(finalizeForm.outcome === 'other' || finalizeForm.outcome === 'warrantySwapParts') && (
+                  <p className="mt-1 text-xs text-slate-500">Required for this closure type.</p>
                 )}
               </div>
 
@@ -1232,16 +1349,19 @@ export const CounterPickupListing: React.FC = () => {
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div>
-                              <label className="text-xs font-medium text-slate-600">Destination</label>
+                              <label className="text-xs font-medium text-slate-600">Outcome</label>
                               <select
-                                value={itemAction.destination || finalizeForm.destination}
+                                value={itemAction.outcome || finalizeForm.outcome}
                                 onChange={(e) => {
-                                  const next = e.target.value as FinalizeFormState['destination'];
+                                  const next = e.target.value as FinalizeFormState['outcome'];
                                   setItemFinalizeActions((prev) => {
                                     const copy = [...prev];
-                                    copy[index] = { ...(copy[index] || createDefaultItemAction()), destination: next };
-                                    if (next !== 'Sold') {
-                                      copy[index].referenceNo = '';
+                                    copy[index] = { ...(copy[index] || createDefaultItemAction()), outcome: next };
+                                    if (next !== 'sold' && next !== 'warrantySwapParts') {
+                                      copy[index].orderNumber = '';
+                                    }
+                                    if (next !== 'warrantySwapParts' && next !== 'other') {
+                                      copy[index].comment = '';
                                     }
                                     return copy;
                                   });
@@ -1249,28 +1369,49 @@ export const CounterPickupListing: React.FC = () => {
                                 className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                               >
                                 <option value="">{text.selectOne}</option>
-                                <option value="Returned">{text.returned}</option>
-                                <option value="Sold">{text.sold}</option>
-                                <option value="Other">{text.other}</option>
+                                <option value="sold">{text.sold}</option>
+                                <option value="returnedToWarehouse">{text.returned}</option>
+                                <option value="warrantySwapParts">{text.warrantySwapParts}</option>
+                                <option value="other">{text.other}</option>
                               </select>
                             </div>
-                            {(itemAction.destination || finalizeForm.destination) === 'Sold' && (
+                            {(itemAction.outcome || finalizeForm.outcome) === 'sold' || (itemAction.outcome || finalizeForm.outcome) === 'warrantySwapParts' ? (
                               <div>
-                                <label className="text-xs font-medium text-slate-600">{text.referenceNo}</label>
+                                <label className="text-xs font-medium text-slate-600">{text.orderNumber}</label>
+                                  <input
+                                    value={itemAction.orderNumber}
+                                    onChange={(e) => {
+                                    const value = applyOrderNumberPrefix(finalizeForm.sourceType || finalizeTarget.sourceType || 'other', e.target.value);
+                                      setItemFinalizeActions((prev) => {
+                                        const copy = [...prev];
+                                        copy[index] = { ...(copy[index] || createDefaultItemAction()), orderNumber: value };
+                                        return copy;
+                                      });
+                                  }}
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  placeholder="Digits only"
+                                  className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                              </div>
+                            ) : null}
+                            {(itemAction.outcome || finalizeForm.outcome) === 'warrantySwapParts' || (itemAction.outcome || finalizeForm.outcome) === 'other' ? (
+                              <div className="md:col-span-1">
+                                <label className="text-xs font-medium text-slate-600">Comment</label>
                                 <input
-                                  value={itemAction.referenceNo}
+                                  value={itemAction.comment}
                                   onChange={(e) => {
-                                    const value = e.target.value.toUpperCase();
+                                    const value = e.target.value;
                                     setItemFinalizeActions((prev) => {
                                       const copy = [...prev];
-                                      copy[index] = { ...(copy[index] || createDefaultItemAction()), referenceNo: value };
+                                      copy[index] = { ...(copy[index] || createDefaultItemAction()), comment: value };
                                       return copy;
                                     });
                                   }}
                                   className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       );
