@@ -766,6 +766,22 @@ export const CounterPickupListing: React.FC = () => {
     if (outcome === 'other') return text.other;
     return outcome;
   };
+  const referenceLabelForHistory = (item: CounterPickupItem, request: CounterPickup) => {
+    return item.referenceNo || item.orderNumber || request.referenceNo || request.orderNumber || '-';
+  };
+  const destinationLabelForHistory = (item: CounterPickupItem, request: CounterPickup) => {
+    const raw = item.destination || item.outcome || request.destination || request.outcome;
+    if (!raw) return '-';
+    if (raw === 'sold') return request.requestType === 'scheduledDelivery' ? text.sent : text.sold;
+    if (raw === 'returnedToWarehouse') return text.returned;
+    if (raw === 'warrantySwapParts') return text.warrantySwapParts;
+    if (raw === 'other') return text.other;
+    if (raw === 'Returned') return text.returned;
+    if (raw === 'Sold') return request.requestType === 'scheduledDelivery' ? text.sent : text.sold;
+    if (raw === 'Other') return text.other;
+    return raw;
+  };
+  const historyCommentLabel = (item: CounterPickupItem, request: CounterPickup) => item.comment || item.otherNotes || request.comment || request.otherNotes || '-';
   const shouldShowCommentForOutcome = (outcome?: string | null) => outcome === 'warrantySwapParts' || outcome === 'other';
   const historyNoteLabel = (item: CounterPickup) => item.comment || '-';
   const isExpandedHistory = (id: string) => expandedHistoryIds.includes(id);
@@ -1257,6 +1273,17 @@ export const CounterPickupListing: React.FC = () => {
                                 <span className="block text-sm break-words" title={item.id}>{item.id}</span>
                               </div>
                               <span className="inline-flex px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase">{text.counterPickup}</span>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedHistoryIds((prev) => (
+                                  prev.includes(item.id)
+                                    ? prev.filter((id) => id !== item.id)
+                                    : [...prev, item.id]
+                                ))}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+                              >
+                                {isExpandedHistory(item.id) ? 'Hide details' : 'View details'}
+                              </button>
                             </div>
                           </td>
                           <td className="px-3 py-3 align-top">
@@ -1314,13 +1341,13 @@ export const CounterPickupListing: React.FC = () => {
                             </div>
                           </td>
                           <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">
-                            {item.orderNumber || item.referenceNo || '-'}
+                            {referenceLabelForHistory(entry, item)}
                           </td>
                           <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
-                            {outcomeLabelForTarget(entry.outcome || item.outcome || item.destination, item)}
+                            {destinationLabelForHistory(entry, item)}
                           </td>
                           <td className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">
-                            {historyNoteLabel(item)}
+                            {historyCommentLabel(entry, item)}
                           </td>
                           <td className="px-3 py-3 align-top">
                             <div className="flex justify-end gap-1.5 flex-wrap">
@@ -1438,12 +1465,12 @@ export const CounterPickupListing: React.FC = () => {
                                   </td>
                                   {view === 'history' && (
                                     <>
-                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{item.orderNumber || item.referenceNo || '-'}</td>
-                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">{outcomeLabelForTarget(item.outcome || item.destination, item)}</td>
+                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">{referenceLabelForHistory(entry, item)}</td>
+                                      <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">{destinationLabelForHistory(entry, item)}</td>
                                     </>
                                   )}
                                   {view === 'history' && (
-                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">{historyNoteLabel(item)}</td>
+                                    <td rowSpan={requestItems.length} className="hidden md:table-cell px-3 py-3 text-slate-600 align-top text-sm break-words">{historyCommentLabel(entry, item)}</td>
                                   )}
                                   <td rowSpan={requestItems.length} className="px-3 py-3 align-top">
                                     <div className="flex justify-end gap-1.5 flex-wrap">
