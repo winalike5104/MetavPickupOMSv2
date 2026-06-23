@@ -996,8 +996,8 @@ export const CounterPickupListing: React.FC = () => {
 
           {canViewPage && (
           <section className="bg-white p-3 md:p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-              <div className="lg:col-span-4 relative">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+              <div className="xl:col-span-4 relative min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
                   value={searchTerm}
@@ -1006,7 +1006,7 @@ export const CounterPickupListing: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
                 {view === 'history' && (
-                  <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                  <div className="mt-3 w-full space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 min-w-0">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{text.sourceType} / {text.requestType}</div>
                       <button
@@ -1085,7 +1085,7 @@ export const CounterPickupListing: React.FC = () => {
                 )}
               </div>
 
-              <div className="lg:col-span-2">
+              <div className="xl:col-span-2">
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -1099,7 +1099,7 @@ export const CounterPickupListing: React.FC = () => {
                 </select>
               </div>
 
-              <div className="lg:col-span-2">
+              <div className="xl:col-span-2">
                 <select
                   value={queueFilter}
                   onChange={(e) => setQueueFilter(e.target.value as QueueFilter)}
@@ -1112,7 +1112,7 @@ export const CounterPickupListing: React.FC = () => {
                 </select>
               </div>
 
-              <div className="lg:col-span-2 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <div className="xl:col-span-2 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 min-w-0">
                 <Calendar className="w-5 h-5 text-slate-400" />
                 <input
                   type="date"
@@ -1129,7 +1129,7 @@ export const CounterPickupListing: React.FC = () => {
                 />
               </div>
 
-              <div className="lg:col-span-2 flex items-center justify-start lg:justify-end">
+              <div className="xl:col-span-3 flex items-center justify-start xl:justify-end gap-3 flex-wrap">
                 <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                   <button
                     onClick={() => setView('active')}
@@ -1144,8 +1144,6 @@ export const CounterPickupListing: React.FC = () => {
                     {text.history}
                   </button>
                 </div>
-              </div>
-              <div className="lg:col-span-12 flex items-center justify-start lg:justify-end">
                 <button
                   type="button"
                   onClick={handleExportFilteredList}
@@ -1155,7 +1153,7 @@ export const CounterPickupListing: React.FC = () => {
                   Export Excel
                 </button>
               </div>
-              <div className="lg:col-span-12 flex items-center justify-end">
+              <div className="xl:col-span-9 flex items-center justify-end">
                 <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                   {(['All', 'My Pending', 'My Created'] as CounterListTab[]).map((tab) => (
                     <button
@@ -1366,6 +1364,14 @@ export const CounterPickupListing: React.FC = () => {
                                 {text.sourceType}: {item.sourceType === 'offline' ? text.offlineSource : item.sourceType === 'blackfern' ? text.blackfernSource : item.sourceType === 'other' ? text.otherSource : text.metavSource}
                               </span>
                             </div>
+                            {(item.pickupNote || item.comment) && (
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Pickup Note</div>
+                                <div className="text-sm text-slate-700 break-words whitespace-pre-wrap">
+                                  {item.pickupNote || item.comment}
+                                </div>
+                              </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
                               {(item.items || [{ sku: item.sku, productName: item.productName, location: item.location, qty: item.qty }]).map((entry, idx) => (
                                 <div key={`${entry.sku}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
