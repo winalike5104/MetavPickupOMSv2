@@ -1591,20 +1591,6 @@ export const CounterPickupListing: React.FC = () => {
             </div>
 
             <div className="space-y-4 flex-1 overflow-y-auto pr-1">
-              <div>
-                <label className="text-sm font-medium text-slate-700">{text.requestType}</label>
-                <div className="mt-2 w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-medium">
-                  {finalizeTarget.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-slate-700">{text.sourceType}</label>
-                <div className="mt-2 w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-medium">
-                  {finalizeTarget.sourceType === 'offline' ? text.offlineSource : finalizeTarget.sourceType === 'blackfern' ? text.blackfernSource : finalizeTarget.sourceType === 'other' ? text.otherSource : text.metavSource}
-                </div>
-              </div>
-
               {!splitPerItem && (
                 <>
                   <div>
