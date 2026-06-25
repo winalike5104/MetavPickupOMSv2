@@ -82,6 +82,7 @@ type CounterPickupRow = {
     location: string;
     outcome?: string | null;
     destination?: string | null;
+    finalizedAt?: string | null;
   };
   itemIndex: number;
 };
@@ -160,6 +161,7 @@ const CN_TEXT = {
   warehouse: '仓库',
   createdBy: '创建人',
   createdAt: '创建时间',
+  finalizedAt: '完成时间',
   destination: '去向',
   referenceNo: '关联单号',
   orderNumber: '订单号',
@@ -243,6 +245,7 @@ const EN_TEXT = {
   warehouse: 'Warehouse',
   createdBy: 'Created By',
   createdAt: 'Created At',
+  finalizedAt: 'Finalize At',
   destination: 'Destination',
   referenceNo: 'Reference No.',
   orderNumber: 'Order Number',
@@ -724,6 +727,7 @@ export const CounterPickupListing: React.FC = () => {
           location: item.location,
           outcome: item.outcome,
           destination: item.destination,
+          finalizedAt: item.finalizedAt,
           orderNumber: item.orderNumber,
           referenceNo: item.referenceNo,
           comment: item.comment,
@@ -1398,7 +1402,7 @@ export const CounterPickupListing: React.FC = () => {
                       <th className="px-3 py-3 w-[14%] md:w-[8%]">{text.location}</th>
                       <th className="px-3 py-3 w-[8%] md:w-[5%] text-right">{text.qty}</th>
                       <th className="hidden md:table-cell px-3 py-3 w-[10%]">{text.warehouse} / {text.createdBy}</th>
-                      <th className="hidden md:table-cell px-3 py-3 w-[9%]">{text.createdAt}</th>
+                      <th className="hidden md:table-cell px-3 py-3 w-[9%]">{text.finalizedAt}</th>
                       {view === 'history' && (
                         <>
                           <th className="hidden md:table-cell px-3 py-3 w-[7%]">{text.referenceNo}</th>
@@ -1496,8 +1500,8 @@ export const CounterPickupListing: React.FC = () => {
                           </td>
                           <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top text-sm">
                             <div className="leading-tight">
-                              <div className="whitespace-nowrap">{formatDate(item.createdAt, 'yyyy-MM-dd')}</div>
-                              <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.createdAt, 'HH:mm')}</div>
+                              <div className="whitespace-nowrap">{formatDate(item.finalizedAt || item.updatedAt || item.createdAt, 'yyyy-MM-dd')}</div>
+                              <div className="whitespace-nowrap text-[11px] text-slate-400">{formatDate(item.finalizedAt || item.updatedAt || item.createdAt, 'HH:mm')}</div>
                             </div>
                           </td>
                           <td className="hidden md:table-cell px-3 py-3 text-slate-500 align-top font-medium text-sm break-all">
