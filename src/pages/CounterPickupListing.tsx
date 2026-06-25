@@ -17,7 +17,7 @@ import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../components/AuthProvider';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { CounterPickup, CounterPickupOutcome, CounterPickupQueueStatus, CounterPickupRequestType, CounterPickupSourceType, CounterPickupStatus, SKU } from '../types';
-import { cn, formatDate, getAucklandDateKey, hasPermission } from '../utils';
+import { cn, formatDate, getAucklandDateKey, getAucklandBusinessDayWindow, hasPermission } from '../utils';
 import * as XLSX from 'xlsx';
 
 type ListingView = 'active' | 'history';
@@ -28,6 +28,11 @@ type FinalizeFormState = {
   outcome: '' | CounterPickupOutcome;
   orderNumber: string;
   comment: string;
+};
+
+type FinalizeMetaState = {
+  requestType: CounterPickupRequestType;
+  sourceType: CounterPickupSourceType;
 };
 
 type FinalizeItemAction = {
@@ -325,18 +330,21 @@ export const CounterPickupListing: React.FC = () => {
     scheduledDelivery: false,
   });
   const [historyTodayOnly, setHistoryTodayOnly] = useState(false);
+  const [dailyExportDate, setDailyExportDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(true);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<CounterPickupItemDraft>(createEmptyDraft);
   const [itemsDraft, setItemsDraft] = useState<CounterPickupItem[]>([]);
   const [pickupNote, setPickupNote] = useState('');
-  const [requestType, setRequestType] = useState<CounterPickupRequestType>('counterPickup');
-  const [sourceType, setSourceType] = useState<CounterPickupSourceType>('metav');
+  const [requestType, setRequestType] = useState<CounterPickupRequestType | ''>('');
+  const [sourceType, setSourceType] = useState<CounterPickupSourceType | ''>('');
   const suppressSkuSearchRef = useRef(false);
 
   const [finalizeTarget, setFinalizeTarget] = useState<CounterPickup | null>(null);
   const [finalizeForm, setFinalizeForm] = useState<FinalizeFormState>(emptyFinalizeForm);
+  const [finalizeMeta, setFinalizeMeta] = useState<FinalizeMetaState>({ requestType: 'counterPickup', sourceType: 'metav' });
+  const [editingFinalizeMeta, setEditingFinalizeMeta] = useState(false);
   const [itemFinalizeActions, setItemFinalizeActions] = useState<FinalizeItemAction[]>([]);
   const [splitPerItem, setSplitPerItem] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -368,8 +376,8 @@ export const CounterPickupListing: React.FC = () => {
     setDraft(createEmptyDraft());
     setItemsDraft([]);
     setPickupNote('');
-    setRequestType('counterPickup');
-    setSourceType('metav');
+    setRequestType('');
+    setSourceType('');
   };
   const loadRequests = async (nextView = view) => {
     if (!token) return;
@@ -523,6 +531,10 @@ export const CounterPickupListing: React.FC = () => {
     const pending = currentItem();
     if (pending.sku) combinedItems.push(pending);
     if (combinedItems.length === 0) return;
+    if (!requestType || !sourceType) {
+      alert('Please select both Request Type and Order Source before submitting.');
+      return;
+    }
     if (combinedItems.some((item) => !item.productName)) {
       alert(text.productNameRequired);
       return;
@@ -584,9 +596,10 @@ export const CounterPickupListing: React.FC = () => {
           'x-warehouse-id': activeWarehouse || ''
         },
         body: JSON.stringify({
-          sourceType: finalizeTarget.sourceType || 'other',
+          sourceType: finalizeMeta.sourceType,
+          requestType: finalizeMeta.requestType,
           outcome: finalizeForm.outcome,
-          orderNumber: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', finalizeForm.orderNumber),
+          orderNumber: applyOrderNumberPrefix(finalizeMeta.sourceType, finalizeForm.orderNumber),
           comment: finalizeForm.comment,
           itemActions: normalizedActions
         })
@@ -595,6 +608,8 @@ export const CounterPickupListing: React.FC = () => {
       if (!response.ok || !data.success) throw new Error(data.error || text.finalizeError);
       setFinalizeTarget(null);
       setFinalizeForm(emptyFinalizeForm);
+      setFinalizeMeta({ requestType: 'counterPickup', sourceType: 'metav' });
+      setEditingFinalizeMeta(false);
       setItemFinalizeActions([]);
       await loadRequests(view);
     } catch (err: any) {
@@ -889,6 +904,76 @@ export const CounterPickupListing: React.FC = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+  const handleExportDailyPickupHistory = () => {
+    const detailRows: string[][] = [
+      ['SKU', 'Qty', 'Requested By', 'Order Source', 'Request No.', 'Order Number', 'Destination', 'Comment', 'Request Type', 'Finalized At']
+    ];
+    const summaryMap = new Map<string, number>();
+    const allowedSourceTypes = new Set(['metav', 'offline', 'blackfern', 'other']);
+    const targetDate = dailyExportDate ? `${dailyExportDate}T12:00:00` : new Date();
+    const { start, end } = getAucklandBusinessDayWindow(targetDate, 15);
+
+    historyRows.forEach(({ request, item }) => {
+      const finalizedAt = request.finalizedAt || request.updatedAt || request.createdAt;
+      const finalizedDate = finalizedAt ? new Date(finalizedAt) : null;
+      if (!finalizedDate || finalizedDate < start || finalizedDate >= end) return;
+      if (!allowedSourceTypes.has(String(request.sourceType || '').toLowerCase())) return;
+      const requestType = String(request.requestType || '').trim();
+      if (requestType !== 'counterPickup' && requestType !== 'scheduledDelivery') return;
+      const destination = String(item.destination || request.destination || item.outcome || request.outcome || '').trim();
+      if (destination === 'Returned' || destination === 'returnedToWarehouse') return;
+
+      const sku = item.sku || '';
+      const qty = Number(item.qty || 0);
+      const orderNumber = item.orderNumber || item.referenceNo || request.orderNumber || request.referenceNo || '';
+      const sourceLabel = request.sourceType === 'offline'
+        ? 'Offline Order'
+        : request.sourceType === 'blackfern'
+          ? 'BlackFern Order'
+          : request.sourceType === 'other'
+            ? 'Other'
+            : 'Metav Order';
+
+      detailRows.push([
+        sku,
+        String(item.qty || ''),
+        request.createdBy || '',
+        sourceLabel,
+        request.id,
+        orderNumber,
+        destinationLabelForHistory(item as any, request),
+        historyCommentLabel(item as any, request),
+        requestType === 'scheduledDelivery' ? 'Scheduled Delivery' : 'Counter Pickup',
+        formatDate(finalizedDate, 'yyyy-MM-dd HH:mm')
+      ]);
+
+      summaryMap.set(sku, (summaryMap.get(sku) || 0) + qty);
+    });
+
+    const summaryRows: string[][] = [
+      ['SKU', 'Total Qty'],
+      ...Array.from(summaryMap.entries()).map(([sku, totalQty]) => [sku, String(totalQty)])
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const detailSheet = XLSX.utils.aoa_to_sheet(detailRows);
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+    autoFitWorksheetColumns(detailSheet, detailRows);
+    autoFitWorksheetColumns(summarySheet, summaryRows);
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Daily Pickup Detail');
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'SKU Summary');
+
+    const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `daily-pickup-history-${dailyExportDate || new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
       <PageHeader
@@ -931,9 +1016,10 @@ export const CounterPickupListing: React.FC = () => {
                   </label>
                   <select
                     value={requestType}
-                    onChange={(e) => setRequestType(e.target.value as CounterPickupRequestType)}
+                    onChange={(e) => setRequestType(e.target.value as CounterPickupRequestType | '')}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
+                    <option value="" disabled>Select Request Type</option>
                     <option value="counterPickup">{text.counterPickupType}</option>
                     <option value="scheduledDelivery">{text.scheduledDeliveryType}</option>
                   </select>
@@ -945,9 +1031,10 @@ export const CounterPickupListing: React.FC = () => {
                   </label>
                   <select
                     value={sourceType}
-                    onChange={(e) => setSourceType(e.target.value as CounterPickupSourceType)}
+                    onChange={(e) => setSourceType(e.target.value as CounterPickupSourceType | '')}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
+                    <option value="" disabled>Select Order Source</option>
                     <option value="metav">{text.metavSource}</option>
                     <option value="offline">{text.offlineSource}</option>
                     <option value="blackfern">{text.blackfernSource}</option>
@@ -1062,7 +1149,7 @@ export const CounterPickupListing: React.FC = () => {
                   </button>
                   <button
                     onClick={handleCreate}
-                    disabled={submitting || (itemsDraft.length === 0 && !canAddDraftItem())}
+                    disabled={submitting || (itemsDraft.length === 0 && !canAddDraftItem()) || !requestType || !sourceType}
                     className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50"
                   >
                     <Send className="w-4 h-4" />
@@ -1253,7 +1340,21 @@ export const CounterPickupListing: React.FC = () => {
                   <Archive className="w-4 h-4" />
                   Export Excel
                 </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleExportDailyPickupHistory}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all ml-2"
+              >
+                <Clock className="w-4 h-4" />
+                Export Daily Pickup History
+              </button>
+              <input
+                type="date"
+                value={dailyExportDate}
+                onChange={(e) => setDailyExportDate(e.target.value)}
+                className="ml-2 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700"
+              />
+            </div>
               <div className="xl:col-span-9 flex items-center justify-end">
                 <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                   {(['All', 'My Pending', 'My Created'] as CounterListTab[]).map((tab) => (
@@ -1411,10 +1512,12 @@ export const CounterPickupListing: React.FC = () => {
                           <td className="px-3 py-3 align-top">
                             <div className="flex justify-end gap-1.5 flex-wrap">
                               {canCreate && item.status === 'Picked' && itemIndex === 0 && (
-                                <button
+                                  <button
                                   onClick={() => {
                                     setFinalizeTarget(item);
                                     setFinalizeForm(emptyFinalizeForm);
+                                    setFinalizeMeta({ requestType: item.requestType || 'counterPickup', sourceType: item.sourceType || 'metav' });
+                                    setEditingFinalizeMeta(false);
                                     setItemFinalizeActions(item.items?.length ? item.items.map(() => createDefaultItemAction()) : [createDefaultItemAction()]);
                                   }}
                                   disabled={submitting}
@@ -1582,6 +1685,8 @@ export const CounterPickupListing: React.FC = () => {
                                           onClick={() => {
                                             setFinalizeTarget(item);
                                             setFinalizeForm(emptyFinalizeForm);
+                                            setFinalizeMeta({ requestType: item.requestType || 'counterPickup', sourceType: item.sourceType || 'metav' });
+                                            setEditingFinalizeMeta(false);
                                             setItemFinalizeActions((requestItems).map(() => createDefaultItemAction()));
                                           }}
                                           disabled={submitting}
@@ -1672,11 +1777,57 @@ export const CounterPickupListing: React.FC = () => {
                 <span className="font-semibold">Comment</span>
                 <span className="text-right max-w-[70%] break-words">{finalizeTarget.comment || '-'}</span>
               </div>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="font-semibold">Request Type / Order Source</span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold">
+                    {finalizeMeta.requestType === 'scheduledDelivery' ? text.scheduledDeliveryType : text.counterPickupType}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold">
+                    {finalizeMeta.sourceType === 'offline' ? text.offlineSource : finalizeMeta.sourceType === 'blackfern' ? text.blackfernSource : finalizeMeta.sourceType === 'other' ? text.otherSource : text.metavSource}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingFinalizeMeta((prev) => !prev)}
+                    className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-semibold border border-indigo-100 hover:bg-indigo-100"
+                  >
+                    Edit
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4 flex-1 overflow-y-auto pr-1">
               {!splitPerItem && (
                 <>
+                  {editingFinalizeMeta && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700">{text.requestType}</label>
+                        <select
+                          value={finalizeMeta.requestType}
+                          onChange={(e) => setFinalizeMeta((prev) => ({ ...prev, requestType: e.target.value as CounterPickupRequestType }))}
+                          className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="counterPickup">{text.counterPickupType}</option>
+                          <option value="scheduledDelivery">{text.scheduledDeliveryType}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700">{text.sourceType}</label>
+                        <select
+                          value={finalizeMeta.sourceType}
+                          onChange={(e) => setFinalizeMeta((prev) => ({ ...prev, sourceType: e.target.value as CounterPickupSourceType }))}
+                          className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="metav">{text.metavSource}</option>
+                          <option value="offline">{text.offlineSource}</option>
+                          <option value="blackfern">{text.blackfernSource}</option>
+                          <option value="other">{text.otherSource}</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="text-sm font-medium text-slate-700">{text.destination}</label>
                     <select
@@ -1685,7 +1836,7 @@ export const CounterPickupListing: React.FC = () => {
                       className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                     >
                       <option value="">{text.selectOne}</option>
-                      <option value="sold">{finalizeTarget.requestType === 'scheduledDelivery' ? text.sent : text.sold}</option>
+                      <option value="sold">{finalizeMeta.requestType === 'scheduledDelivery' ? text.sent : text.sold}</option>
                       <option value="returnedToWarehouse">{text.returned}</option>
                       <option value="warrantySwapParts">{text.warrantySwapParts}</option>
                       <option value="other">{text.other}</option>
@@ -1697,7 +1848,7 @@ export const CounterPickupListing: React.FC = () => {
                       <label className="text-sm font-medium text-slate-700">{text.orderNumber}</label>
                       <input
                         value={finalizeForm.orderNumber}
-                        onChange={(e) => setFinalizeForm((prev) => ({ ...prev, orderNumber: applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', e.target.value) }))}
+                        onChange={(e) => setFinalizeForm((prev) => ({ ...prev, orderNumber: applyOrderNumberPrefix(finalizeMeta.sourceType, e.target.value) }))}
                         inputMode="numeric"
                         pattern="[0-9]*"
                         placeholder="Digits only"
@@ -1795,7 +1946,7 @@ export const CounterPickupListing: React.FC = () => {
                                 className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                               >
                                 <option value="">{text.selectOne}</option>
-                                <option value="sold">{item.requestType === 'scheduledDelivery' ? text.sent : text.sold}</option>
+                                <option value="sold">{finalizeMeta.requestType === 'scheduledDelivery' ? text.sent : text.sold}</option>
                                 <option value="returnedToWarehouse">{text.returned}</option>
                                 <option value="warrantySwapParts">{text.warrantySwapParts}</option>
                                 <option value="other">{text.other}</option>
@@ -1807,7 +1958,7 @@ export const CounterPickupListing: React.FC = () => {
                                   <input
                                     value={itemAction.orderNumber}
                                     onChange={(e) => {
-                                    const value = applyOrderNumberPrefix(finalizeTarget.sourceType || 'other', e.target.value);
+                                    const value = applyOrderNumberPrefix(finalizeMeta.sourceType, e.target.value);
                                       setItemFinalizeActions((prev) => {
                                         const copy = [...prev];
                                         copy[index] = { ...(copy[index] || createDefaultItemAction()), orderNumber: value };
@@ -1852,6 +2003,8 @@ export const CounterPickupListing: React.FC = () => {
                 onClick={() => {
                   setFinalizeTarget(null);
                   setFinalizeForm(emptyFinalizeForm);
+                  setFinalizeMeta({ requestType: 'counterPickup', sourceType: 'metav' });
+                  setEditingFinalizeMeta(false);
                 }}
                 className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-semibold"
               >

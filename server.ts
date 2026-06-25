@@ -995,6 +995,7 @@ async function startServer() {
 
       const timestamp = nowAucklandIso();
       const sourceType = normalizeCounterPickupSourceType(req.body?.sourceType || data.sourceType);
+      const requestType = normalizeCounterPickupRequestType(req.body?.requestType || data.requestType);
       const referenceNo = normalizeCounterPickupOrderNumber(sourceType, req.body?.orderNumber || req.body?.referenceNo || "");
       const baseItems = Array.isArray(data.items) && data.items.length > 0
         ? data.items
@@ -1033,6 +1034,7 @@ async function startServer() {
 
       const updatePayload: any = {
         sourceType,
+        requestType,
         outcome: topLevelOutcome,
         destination: normalizeDisplayDestination(topLevelOutcome),
         comment: comment || null,
@@ -1043,6 +1045,7 @@ async function startServer() {
         const itemAction = normalizedActions[index];
         const itemUpdate: any = {
           ...item,
+          requestType,
           outcome: itemAction.outcome,
           destination: normalizeDisplayDestination(itemAction.outcome),
           orderNumber: itemAction.orderNumber || null,

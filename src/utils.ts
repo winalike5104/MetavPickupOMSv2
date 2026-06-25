@@ -153,6 +153,34 @@ export const getAucklandDateKey = (value: string | number | Date) =>
     day: '2-digit',
   }).format(new Date(value));
 
+export const getAucklandBusinessDayWindow = (value: string | number | Date, cutoffHour = 15) => {
+  const formatter = new Intl.DateTimeFormat('en-NZ', {
+    timeZone: 'Pacific/Auckland',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(new Date(value));
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const year = Number(map.year);
+  const month = Number(map.month);
+  const day = Number(map.day);
+  const hour = Number(map.hour);
+  const base = new Date(Date.UTC(year, month - 1, day, cutoffHour, 0, 0));
+  const tzOffsetMinutes = new Date().getTimezoneOffset();
+  const utcCandidate = new Date(base.getTime() - tzOffsetMinutes * 60 * 1000);
+  const start = new Date(utcCandidate);
+  if (hour < cutoffHour) start.setDate(start.getDate() - 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+};
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
