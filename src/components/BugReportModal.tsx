@@ -40,7 +40,7 @@ export const BugReportModal: React.FC<BugReportModalProps> = ({ isOpen, onClose 
         reporterEmail: profile?.email,
         createdAt: new Date().toISOString(),
         userAgent: navigator.userAgent,
-    appVersion: '1.1.1'
+    appVersion: '1.1.2'
       });
       
       setSuccess(true);

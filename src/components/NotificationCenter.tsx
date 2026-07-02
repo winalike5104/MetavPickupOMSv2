@@ -26,7 +26,9 @@ export const NotificationCenter: React.FC = () => {
 
     const q = query(
       collection(db, 'notifications'),
-      where('recipientUid', '==', profile.uid)
+      where('recipientUid', '==', profile.uid),
+      orderBy('createdAt', 'desc'),
+      limit(30)
     );
 
     let retryCount = 0;
@@ -44,9 +46,7 @@ export const NotificationCenter: React.FC = () => {
       unsubscribe = onSnapshot(q, (snap) => {
         retryCount = 0; // Reset on success
         const allNotifications = snap.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as any))
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 30);
+          .map(doc => ({ id: doc.id, ...doc.data() } as any));
         
         setNotifications(allNotifications);
         setUnreadCount(allNotifications.filter((n: any) => !n.isRead).length);

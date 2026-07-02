@@ -63,7 +63,7 @@ export const Settings = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showBugModal, setShowBugModal] = useState(false);
   const [pairingPassword, setPairingPassword] = useState(localStorage.getItem('pairing_password') || '');
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.1.2';
 
   // Sync settings when profile updates
   useEffect(() => {

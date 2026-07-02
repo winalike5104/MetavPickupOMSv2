@@ -42,6 +42,7 @@ import { PageHeader } from '../components/PageHeader';
 
 const ORDER_CACHE_DB = 'mvp_orders_cache_v1';
 const ORDER_CACHE_STORE = 'order_lists';
+const ORDER_CACHE_TTL_MS = 60 * 1000;
 
 type OrderCacheRecord = {
   key: string;
@@ -286,6 +287,10 @@ export const Orders = () => {
       if (cached?.orders?.length) {
         setOrders(cached.orders);
         setLoading(false);
+        const cacheAgeMs = cached.updatedAt ? Date.now() - new Date(cached.updatedAt).getTime() : Infinity;
+        if (cacheAgeMs >= 0 && cacheAgeMs < ORDER_CACHE_TTL_MS) {
+          return;
+        }
       }
 
       const params = new URLSearchParams({

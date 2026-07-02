@@ -43,6 +43,7 @@ import { AnnouncementModal } from '../components/AnnouncementModal';
 import { API_BASE_URL } from '../constants';
 
 const DASHBOARD_CACHE_PREFIX = 'dashboard_orders_cache_v1';
+const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
 
 const getOrderSortMs = (order: any): number => {
   const updated = order?.updatedAt;
@@ -63,6 +64,28 @@ const mergeOrdersById = (base: Order[], incoming: Order[]): Order[] => {
     if (o?.id) map.set(o.id, o);
   });
   return Array.from(map.values()).sort((a: Order, b: Order) => getOrderSortMs(b) - getOrderSortMs(a));
+};
+
+type DashboardCacheRecord = {
+  orders: Order[];
+  updatedAt: string;
+};
+
+const getDashboardCache = (key: string): DashboardCacheRecord | null => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const setDashboardCache = (key: string, record: DashboardCacheRecord) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(record));
+  } catch {
+    // Best-effort cache; ignore storage quota/private mode failures.
+  }
 };
 
 export const Dashboard = () => {
@@ -158,6 +181,94 @@ export const Dashboard = () => {
     setLoading(true);
     
     try {
+      const applyDashboardOrders = (orders: Order[]) => {
+        // Filter by warehouse: match warehouse OR missing warehouseId (assumed AKL)
+        const filteredByWarehouse = orders.filter(order => {
+          const orderWarehouse = order.warehouseId || 'AKL';
+          return orderWarehouse === warehouse;
+        });
+
+        // 1. Calculate Stats
+        const statsData = {
+          total: filteredByWarehouse.length,
+          created: filteredByWarehouse.filter(o => o.status === 'Created').length,
+          pickedUp: filteredByWarehouse.filter(o => o.status === 'Picked Up' || o.status === 'Reviewed').length,
+          cancelled: filteredByWarehouse.filter(o => o.status === 'Cancelled').length
+        };
+        setStats(statsData);
+
+        // 2. Warnings (72h Overdue)
+        const threshold = subDays(new Date(), 3).toISOString();
+        const warningOrders = filteredByWarehouse
+          .filter(o => o.status === 'Created' && o.pickupDateScheduled < threshold)
+          .sort((a, b) => a.pickupDateScheduled.localeCompare(b.pickupDateScheduled))
+          .slice(0, 5);
+        setWarningOrders(warningOrders);
+
+        // 3. Recent Orders
+        setRecentOrders(filteredByWarehouse.slice(0, 5));
+
+        // 4. Trend Data (Last 14 days)
+        const trendThreshold = subDays(new Date(), 14).toISOString();
+        const trendOrders = filteredByWarehouse.filter(o => 
+          (o.status === 'Picked Up' || o.status === 'Reviewed') && 
+          o.actualPickupTime && o.actualPickupTime >= trendThreshold
+        );
+
+        const trendMap = new Map();
+        for (let i = 0; i < 14; i++) {
+          const dateStr = formatDate(subDays(new Date(), i), 'MM/dd');
+          trendMap.set(dateStr, 0);
+        }
+
+        trendOrders.forEach(order => {
+          if (order.actualPickupTime) {
+            const pickupDate = formatDate(order.actualPickupTime, 'MM/dd');
+            if (trendMap.has(pickupDate)) {
+              trendMap.set(pickupDate, trendMap.get(pickupDate) + 1);
+            }
+          }
+        });
+
+        const formattedTrend = Array.from(trendMap.entries())
+          .map(([date, count]) => ({ date, count }))
+          .reverse();
+        setTrendData(formattedTrend);
+      };
+
+      const cacheKey = `${DASHBOARD_CACHE_PREFIX}:${user?.uid || 'anon'}:${warehouse}`;
+      const cached = getDashboardCache(cacheKey);
+      if (cached?.orders?.length) {
+        applyDashboardOrders(cached.orders);
+        const cacheAgeMs = cached.updatedAt ? Date.now() - new Date(cached.updatedAt).getTime() : Infinity;
+        if (cacheAgeMs >= 0 && cacheAgeMs < DASHBOARD_CACHE_TTL_MS) {
+          const announcementSnap = await getDoc(doc(db, 'announcements', 'current'));
+          let currentTips = [...baseTips];
+          if (announcementSnap.exists()) {
+            const data = announcementSnap.data();
+            setAnnouncement(data);
+            if (data.isActive) {
+              currentTips = [
+                {
+                  id: 'announcement',
+                  title: 'System Announcement',
+                  content: data.content,
+                  link: data.link || null,
+                  linkText: data.link ? 'Learn More' : null,
+                  icon: Megaphone,
+                  color: 'from-indigo-600 to-indigo-700',
+                  isAnnouncement: true,
+                  updatedAt: data.updatedAt
+                },
+                ...baseTips
+              ];
+            }
+          }
+          setAllTips(currentTips);
+          return;
+        }
+      }
+
       const ordersRef = collection(db, 'orders');
       
       // 核心优化：确保查询条件与安全规则匹配 (Query Matching)
@@ -200,59 +311,11 @@ export const Dashboard = () => {
       }
 
       const allFetched = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Order));
-      
-      // Filter by warehouse: match warehouse OR missing warehouseId (assumed AKL)
-      const filteredByWarehouse = allFetched.filter(order => {
-        const orderWarehouse = order.warehouseId || 'AKL';
-        return orderWarehouse === warehouse;
+      applyDashboardOrders(allFetched);
+      setDashboardCache(cacheKey, {
+        orders: allFetched,
+        updatedAt: new Date().toISOString()
       });
-
-      // 1. Calculate Stats
-      const statsData = {
-        total: filteredByWarehouse.length,
-        created: filteredByWarehouse.filter(o => o.status === 'Created').length,
-        pickedUp: filteredByWarehouse.filter(o => o.status === 'Picked Up' || o.status === 'Reviewed').length,
-        cancelled: filteredByWarehouse.filter(o => o.status === 'Cancelled').length
-      };
-      setStats(statsData);
-
-      // 2. Warnings (72h Overdue)
-      const threshold = subDays(new Date(), 3).toISOString();
-      const warningOrders = filteredByWarehouse
-        .filter(o => o.status === 'Created' && o.pickupDateScheduled < threshold)
-        .sort((a, b) => a.pickupDateScheduled.localeCompare(b.pickupDateScheduled))
-        .slice(0, 5);
-      setWarningOrders(warningOrders);
-
-      // 3. Recent Orders
-      setRecentOrders(filteredByWarehouse.slice(0, 5));
-
-      // 4. Trend Data (Last 14 days)
-      const trendThreshold = subDays(new Date(), 14).toISOString();
-      const trendOrders = filteredByWarehouse.filter(o => 
-        (o.status === 'Picked Up' || o.status === 'Reviewed') && 
-        o.actualPickupTime && o.actualPickupTime >= trendThreshold
-      );
-
-      const trendMap = new Map();
-      for (let i = 0; i < 14; i++) {
-        const dateStr = formatDate(subDays(new Date(), i), 'MM/dd');
-        trendMap.set(dateStr, 0);
-      }
-
-      trendOrders.forEach(order => {
-        if (order.actualPickupTime) {
-          const pickupDate = formatDate(order.actualPickupTime, 'MM/dd');
-          if (trendMap.has(pickupDate)) {
-            trendMap.set(pickupDate, trendMap.get(pickupDate) + 1);
-          }
-        }
-      });
-
-      const formattedTrend = Array.from(trendMap.entries())
-        .map(([date, count]) => ({ date, count }))
-        .reverse();
-      setTrendData(formattedTrend);
 
       // Announcement
       const announcementSnap = await getDoc(doc(db, 'announcements', 'current'));
